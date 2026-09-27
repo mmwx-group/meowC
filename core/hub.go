@@ -118,8 +118,14 @@ func handleValidateConfig(params *ValidateConfigParams) string {
 	}
 
 	data := patchYamlShortID([]byte(params.Data))
-	_, err := config.Parse(data)
+	// 等价于 config.Parse，中间插一步 MeowX 的悬空引用处理（见 meow_rules.go）：
+	// 校验与实际应用（setupConfig）必须用同一套宽容度，否则会出现「导入报错但其实能跑」。
+	rawCfg, err := config.UnmarshalRawConfig(data)
 	if err != nil {
+		return err.Error()
+	}
+	meowSanitizeDanglingRules(rawCfg)
+	if _, err := config.ParseRawConfig(rawCfg); err != nil {
 		return err.Error()
 	}
 	return ""

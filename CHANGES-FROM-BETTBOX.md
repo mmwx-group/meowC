@@ -40,3 +40,8 @@
 ## 2026-09-21 · 宽屏布局
 - `lib/manager/app_manager.dart`：关掉 Bettbox 桌面侧栏（MeowX 壳自带图标栏）。
 - 首页（仅 Windows）：网速图位置换成「接管方式」卡（TUN / 系统代理，开关沿用 Bettbox 的 provider）。
+
+## 2026-09-27 · 悬空规则引用不再废掉整份配置
+- 新增 `core/meow_rules.go`（+ `core/meow_rules_test.go`）：`meowSanitizeDanglingRules` 在 `UnmarshalRawConfig` 之后、`ParseRawConfig` 之前，把引用了配置里不存在的出站的规则改成 `PASS`、引用了不存在 rule-provider 的规则删掉（子规则同理），并写 warn 日志。
+- `core/hub.go handleValidateConfig`：由 `config.Parse` 改为 `UnmarshalRawConfig` → 消毒 → `ParseRawConfig`，让导入校验与实际应用同一套宽容度。
+- `core/common.go setupConfig`：`ParseRawConfig` 前同样消毒。

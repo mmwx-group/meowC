@@ -400,6 +400,8 @@ func setupConfig(params *SetupParams) error {
 		}
 	}
 
+	meowSanitizeDanglingRules(rawCfg)
+
 	currentConfig, err = config.ParseRawConfig(rawCfg)
 	if err != nil {
 		return err
