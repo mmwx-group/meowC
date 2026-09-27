@@ -47,6 +47,99 @@ class PanelClient {
     return dio;
   }
 
+  // ---- DNS 兜底 ----
+  // 不开代理时主控请求走系统解析：运营商 DNS 解析不出（或给了个连不上的地址）就登不进去。
+  // 连接阶段失败时用 **按 IP 访问** 的 DoH 重新解析一次（所以它自己不依赖系统解析），把地址钉进一个
+  // 临时 Dio 重试。TLS 仍然按原域名做 SNI 与证书校验（SecureSocket.secure 的 host:），只是 TCP 连到
+  // 钉好的 IP —— Cloudflare 这类前置不给正确 SNI 是会直接 403 的。
+  // 只治「解析不出 / 连不上」；如果是那个 IP 本身被墙（DoH 也只会给回同一个地址），这条路救不了。
+  static const _dohEndpoints = [
+    'https://1.1.1.1/dns-query', // Cloudflare，证书带 IP SAN
+    'https://223.5.5.5/resolve', // AliDNS，1.1.1.1 不通时兜底
+  ];
+
+  String? _pinnedIP;
+
+  /// 这一次失败是不是「还没连上」：只有这种才值得换个地址重试。
+  static bool _isConnectStage(DioException e) =>
+      e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout;
+
+  /// 从 DoH 的 JSON 应答里取第一个 A 记录（type 1）。
+  static String? parseDohAnswer(dynamic body) {
+    final answers = body is Map ? body['Answer'] : null;
+    if (answers is! List) return null;
+    for (final a in answers) {
+      if (a is! Map) continue;
+      if (a['type'] != 1) continue;
+      final ip = a['data']?.toString().trim() ?? '';
+      if (ip.isNotEmpty && InternetAddress.tryParse(ip) != null) return ip;
+    }
+    return null;
+  }
+
+  Future<String?> _dohLookup(String name) async {
+    final dio = _directDio();
+    for (final ep in _dohEndpoints) {
+      try {
+        final res = await dio.get<dynamic>(
+          ep,
+          queryParameters: {'name': name, 'type': 'A'},
+          options: Options(
+            responseType: ResponseType.json,
+            receiveTimeout: const Duration(seconds: 8),
+            headers: {'accept': 'application/dns-json', HttpHeaders.userAgentHeader: userAgent},
+          ),
+        );
+        final ip = parseDohAnswer(res.data);
+        if (ip != null) {
+          commonPrint.log('MeowX panel: $name 经 $ep 解析为 $ip');
+          return ip;
+        }
+      } catch (e) {
+        commonPrint.log('MeowX panel: DoH $ep 失败 $e');
+      }
+    }
+    return null;
+  }
+
+  /// 把 TCP 目标钉到 [ip]，TLS 仍按原域名握手。
+  Dio _pinnedDio(String ip) {
+    final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(seconds: 20)));
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient()..findProxy = (_) => 'DIRECT';
+        client.connectionFactory = (uri, _, _) {
+          final port = uri.hasPort && uri.port != 0 ? uri.port : (uri.scheme == 'https' ? 443 : 80);
+          final raw = Socket.connect(ip, port, timeout: const Duration(seconds: 15));
+          final socket = uri.scheme == 'https'
+              ? raw.then<Socket>((s) => SecureSocket.secure(s, host: uri.host))
+              : raw;
+          return Future.value(ConnectionTask.fromSocket(socket, () {}));
+        };
+        return client;
+      },
+    );
+    return dio;
+  }
+
+  /// 发一次请求：连接阶段失败就 DoH 换地址重试一次。[send] 必须每次自己构造请求体
+  /// （rpc 的 body 是一次性的 Stream，复用会发出空包）。
+  Future<T> _send<T>(Future<T> Function(Dio dio) send) async {
+    final pinned = _pinnedIP;
+    try {
+      return await send(pinned == null ? _dio : _pinnedDio(pinned));
+    } on DioException catch (e) {
+      if (!_isConnectStage(e)) rethrow;
+      _pinnedIP = null;
+      if (InternetAddress.tryParse(host) != null) rethrow; // 本来就是 IP，没什么可解析的
+      final ip = await _dohLookup(host);
+      if (ip == null) rethrow;
+      final result = await send(_pinnedDio(ip));
+      _pinnedIP = ip;
+      return result;
+    }
+  }
+
   /// 主控 X25519 公钥：缓存命中即用（后台重拉），否则拉取 `/api/secure/cert` 验签后缓存。
   Future<Uint8List> masterPub({bool refresh = false}) async {
     if (_masterPub != null && !refresh) return _masterPub!;
@@ -63,12 +156,14 @@ class PanelClient {
   }
 
   Future<Uint8List> _fetchCert() async {
-    final res = await _dio.get<dynamic>(
-      '$base/api/secure/cert',
-      options: Options(
-        responseType: ResponseType.json,
-        receiveTimeout: const Duration(seconds: 15),
-        headers: {HttpHeaders.userAgentHeader: userAgent},
+    final res = await _send(
+      (dio) => dio.get<dynamic>(
+        '$base/api/secure/cert',
+        options: Options(
+          responseType: ResponseType.json,
+          receiveTimeout: const Duration(seconds: 15),
+          headers: {HttpHeaders.userAgentHeader: userAgent},
+        ),
       ),
     );
     if (res.statusCode != 200 || res.data is! Map) throw PanelException('无法获取主控证书（HTTP ${res.statusCode}）');
@@ -104,18 +199,20 @@ class PanelClient {
     final envelope = await MeowCrypto.sealRpcRequest(ephemeral: ephemeral, masterPub: pub, plain: utf8.encode(json.encode(inner)));
     final Response<List<int>> res;
     try {
-      res = await _dio.post<List<int>>(
-        '$base/api/secure/rpc',
-        data: Stream.fromIterable([envelope]),
-        options: Options(
-          headers: {
-            Headers.contentTypeHeader: 'application/octet-stream',
-            Headers.contentLengthHeader: envelope.length,
-            HttpHeaders.userAgentHeader: userAgent,
-          },
-          responseType: ResponseType.bytes,
-          receiveTimeout: const Duration(seconds: 20),
-          validateStatus: (_) => true,
+      res = await _send(
+        (dio) => dio.post<List<int>>(
+          '$base/api/secure/rpc',
+          data: Stream.fromIterable([envelope]),
+          options: Options(
+            headers: {
+              Headers.contentTypeHeader: 'application/octet-stream',
+              Headers.contentLengthHeader: envelope.length,
+              HttpHeaders.userAgentHeader: userAgent,
+            },
+            responseType: ResponseType.bytes,
+            receiveTimeout: const Duration(seconds: 20),
+            validateStatus: (_) => true,
+          ),
         ),
       );
     } on DioException catch (e) {
