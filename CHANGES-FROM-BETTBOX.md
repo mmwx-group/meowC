@@ -49,3 +49,7 @@
 ## 2026-09-29 · TUN 栈默认改回 mixed
 - `lib/models/clash_config.dart`：`Tun.stack` 默认恢复 Bettbox 原值 `mixed`（09-22 曾改为 mihomo 的 `mips` 用户态栈；Android 分应用白名单下 Google Play / OKX 不通，同配置 mixed 正常）。
 - `lib/models/config.dart compatibleFromJson`：一次性把存着 `mips` 的配置改回 `mixed`，迁完记 `meow.tunStackMipsReverted`，之后在「高级」里手选 `mips` 仍保留；去掉 09-22 的 `mixed → mips` 迁移及其标记 `tunStackMigrated`。
+
+## 2026-09-29 · Windows 多屏窗口位置
+- `lib/common/window.dart`：还原窗口位置改为按屏换算——存盘坐标（`getBounds`，按保存时所在屏缩放）、屏幕工作区（`screen_retriever`，按各屏自己的缩放）、`setPosition`（按当前所在屏缩放）三者口径不同，多屏且缩放不一致时原逻辑会把窗口放到屏外 / 别的屏；换算逻辑在 `lib/meowx/state/window_placement.dart`。标题栏放不进任何一块屏时居中，超出右 / 下边的部分收回屏内；居中前先定尺寸（原来按默认 1280×720 居中会偏右下）。
+- `lib/common/window.dart show()`：从托盘显示前同样检查，藏在托盘期间拔了显示器时挪回主屏居中。
