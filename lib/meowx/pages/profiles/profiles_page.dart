@@ -267,9 +267,10 @@ class _AccountCard extends ConsumerWidget {
             const SizedBox(height: 8),
             Text(
               system.isAndroid
-                  ? '在桌面端「个人菜单 → 扫码登录」出示二维码，用手机扫一扫即可登录'
-                  // Windows 没有扫码：网页「扫码登录」对话框里的「登录客户端」按钮用 miaomiaowu:// 深链唤起本 App 完成登录
-                  : '在网页端「个人菜单 → 扫码登录」里点「登录客户端」，MeowX 会自动打开并完成登录',
+                  ? '在桌面端「个人菜单 → 扫码登录手机」出示二维码，用手机扫一扫即可登录'
+                  // Windows 没有扫码：网页「扫码登录手机」对话框里的「登录客户端」按钮用 miaomiaowu:// 深链唤起本 App 完成登录。
+                  // 菜单名要和网页 user-menu.tsx 的一字不差（#970）
+                  : '在网页端「个人菜单 → 扫码登录手机」里点「登录客户端」，MeowX 会自动打开并完成登录',
               style: TextStyle(fontSize: MeowFont.caption2, color: mm.t3),
             ),
           ],

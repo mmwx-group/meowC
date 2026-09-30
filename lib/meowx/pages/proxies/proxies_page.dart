@@ -29,8 +29,8 @@ final expandedGroupsProvider = StateProvider<Set<String>>((ref) => {});
 /// 宽屏左栏选中的组。
 final selectedGroupProvider = StateProvider<String?>((ref) => null);
 
-/// 全部叶子节点（去重）。
-List<Proxy> _allLeafProxies(List<Group> groups) {
+/// 全部叶子节点（去重）。侧栏「代理」角标也用它，和本页标题的节点数同一口径。
+List<Proxy> allLeafProxies(List<Group> groups) {
   final seen = <String>{};
   final out = <Proxy>[];
   for (final g in groups) {
@@ -69,7 +69,8 @@ class _CurrentBadges extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (medal != null) ...[MedalBadge(medal, size: 14), const SizedBox(width: 4)],
+        // 奖牌 / 解锁之间 8（无底符号贴在一起分不开），三端统一；末尾 4 隔开延迟胶囊
+        if (medal != null) ...[MedalBadge(medal, size: 14), SizedBox(width: unlocks != null ? 8 : 4)],
         if (unlocks != null) ...[UnlockBadge(unlocks, size: 14), const SizedBox(width: 4)],
       ],
     );
@@ -138,7 +139,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     if (demoExtras) {
       seedDemoExtras(
         ref,
-        _allLeafProxies(
+        allLeafProxies(
           ref.read(currentGroupsStateProvider).value,
         ).map((p) => p.name).toList(),
       );
@@ -197,7 +198,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     if (_testingAll) return;
     setState(() => _testingAll = true);
     try {
-      await delayTest(_allLeafProxies(groups));
+      await delayTest(allLeafProxies(groups));
     } finally {
       if (mounted) setState(() => _testingAll = false);
     }
@@ -211,7 +212,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     final hasProfile = ref.watch(currentProfileProvider) != null;
     final size = ref.watch(meowSettingProvider.select((s) => s.nodeCardSize));
     final layout = ref.watch(meowSettingProvider.select((s) => s.proxyLayout));
-    final nodeCount = _allLeafProxies(groups).length;
+    final nodeCount = allLeafProxies(groups).length;
 
     final title = PageTitle(
       S.proxies,
@@ -1316,7 +1317,7 @@ class _NodeCell extends ConsumerWidget {
                   MedalBadge(medal, size: 14),
                 ],
                 if (unlocks != null) ...[
-                  const SizedBox(width: 2),
+                  SizedBox(width: medal != null ? 8 : 2),   // 奖牌 / 解锁之间 8，三端统一
                   UnlockBadge(unlocks, size: 14),
                 ],
               ],

@@ -169,6 +169,34 @@ class UnlockEntry {
   }
 }
 
+/// 解锁徽标三态：全部解锁 / 部分解锁 / 一个都没解锁（三端同一套）。
+enum UnlockLevel {
+  full('全部解锁'),
+  partial('部分解锁'),
+  none('未解锁');
+
+  const UnlockLevel(this.label);
+  final String label;
+}
+
+/// 徽标 / 头行 / 分类标签共用口径（与 iOS 一致）：只数有「解锁 / 未解锁」二值结论的服务，
+/// 信息类（Apple 地区、Steam 货币、CDN…）的 yes 只表示测到了，不进分子分母；全是信息类时退回按全部条目数。
+class UnlockSummary {
+  const UnlockSummary({required this.unlocked, required this.total});
+  final int unlocked, total;
+
+  static UnlockSummary of(List<UnlockEntry> entries) {
+    final checkable = entries.where((e) => !e.meta.info).toList();
+    final pool = checkable.isEmpty ? entries : checkable;
+    return UnlockSummary(unlocked: pool.where((e) => e.unlocked).length, total: pool.length);
+  }
+
+  UnlockLevel get level {
+    if (total > 0 && unlocked == total) return UnlockLevel.full;
+    return unlocked > 0 ? UnlockLevel.partial : UnlockLevel.none;
+  }
+}
+
 /// 一个节点的解锁结论（按目录顺序）。
 class NodeUnlocks {
   const NodeUnlocks({required this.name, required this.entries});
@@ -176,6 +204,8 @@ class NodeUnlocks {
   final List<UnlockEntry> entries;
 
   int get unlockedCount => entries.where((e) => e.unlocked).length;
+  UnlockSummary get summary => UnlockSummary.of(entries);
+  UnlockLevel get level => summary.level;
 
   /// 按分类分组，组内保持目录顺序；目录里没有的 key 归「其他」。
   Map<UnlockCategory, List<UnlockEntry>> get grouped {

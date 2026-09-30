@@ -126,11 +126,12 @@ class MedalBadge extends StatelessWidget {
   final double size;
   final bool tappable;
 
-  static Color color(String medal) => medal == 'gold' ? const Color(0xFFD4A017) : const Color(0xFF9AA0A6);
+  /// 与 iOS / macOS 同一套 RGB（金 #D99E26 / 银 #9EA3AD），图标同为五角星、无底纯色。
+  static Color color(String medal) => medal == 'gold' ? const Color(0xFFD99E26) : const Color(0xFF9EA3AD);
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(Icons.workspace_premium_rounded, size: size, color: color(medal.medal));
+    final icon = Icon(Icons.star_rounded, size: size, color: color(medal.medal));
     if (!tappable) return icon;
     return Builder(
       builder: (ctx) => GestureDetector(

@@ -5,7 +5,16 @@ import '../panel/unlock_catalog.dart';
 import 'popover.dart';
 import 'tokens.dart';
 
-/// 节点解锁徽标：开锁 = 至少一项解锁（绿），闭锁 = 全部未解锁（灰）；点按弹分类详情，点其他地方关闭。
+/// 三态的颜色 / 图标（与 iOS / macOS 同一套 RGB：绿开锁 = 全部解锁，橙开锁 = 部分解锁，灰闭锁 = 一个都没解锁）。
+Color unlockLevelColor(UnlockLevel level) => switch (level) {
+  UnlockLevel.full => const Color(0xFF33A85C),
+  UnlockLevel.partial => const Color(0xFFED8F21),
+  UnlockLevel.none => const Color(0xFF8F949E),
+};
+
+IconData unlockLevelIcon(UnlockLevel level) => level == UnlockLevel.none ? Icons.lock_rounded : Icons.lock_open_rounded;
+
+/// 节点解锁徽标（无底纯色符号，与奖牌同模具）；点按弹分类详情，点其他地方关闭。
 class UnlockBadge extends StatelessWidget {
   const UnlockBadge(this.node, {super.key, this.size = 14});
 
@@ -14,15 +23,14 @@ class UnlockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    final any = node.unlockedCount > 0;
+    final level = node.level;
     return Builder(
       builder: (ctx) => GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => showAnchoredPopover(ctx, builder: (_) => UnlockDetail(node: node)),
         child: Padding(
           padding: const EdgeInsets.all(2),
-          child: Icon(any ? Icons.lock_open_rounded : Icons.lock_rounded, size: size, color: any ? mm.good : mm.t3),
+          child: Icon(unlockLevelIcon(level), size: size, color: unlockLevelColor(level)),
         ),
       ),
     );
@@ -65,14 +73,16 @@ class _UnlockDetailState extends State<UnlockDetail> {
         children: [
           Row(
             children: [
-              Icon(widget.node.unlockedCount > 0 ? Icons.lock_open_rounded : Icons.lock_rounded, size: 14, color: widget.node.unlockedCount > 0 ? mm.good : mm.t3),
+              Icon(unlockLevelIcon(widget.node.level), size: 14, color: unlockLevelColor(widget.node.level)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(widget.node.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: mm.t1)),
               ),
               const SizedBox(width: 8),
-              Text('解锁 ${widget.node.unlockedCount}/${widget.node.entries.length}', style: MeowFont.mono(size: MeowFont.caption2, color: mm.t2)),
+              // 与徽标同口径（信息类不计），三端一致
+              Text('${widget.node.level.label} ${widget.node.summary.unlocked}/${widget.node.summary.total}',
+                  style: MeowFont.mono(size: MeowFont.caption2, color: mm.t2)),
             ],
           ),
           const SizedBox(height: 8),
@@ -99,7 +109,7 @@ class _UnlockDetailState extends State<UnlockDetail> {
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Text(
-                              '${c.label} ${_groups[c]!.where((e) => e.unlocked).length}/${_groups[c]!.length}',
+                              '${c.label} ${UnlockSummary.of(_groups[c]!).unlocked}/${UnlockSummary.of(_groups[c]!).total}',
                               textAlign: TextAlign.center,
                               maxLines: 1,
                               softWrap: false,

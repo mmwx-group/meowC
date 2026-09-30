@@ -188,15 +188,11 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
 
     final Widget body;
     if (wide) {
-      final proxyCount = ref.watch(groupsProvider.select((g) {
-        final names = <String>{};
-        for (final group in g) {
-          for (final p in group.all) {
-            names.add(p.name);
-          }
-        }
-        return names.length;
-      }));
+      // 和代理页标题「N 个节点」同一口径：只数当前模式下可见组里的叶子节点。
+      // 之前数的是核心原始组，直连配置下 GLOBAL 里的 DIRECT / REJECT 也算进来，没有代理组也显示 2（#969）
+      final proxyCount = ref.watch(currentGroupsStateProvider.select(
+        (s) => allLeafProxies(s.value).length,
+      ));
       body = Row(
         children: [
           Padding(
