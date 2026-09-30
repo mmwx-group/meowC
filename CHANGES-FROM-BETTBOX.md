@@ -45,3 +45,7 @@
 - 新增 `core/meow_rules.go`（+ `core/meow_rules_test.go`）：`meowSanitizeDanglingRules` 在 `UnmarshalRawConfig` 之后、`ParseRawConfig` 之前，把引用了配置里不存在的出站的规则改成 `PASS`、引用了不存在 rule-provider 的规则删掉（子规则同理），并写 warn 日志。
 - `core/hub.go handleValidateConfig`：由 `config.Parse` 改为 `UnmarshalRawConfig` → 消毒 → `ParseRawConfig`，让导入校验与实际应用同一套宽容度。
 - `core/common.go setupConfig`：`ParseRawConfig` 前同样消毒。
+
+## 2026-09-29 · TUN 栈默认改回 mixed
+- `lib/models/clash_config.dart`：`Tun.stack` 默认恢复 Bettbox 原值 `mixed`（09-22 曾改为 mihomo 的 `mips` 用户态栈；Android 分应用白名单下 Google Play / OKX 不通，同配置 mixed 正常）。
+- `lib/models/config.dart compatibleFromJson`：一次性把存着 `mips` 的配置改回 `mixed`，迁完记 `meow.tunStackMipsReverted`，之后在「高级」里手选 `mips` 仍保留；去掉 09-22 的 `mixed → mips` 迁移及其标记 `tunStackMigrated`。

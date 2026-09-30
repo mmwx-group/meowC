@@ -285,8 +285,7 @@ abstract class Tun with _$Tun {
     @Default(false) bool enable,
     @Default(tunDeviceName) String device,
     @JsonKey(name: 'auto-route') @Default(false) bool autoRoute,
-    // MeowX：默认栈 mips（mihomo 自研的纯 Go 用户态 IP 栈，sing-tun 0.4.24 起可用；老配置的迁移见 Config.compatibleFromJson）
-    @Default(TunStack.mips) TunStack stack,
+    @Default(TunStack.mixed) TunStack stack,
     @JsonKey(name: 'dns-hijack') @Default(['any:53']) List<String> dnsHijack,
     @JsonKey(name: 'route-address') @Default([]) List<String> routeAddress,
     @JsonKey(name: 'route-exclude-address')

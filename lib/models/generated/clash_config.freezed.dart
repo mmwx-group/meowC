@@ -1492,8 +1492,7 @@ as bool?,
 /// @nodoc
 mixin _$Tun {
 
- bool get enable; String get device;@JsonKey(name: 'auto-route') bool get autoRoute;// MeowX：默认栈 mips（mihomo 自研的纯 Go 用户态 IP 栈，sing-tun 0.4.24 起可用；老配置的迁移见 Config.compatibleFromJson）
- TunStack get stack;@JsonKey(name: 'dns-hijack') List<String> get dnsHijack;@JsonKey(name: 'route-address') List<String> get routeAddress;@JsonKey(name: 'route-exclude-address') List<String> get routeExcludeAddress;@JsonKey(name: 'strict-route') bool get strictRoute;@JsonKey(name: 'disable-icmp-forwarding') bool get disableIcmpForwarding; int get mtu;@JsonKey(name: 'endpoint-independent-nat') bool get endpointIndependentNat;@JsonKey(name: 'auto-redirect') bool get autoRedirect;
+ bool get enable; String get device;@JsonKey(name: 'auto-route') bool get autoRoute; TunStack get stack;@JsonKey(name: 'dns-hijack') List<String> get dnsHijack;@JsonKey(name: 'route-address') List<String> get routeAddress;@JsonKey(name: 'route-exclude-address') List<String> get routeExcludeAddress;@JsonKey(name: 'strict-route') bool get strictRoute;@JsonKey(name: 'disable-icmp-forwarding') bool get disableIcmpForwarding; int get mtu;@JsonKey(name: 'endpoint-independent-nat') bool get endpointIndependentNat;@JsonKey(name: 'auto-redirect') bool get autoRedirect;
 /// Create a copy of Tun
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -1698,13 +1697,12 @@ return $default(_that.enable,_that.device,_that.autoRoute,_that.stack,_that.dnsH
 @JsonSerializable()
 
 class _Tun implements Tun {
-  const _Tun({this.enable = false, this.device = tunDeviceName, @JsonKey(name: 'auto-route') this.autoRoute = false, this.stack = TunStack.mips, @JsonKey(name: 'dns-hijack') final  List<String> dnsHijack = const ['any:53'], @JsonKey(name: 'route-address') final  List<String> routeAddress = const [], @JsonKey(name: 'route-exclude-address') final  List<String> routeExcludeAddress = const [], @JsonKey(name: 'strict-route') this.strictRoute = false, @JsonKey(name: 'disable-icmp-forwarding') this.disableIcmpForwarding = true, this.mtu = 9000, @JsonKey(name: 'endpoint-independent-nat') this.endpointIndependentNat = false, @JsonKey(name: 'auto-redirect') this.autoRedirect = false}): _dnsHijack = dnsHijack,_routeAddress = routeAddress,_routeExcludeAddress = routeExcludeAddress;
+  const _Tun({this.enable = false, this.device = tunDeviceName, @JsonKey(name: 'auto-route') this.autoRoute = false, this.stack = TunStack.mixed, @JsonKey(name: 'dns-hijack') final  List<String> dnsHijack = const ['any:53'], @JsonKey(name: 'route-address') final  List<String> routeAddress = const [], @JsonKey(name: 'route-exclude-address') final  List<String> routeExcludeAddress = const [], @JsonKey(name: 'strict-route') this.strictRoute = false, @JsonKey(name: 'disable-icmp-forwarding') this.disableIcmpForwarding = true, this.mtu = 9000, @JsonKey(name: 'endpoint-independent-nat') this.endpointIndependentNat = false, @JsonKey(name: 'auto-redirect') this.autoRedirect = false}): _dnsHijack = dnsHijack,_routeAddress = routeAddress,_routeExcludeAddress = routeExcludeAddress;
   factory _Tun.fromJson(Map<String, dynamic> json) => _$TunFromJson(json);
 
 @override@JsonKey() final  bool enable;
 @override@JsonKey() final  String device;
 @override@JsonKey(name: 'auto-route') final  bool autoRoute;
-// MeowX：默认栈 mips（mihomo 自研的纯 Go 用户态 IP 栈，sing-tun 0.4.24 起可用；老配置的迁移见 Config.compatibleFromJson）
 @override@JsonKey() final  TunStack stack;
  final  List<String> _dnsHijack;
 @override@JsonKey(name: 'dns-hijack') List<String> get dnsHijack {

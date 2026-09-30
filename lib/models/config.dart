@@ -482,17 +482,19 @@ abstract class Config with _$Config {
       }
     } catch (_) {}
 
-    // MeowX：默认 TUN 栈 mixed → mips（2026-09-22）。栈只能在「高级」里改，老用户存的基本都是旧默认 mixed，
-    // 一次性迁过去；迁完在 meow 里记一笔，之后用户手选 mixed 就保留
+    // MeowX：默认 TUN 栈改回 mixed（2026-09-29）。09-22 把默认改成 mips 并把存着 mixed 的老配置迁了过去，
+    // 结果 Android 分应用白名单下 Google Play / OKX 不通，mixed 正常。存着 mips 的分不清是被迁的还是手选的，
+    // 一次性全部改回 mixed；迁完在 meow 里记一笔，之后用户在「高级」里手选 mips 就保留
     try {
       final meow = json['meow'] is Map ? Map<String, Object?>.from(json['meow'] as Map) : <String, Object?>{};
-      if (meow['tunStackMigrated'] != true) {
+      if (meow['tunStackMipsReverted'] != true) {
         final patch = json['patchClashConfig'];
         final tun = patch is Map ? patch['tun'] : null;
-        if (tun is Map && tun['stack'] == TunStack.mixed.name) {
-          tun['stack'] = TunStack.mips.name;
+        if (tun is Map && tun['stack'] == TunStack.mips.name) {
+          tun['stack'] = TunStack.mixed.name;
         }
-        json['meow'] = {...meow, 'tunStackMigrated': true};
+        meow.remove('tunStackMigrated');
+        json['meow'] = {...meow, 'tunStackMipsReverted': true};
       }
     } catch (_) {}
 
