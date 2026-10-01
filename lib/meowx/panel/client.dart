@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'crypto.dart';
 import 'models.dart';
+import 'po0.dart';
 
 /// 妙妙屋X 主控客户端：证书拉取 / 缓存 / 验签 + 加密 RPC。
 /// 自带直连 HttpClient（不走 Bettbox 全局 HttpOverrides 的本地代理，避免 Windows 系统代理模式下成环）。
@@ -305,6 +306,14 @@ class PanelClient {
   Future<Map<String, NodeMedal>> returnRoutes(String token) async {
     final r = await rpc('/user/return-routes', method: 'GET', token: token);
     return NodeMedal.parse(r);
+  }
+
+  /// 用户登记的 po0 服务器列表（客户端 IP 加白目标）；没有时为空列表。未登录 / 出错抛 [PanelException]。
+  Future<List<Po0Server>> po0Servers(String token) async {
+    final r = await rpc('/user/po0-servers', method: 'GET', token: token);
+    final err = _error(r);
+    if (err != null && r['servers'] == null) throw PanelException(err);
+    return Po0Server.parse(r);
   }
 }
 

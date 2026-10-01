@@ -1,5 +1,6 @@
 import 'package:bett_box/models/meow.dart';
 
+import '../panel/po0.dart';
 import '../state/overrides.dart';
 
 /// fake-ip 缺省过滤（与 iOS 端补默认时一致）。
@@ -72,8 +73,10 @@ void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {
   rawConfig['hosts'] = hosts;
 }
 
-/// 返回要前置到规则表最前的规则（绕过代理 → 推送直连）。
-List<String> meowPrependRules(MeowSettings meow) => [
+/// 返回要前置到规则表最前的规则（po0 直连 → 绕过代理 → 推送直连）。
+/// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，IP 来自最近一次拿到的服务器列表。
+List<String> meowPrependRules(MeowSettings meow, {bool? debugPo0}) => [
+  if (meow.po0Enabled || (debugPo0 ?? debugPo0Urls.isNotEmpty)) ...po0DirectRules(meow.po0DirectIps),
   ...bypassRules(meow.bypassDomains, meow.bypassCidrs),
   if (meow.pushDirect) ...pushDirectRules,
 ];

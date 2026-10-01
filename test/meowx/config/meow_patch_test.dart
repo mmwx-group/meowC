@@ -31,6 +31,22 @@ void main() {
       ]);
       expect(meowPrependRules(const MeowSettings()), isEmpty);
     });
+    test('po0 直连：开关关着不加；开着按缓存 IP 生成 v4 / v6 规则且排在最前', () {
+      const ips = ['209.248.57.93', '2001:db8::1'];
+      // 关着：有缓存也不加
+      expect(meowPrependRules(const MeowSettings(po0DirectIps: ips), debugPo0: false), isEmpty);
+      // 开着：排在绕过 / 推送直连之前
+      expect(meowPrependRules(const MeowSettings(po0Enabled: true, po0DirectIps: ips, bypassDomains: ['x.com'], pushDirect: true), debugPo0: false), [
+        'IP-CIDR,209.248.57.93/32,DIRECT,no-resolve',
+        'IP-CIDR6,2001:db8::1/128,DIRECT,no-resolve',
+        'DOMAIN,x.com,DIRECT',
+        ...pushDirectRules,
+      ]);
+      // 开着但列表空（撤掉）
+      expect(meowPrependRules(const MeowSettings(po0Enabled: true), debugPo0: false), isEmpty);
+      // debug 注入视为开着
+      expect(meowPrependRules(const MeowSettings(po0DirectIps: ['1.2.3.4']), debugPo0: true), ['IP-CIDR,1.2.3.4/32,DIRECT,no-resolve']);
+    });
     test('本地代理凭据 → authentication', () {
       final raw = <String, dynamic>{};
       applyMeowAuthentication(raw, const MeowSettings(localProxy: MeowLocalProxy(username: 'u', password: 'p')));

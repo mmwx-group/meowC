@@ -133,6 +133,8 @@ const (
 	generateAgeKeyPairMethod              Method = "generateAgeKeyPair"
 	convertAgeSecretKeyToPublicKeyMethod  Method = "convertAgeSecretKeyToPublicKey"
 	getModeMethod                         Method = "getMode"
+	// MeowX：po0 客户端 IP 加白上报（见 meow_po0.go）
+	meowPo0ReportMethod                   Method = "meowPo0Report"
 	parseExternalProviderContentMethod    Method = "parseExternalProviderContent"
 	getCoreStatusMethod                   Method = "getCoreStatus"
 )

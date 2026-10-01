@@ -53,3 +53,9 @@
 ## 2026-09-29 · Windows 多屏窗口位置
 - `lib/common/window.dart`：还原窗口位置改为按屏换算——存盘坐标（`getBounds`，按保存时所在屏缩放）、屏幕工作区（`screen_retriever`，按各屏自己的缩放）、`setPosition`（按当前所在屏缩放）三者口径不同，多屏且缩放不一致时原逻辑会把窗口放到屏外 / 别的屏；换算逻辑在 `lib/meowx/state/window_placement.dart`。标题栏放不进任何一块屏时居中，超出右 / 下边的部分收回屏内；居中前先定尺寸（原来按默认 1280×720 居中会偏右下）。
 - `lib/common/window.dart show()`：从托盘显示前同样检查，藏在托盘期间拔了显示器时挪回主屏居中。
+
+## 2026-09-30 · po0 客户端 IP 加白
+- 新增 `core/meow_po0.go`：`meowPo0Report` action——用 mihomo 直连 dialer（与 DIRECT 出站同一条路，Android 经 socket protect 出 VPN、Windows TUN 经 sing-tun 绑物理网卡）向 po0 服务器 POST 空 body、跳过证书校验、10s 超时，逐 url 返回状态码与响应体；`core/constant.go` / `core/action.go` 登记该方法。
+- `lib/enum/enum.dart`（`ActionMethod.meowPo0Report`）与生成文件 `lib/models/generated/core.g.dart`（枚举映射手动补一行，与 build_runner 输出一致）。
+- 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型在 `lib/meowx/panel/po0.dart`。
+- `lib/models/meow.dart MeowSettings`：新增 `po0Enabled`（默认 false）与 `po0DirectIps`（最近一次 po0 服务器 IP 缓存；开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve`，列表变化时与其它覆写同样 `applyProfileDebounce` 热生效）；设置页「订阅」组加「po0 加白」开关，所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化）以它为准。

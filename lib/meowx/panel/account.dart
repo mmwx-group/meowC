@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/direct_profile.dart';
 import '../state/meow_settings.dart';
+import '../state/po0_reporter.dart';
 import 'client.dart';
 import 'models.dart';
 import 'unlock_catalog.dart';
@@ -107,6 +108,7 @@ class AccountActions {
     ref.read(medalsProvider.notifier).state = const {};
     ref.read(unlocksProvider.notifier).state = const {};
     ref.read(panelFeaturesProvider.notifier).state = const PanelFeatures();
+    ref.read(po0ReporterProvider).stop();
     _extrasAt = null;
   }
 
@@ -163,6 +165,8 @@ class AccountActions {
     if (token.isEmpty) return;
     if (ifStale && _extrasAt != null && DateTime.now().difference(_extrasAt!) < const Duration(minutes: 10)) return;
     _extrasAt = DateTime.now();
+    // po0 加白目标列表也在这里顺带刷新并立刻上报（不依赖 features 开关）
+    unawaited(ref.read(po0ReporterProvider).refresh());
     final client = _client();
     PanelFeatures features;
     try {

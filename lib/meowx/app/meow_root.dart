@@ -21,8 +21,10 @@ import '../pages/proxies/proxies_page.dart';
 import '../pages/settings/settings_page.dart';
 import '../panel/account.dart';
 import '../panel/client.dart';
+import '../panel/po0.dart';
 import '../panel/realtime.dart';
 import '../state/meow_settings.dart';
+import '../state/po0_reporter.dart';
 import '../state/status.dart';
 import '../theme/icon_rail.dart';
 import '../theme/tokens.dart';
@@ -42,6 +44,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<String?> _profileSub;
   late final ProviderSubscription<bool> _initSub;
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
+  late final ProviderSubscription<(String, bool, bool)> _po0Sub;
   RealtimeClient? _realtime;
 
   @override
@@ -59,6 +62,25 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         return (a.host, a.token, r.watch(isRunningProvider));
       }),
       (prev, next) => _syncRealtime(next),
+      fireImmediately: true,
+    );
+    // po0 加白：以设置开关为准。开着 → 启动（核心 init 完）/ 登录后拉列表并立刻上报，开关刚打开时无视去重立刻报；
+    // 关掉 / 登出 → 停表清空
+    _po0Sub = ref.listenManual(
+      Provider<(String, bool, bool)>((r) {
+        final s = r.watch(meowSettingProvider.select((s) => (s.account.token, s.po0Enabled)));
+        return (s.$1, s.$2, r.watch(initProvider));
+      }),
+      (prev, next) {
+        final (token, enabled, inited) = next;
+        if (!inited) return;
+        final reporter = ref.read(po0ReporterProvider);
+        if (debugPo0Urls.isEmpty && (token.isEmpty || !enabled)) {
+          reporter.stop();
+        } else {
+          unawaited(reporter.refresh(force: prev != null && !prev.$2));
+        }
+      },
       fireImmediately: true,
     );
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
@@ -125,6 +147,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _profileSub.close();
     _initSub.close();
     _realtimeSub.close();
+    _po0Sub.close();
     _realtime?.stop();
     super.dispose();
   }

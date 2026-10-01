@@ -328,6 +328,7 @@ const _$ActionMethodEnumMap = {
   ActionMethod.getMode: 'getMode',
   ActionMethod.parseExternalProviderContent: 'parseExternalProviderContent',
   ActionMethod.getCoreStatus: 'getCoreStatus',
+  ActionMethod.meowPo0Report: 'meowPo0Report',
   ActionMethod.setState: 'setState',
   ActionMethod.startTun: 'startTun',
   ActionMethod.stopTun: 'stopTun',

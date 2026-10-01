@@ -253,6 +253,12 @@ func handleAction(action *Action, result ActionResult) {
 		}
 		result.success(publicKeys[0])
 		return
+	case meowPo0ReportMethod:
+		data := action.Data.(string)
+		handleMeowPo0Report(data, func(value string) {
+			result.success(value)
+		})
+		return
 	case crashMethod:
 		result.success(true)
 		handleCrash()

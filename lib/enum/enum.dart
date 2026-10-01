@@ -260,6 +260,9 @@ enum ActionMethod {
   parseExternalProviderContent,
   getCoreStatus,
 
+  /// MeowX：po0 客户端 IP 加白上报（核心直连 POST）
+  meowPo0Report,
+
   ///Android,
   setState,
   startTun,

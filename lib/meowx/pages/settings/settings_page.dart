@@ -242,6 +242,15 @@ class SettingsPage extends ConsumerWidget {
                 }
               },
             ),
+            // 开关变化由 MeowRoot 监听 po0Enabled 统一处理：打开立刻拉列表上报，关闭停表清空
+            _SwitchRow(
+              icon: Icons.verified_user_rounded,
+              color: mm.teal,
+              title: 'po0 加白',
+              subtitle: '把本机出口 IP 上报到主控里登记的 po0 服务器，每 10 分钟及网络变化时自动加白',
+              value: meow.po0Enabled,
+              onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(po0Enabled: v)),
+            ),
           ],
         ),
         _Section(

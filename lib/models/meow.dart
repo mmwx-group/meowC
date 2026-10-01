@@ -158,6 +158,13 @@ abstract class MeowSettings with _$MeowSettings {
     @Default(MeowLocalProxy()) MeowLocalProxy localProxy,
     @Default(MeowAccount()) MeowAccount account,
 
+    /// po0 客户端 IP 加白：打开后才拉主控的 po0 列表并定时 / 网络变化时上报本机出口 IP
+    @Default(false) bool po0Enabled,
+
+    /// 最近一次拿到的 po0 服务器 IP（已去重、规范化）：开关打开时据此在规则最前加 DIRECT。
+    /// 落盘是为了启动 / 磁贴快速启动（服务 isolate 里没有 Reporter）时规则也在
+    @Default([]) List<String> po0DirectIps,
+
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,
 
