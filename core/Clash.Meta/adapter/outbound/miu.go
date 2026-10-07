@@ -41,7 +41,7 @@ type MiuOption struct {
 	Certificate              string         `proxy:"certificate,omitempty"`
 	PrivateKey               string         `proxy:"private-key,omitempty"`
 	UDP                      bool           `proxy:"udp,omitempty"`
-	Direct                   bool           `proxy:"direct,omitempty"`
+	Vision                   bool           `proxy:"vision,omitempty"`
 	RecvWindow               int            `proxy:"recv-window,omitempty"`
 	ClientMetadata           string         `proxy:"client-metadata,omitempty"`
 	IdleSessionCheckInterval int            `proxy:"idle-session-check-interval,omitempty"`
@@ -143,7 +143,7 @@ func NewMiu(option MiuOption) (*Miu, error) {
 	client, err := miu.NewClient(context.TODO(), miu.ClientConfig{
 		PSK:                      option.PSK,
 		ClientMetadata:           option.ClientMetadata,
-		Direct:                   option.Direct,
+		Vision:                   option.Vision,
 		RecvWindow:               option.RecvWindow,
 		IdleSessionCheckInterval: time.Duration(option.IdleSessionCheckInterval) * time.Second,
 		IdleSessionTimeout:       time.Duration(option.IdleSessionTimeout) * time.Second,

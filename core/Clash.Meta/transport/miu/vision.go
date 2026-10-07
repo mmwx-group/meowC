@@ -15,14 +15,14 @@ import (
 	M "github.com/metacubex/sing/common/metadata"
 )
 
-// DIRECT: one connection, one stream. After SYNACK both ends drop the Miu framing
+// Vision: one connection, one stream. After SYNACK both ends drop the Miu framing
 // and hand the connection over to XTLS-Vision, inner TLS 1.3 traffic then leaves
 // the outer TLS and the server can splice it. Only the handshake is done here,
 // the switching itself is the stock Vision implementation.
 
-const directStreamID = 1
+const visionStreamID = 1
 
-var errDirectRefused = errors.New("miu: server did not grant DIRECT")
+var errVisionRefused = errors.New("miu: server did not grant Vision")
 
 func readFrame(conn net.Conn) (cmd byte, sid uint32, data []byte, err error) {
 	var hdr rawHeader
@@ -38,7 +38,7 @@ func readFrame(conn net.Conn) (cmd byte, sid uint32, data []byte, err error) {
 	return hdr.Cmd(), hdr.StreamID(), data, nil
 }
 
-func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net.Conn, err error) {
+func (c *Client) dialVision(ctx context.Context, destination M.Socksaddr) (_ net.Conn, err error) {
 	addr, err := destinationBytes(destination)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net
 	}()
 	if ekm == nil {
 		// Vision needs the outer TLS session anyway
-		return nil, errors.New("miu: DIRECT requires TLS or REALITY")
+		return nil, errors.New("miu: Vision requires TLS or REALITY")
 	}
 
 	deadline := time.Now().Add(10 * time.Second)
@@ -69,7 +69,7 @@ func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net
 		return nil, err
 	}
 
-	// wait for ServerSettings: does the server speak miu, is it the right server, does it grant DIRECT
+	// wait for ServerSettings: does the server speak miu, is it the right server, does it grant Vision
 	for granted := false; !granted; {
 		cmd, _, data, err := readFrame(conn)
 		if err != nil {
@@ -78,8 +78,8 @@ func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net
 		switch cmd {
 		case cmdServerSettings:
 			m := util.StringMapFromBytes(data)
-			if m["miu"] != "1" || m["direct"] != "1" {
-				return nil, errDirectRefused
+			if m["miu"] != "1" || m["vision"] != "1" {
+				return nil, errVisionRefused
 			}
 			if err = verifyServerTag(m, c.psk, ekm); err != nil {
 				return nil, err
@@ -92,8 +92,8 @@ func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net
 		}
 	}
 
-	open := newFrame(cmdSYNDirect, directStreamID).appendTo(nil)
-	psh := newFrame(cmdPSH, directStreamID)
+	open := newFrame(cmdSYNVision, visionStreamID).appendTo(nil)
+	psh := newFrame(cmdPSH, visionStreamID)
 	psh.data = addr
 	if _, err = conn.Write(psh.appendTo(open)); err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func (c *Client) dialDirect(ctx context.Context, destination M.Socksaddr) (_ net
 		}
 		switch cmd {
 		case cmdSYNACK:
-			if sid != directStreamID {
+			if sid != visionStreamID {
 				continue
 			}
 			if len(data) > 0 {

@@ -20,7 +20,7 @@ import (
 type ClientConfig struct {
 	PSK                      string
 	ClientMetadata           string
-	Direct                   bool // TCP uses a dedicated connection handed over to XTLS-Vision
+	Vision                   bool // TCP uses a dedicated connection handed over to XTLS-Vision
 	RecvWindow               int  // per stream receive window in bytes, 0 = default
 	IdleSessionCheckInterval time.Duration
 	IdleSessionTimeout       time.Duration
@@ -32,11 +32,11 @@ type ClientConfig struct {
 
 type Client struct {
 	psk            []byte
-	visionSeed     uuid.UUID // sha256(psk)[:16], the Vision seed of DIRECT, same on both ends
+	visionSeed     uuid.UUID // sha256(psk)[:16], the Vision seed of Vision, same on both ends
 	clientMetadata string
 	recvWindow     int64
-	direct         bool
-	directRefused  atomic.Bool // the server does not grant DIRECT
+	vision         bool
+	visionRefused  atomic.Bool // the server does not grant Vision
 	tlsConfig      *vmess.TLSConfig
 	dialer         N.Dialer
 	server         M.Socksaddr
@@ -55,7 +55,7 @@ func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
 		visionSeed:     uuid.FromBytesOrNil(seed[:uuid.Size]),
 		clientMetadata: config.ClientMetadata,
 		recvWindow:     clampWindow(int64(config.RecvWindow)),
-		direct:         config.Direct,
+		vision:         config.Vision,
 		tlsConfig:      config.TLSConfig,
 		dialer:         config.Dialer,
 		server:         config.Server,
@@ -66,16 +66,16 @@ func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-// CreateProxy opens a TCP proxy connection to destination, with DIRECT when it
+// CreateProxy opens a TCP proxy connection to destination, with Vision when it
 // is enabled and granted by the server, as a MUX stream otherwise.
 func (c *Client) CreateProxy(ctx context.Context, destination M.Socksaddr) (net.Conn, error) {
-	if c.direct && !c.directRefused.Load() {
-		conn, err := c.dialDirect(ctx, destination)
-		if err != errDirectRefused {
+	if c.vision && !c.visionRefused.Load() {
+		conn, err := c.dialVision(ctx, destination)
+		if err != errVisionRefused {
 			return conn, err
 		}
-		if c.directRefused.CompareAndSwap(false, true) {
-			log.Warnln("[Miu] %s does not grant DIRECT, falling back to MUX", c.server)
+		if c.visionRefused.CompareAndSwap(false, true) {
+			log.Warnln("[Miu] %s does not grant Vision, falling back to MUX", c.server)
 		}
 	}
 	return c.CreateStream(ctx, destination)

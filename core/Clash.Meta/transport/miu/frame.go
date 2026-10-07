@@ -4,7 +4,7 @@
 //   - a per-user PSK auth header bound to the outer TLS session via the TLS exporter,
 //     so nothing fixed per user ever appears on the wire;
 //   - per-stream flow control (cmdWindow);
-//   - DIRECT: a dedicated connection that hands over to XTLS-Vision after SYNACK,
+//   - Vision: a dedicated connection that hands over to XTLS-Vision after SYNACK,
 //     letting the server splice inner TLS 1.3 traffic.
 //
 // The extensions are only used after both sides announced "miu=1" in their settings.
@@ -29,7 +29,7 @@ const ( // cmds 0-10 are identical to AnyTLS
 
 	// Miu extensions
 	cmdWindow    = 11 // flow control: u32 BE, bytes the receiver has freed
-	cmdSYNDirect = 13 // like SYN, and promises this connection only carries this stream
+	cmdSYNVision = 13 // like SYN, and promises this connection only carries this stream
 )
 
 const (
