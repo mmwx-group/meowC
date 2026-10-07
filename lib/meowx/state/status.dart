@@ -79,7 +79,7 @@ final proxyMetaProvider = Provider<Map<String, ProxyMeta>>((ref) {
     final realityOpts = item['reality-opts'];
     out[name] = ProxyMeta(
       type: item['type']?.toString() ?? '',
-      tls: item['tls'] == true || item['type'] == 'trojan' || item['type'] == 'hysteria2' || item['type'] == 'anytls',
+      tls: item['tls'] == true || item['type'] == 'trojan' || item['type'] == 'hysteria2' || item['type'] == 'anytls' || item['type'] == 'miu',
       reality: realityOpts is Map && realityOpts.isNotEmpty,
       flow: item['flow']?.toString() ?? '',
       network: item['network']?.toString() ?? '',

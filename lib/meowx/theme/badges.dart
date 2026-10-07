@@ -87,6 +87,7 @@ class TypeBadge extends StatelessWidget {
     'hysteria2' || 'hysteria' => (label: 'hy2', color: mm.down),
     'tuic' => (label: 'tuic', color: mm.down),
     'anytls' => (label: 'anytls', color: mm.teal),
+    'miu' => (label: 'miu', color: const Color(0xFFF2793D)),
     'wireguard' => (label: 'wg', color: mm.orange),
     'mieru' => (label: 'mieru', color: const Color(0xFF3EB489)),
     'socks5' || 'http' || 'ssh' => (label: t, color: mm.t2),

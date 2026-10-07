@@ -1008,7 +1008,7 @@ class GlobalState {
         final isTls = proxy['tls'] == true;
 
         bool supportClientFingerprint = false;
-        if (type == 'trojan' || type == 'anytls') {
+        if (type == 'trojan' || type == 'anytls' || type == 'miu') {
           supportClientFingerprint = true;
         } else if ((type == 'vmess' || type == 'vless') && isTls) {
           supportClientFingerprint = true;
