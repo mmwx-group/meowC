@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'tokens.dart';
 
-/// iOS 端 GlassCard：纯色卡片底 + 1px [MeowTokens.cardEdge] 描边（传 [border] 覆盖），圆角默认 26。
+/// 通用卡片：纯色卡片底，圆角默认 24。[MeowTokens.cardEdge] 在新主题里是透明的（白卡配奶白底不需要描边），传 [border] 可覆盖。
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
     required this.child,
-    this.radius = 26,
+    this.radius = 24,
     this.padding = const EdgeInsets.all(14),
     this.color,
     this.border,

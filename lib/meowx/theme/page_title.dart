@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'tokens.dart';
+import 'widgets.dart';
 
-/// 手机端页内大标题：34pt bold，作为内容首行随滚动走；右侧可放圆形玻璃钮。
+/// 页内标题：26pt bold，作为内容首行随滚动走；右侧可放圆形按钮。
 class PageTitle extends StatelessWidget {
   const PageTitle(this.title, {super.key, this.trailing, this.subtitle});
 
@@ -24,7 +25,7 @@ class PageTitle extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: MeowFont.largeTitle,
+                    fontSize: MeowFont.pageTitle,
                     fontWeight: FontWeight.bold,
                     color: mm.t1,
                     height: 1.15,
@@ -41,43 +42,50 @@ class PageTitle extends StatelessWidget {
   }
 }
 
-/// 标题右侧的圆形玻璃钮（36pt）。
+/// 标题右侧的圆形按钮（44，卡片底；[filled] = 墨色实底，用于该页的主操作）。
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
-    required this.icon,
+    this.icon,
+    this.glyph,
     required this.onTap,
     this.color,
     this.busy = false,
     this.tooltip,
+    this.filled = false,
   });
 
-  final IconData icon;
+  /// [icon]（Material 图标）与 [glyph]（设计稿的线性图标）二选一
+  final IconData? icon;
+  final MeowGlyph? glyph;
   final VoidCallback? onTap;
   final Color? color;
   final bool busy;
   final String? tooltip;
+  final bool filled;
 
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
     final btn = Material(
-      color: mm.elev,
-      shape: CircleBorder(side: BorderSide(color: mm.cardEdge)),
+      color: filled ? mm.t1 : mm.elev,
+      shape: const CircleBorder(),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: busy ? null : onTap,
         child: SizedBox(
-          width: 36,
-          height: 36,
+          width: 44,
+          height: 44,
           child: Center(
             child: busy
                 ? SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: mm.t2),
+                    child: CircularProgressIndicator(strokeWidth: 2, color: filled ? mm.bg : mm.t2),
                   )
-                : Icon(icon, size: 18, color: color ?? mm.t1),
+                : glyph != null
+                ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.bg : mm.t1))
+                : Icon(icon, size: 20, color: color ?? (filled ? mm.bg : mm.t1)),
           ),
         ),
       ),

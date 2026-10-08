@@ -24,4 +24,14 @@ void main() {
     expect(latencyStateOf(-1), LatencyState.timeout);
     expect(latencyStateOf(88), LatencyState.value);
   });
+
+  test('延迟文案：没测过 / 测试中 / 超时 / 有值按测速方式上色', () {
+    expect(msStyle(mm, null, LatencyMode.url), ('— ms', mm.t2));
+    expect(msStyle(mm, 0, LatencyMode.url), ('…', mm.t2));
+    expect(msStyle(mm, -1, LatencyMode.url), ('超时', mm.slow));
+    expect(msStyle(mm, 100000, LatencyMode.url), ('超时', mm.slow));
+    expect(msStyle(mm, 38, LatencyMode.url), ('38 ms', mm.good));
+    expect(msStyle(mm, 150, LatencyMode.url), ('150 ms', mm.mid));
+    expect(msStyle(mm, 150, LatencyMode.urlFull), ('150 ms', mm.good));
+  });
 }

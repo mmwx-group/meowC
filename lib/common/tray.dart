@@ -169,6 +169,29 @@ class Tray {
       );
     }
     menuItems.add(MenuItem.separator());
+    // MeowX：菜单顺序按设计稿（design/ui-redesign/boards/WTray.dc.html）——
+    // 显示 / 启停 → 模式 → 接管方式（TUN / 系统代理）→ 代理组 → 开机启动 / 终端代理命令 / 重启内核 → 更多 → 退出
+    if (trayState.isStart) {
+      menuItems.add(
+        MenuItem.checkbox(
+          label: appLocalizations.tun,
+          onClick: (_) {
+            globalState.appController.updateTun();
+          },
+          checked: trayState.tunEnable,
+        ),
+      );
+      menuItems.add(
+        MenuItem.checkbox(
+          label: appLocalizations.systemProxy,
+          onClick: (_) {
+            globalState.appController.updateSystemProxy();
+          },
+          checked: trayState.systemProxy,
+        ),
+      );
+      menuItems.add(MenuItem.separator());
+    }
     if (trayState.trayEnhancement) {
       for (final group in trayState.groups) {
         List<MenuItem> subMenuItems = [];
@@ -228,36 +251,7 @@ class Tray {
         menuItems.add(MenuItem.separator());
       }
     }
-    if (trayState.isStart) {
-      menuItems.add(
-        MenuItem.checkbox(
-          label: appLocalizations.tun,
-          onClick: (_) {
-            globalState.appController.updateTun();
-          },
-          checked: trayState.tunEnable,
-        ),
-      );
-      menuItems.add(
-        MenuItem.checkbox(
-          label: appLocalizations.systemProxy,
-          onClick: (_) {
-            globalState.appController.updateSystemProxy();
-          },
-          checked: trayState.systemProxy,
-        ),
-      );
-      menuItems.add(MenuItem.separator());
-    }
-    final restartMenuItem = MenuItem(
-      label: appLocalizations.restartApp,
-      onClick: (_) async {
-        await Restart.restartApp();
-      },
-    );
-    menuItems.add(restartMenuItem);
-
-    final List<MenuItem> moreMenuItems = [
+    menuItems.addAll([
       MenuItem.checkbox(
         label: appLocalizations.autoLaunch,
         onClick: (_) async {
@@ -280,10 +274,16 @@ class Tray {
           }
         },
       ),
-    ];
+    ]);
 
-    if (!system.isAndroid) {
-      moreMenuItems.add(
+    final List<MenuItem> moreMenuItems = [
+      MenuItem(
+        label: appLocalizations.restartApp,
+        onClick: (_) async {
+          await Restart.restartApp();
+        },
+      ),
+      if (!system.isAndroid)
         MenuItem.checkbox(
           label: appLocalizations.wakelock,
           onClick: (_) async {
@@ -291,12 +291,11 @@ class Tray {
           },
           checked: trayState.wakelockEnabled,
         ),
-      );
-    }
+    ];
 
     menuItems.add(
       MenuItem.submenu(
-        label: appLocalizations.tools,
+        label: appLocalizations.tools,   // 文案是「更多」
         submenu: Menu(items: moreMenuItems),
       ),
     );

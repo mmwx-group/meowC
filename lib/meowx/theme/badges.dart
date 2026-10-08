@@ -2,55 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app/strings.dart';
 import '../panel/models.dart';
-import '../state/latency.dart';
 import 'popover.dart';
 import 'tokens.dart';
-
-/// 延迟胶囊：caption2 等宽 bold，底同色 0.15；null →「—」灰；≤0 →「超时」灰。
-class LatencyChip extends StatelessWidget {
-  const LatencyChip(this.ms, {super.key, this.mode = LatencyMode.url, this.testing = false});
-
-  final int? ms;
-  final LatencyMode mode;
-  final bool testing;
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final String text;
-    final Color color;
-    if (ms == null) {
-      text = '—';
-      color = mm.t3;
-    } else if (ms == 0) {
-      // Bettbox 的 delayMap 用 0 表示「测试中」，不是超时
-      text = '…';
-      color = mm.t3;
-    } else if (ms! < 0 || ms! >= 100000) {
-      text = S.timeout;
-      color = mm.t3;
-    } else {
-      text = '$ms ms';
-      color = latencyColor(ms!, mode, mm);
-    }
-    return Opacity(
-      opacity: testing || ms == 0 ? 0.35 : 1,
-      child: Container(
-        constraints: const BoxConstraints(minWidth: 30),
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: MeowFont.mono(size: MeowFont.caption2, weight: FontWeight.bold, color: color),
-        ),
-      ),
-    );
-  }
-}
 
 /// 类型徽标：caption2 等宽，底同色 0.16。
 class TypeBadge extends StatelessWidget {
@@ -127,12 +80,11 @@ class MedalBadge extends StatelessWidget {
   final double size;
   final bool tappable;
 
-  /// 与 iOS / macOS 同一套 RGB（金 #D99E26 / 银 #9EA3AD），图标同为五角星、无底纯色。
-  static Color color(String medal) => medal == 'gold' ? const Color(0xFFD99E26) : const Color(0xFF9EA3AD);
-
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(Icons.star_rounded, size: size, color: color(medal.medal));
+    // 五角星、无底纯色；金 / 银取主题 token（设计稿 --gold / --silver，深浅色各一套）
+    final mm = context.mm;
+    final icon = Icon(Icons.star_rounded, size: size, color: medal.medal == 'gold' ? mm.gold : mm.silver);
     if (!tappable) return icon;
     return Builder(
       builder: (ctx) => GestureDetector(

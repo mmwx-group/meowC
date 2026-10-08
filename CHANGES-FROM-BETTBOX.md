@@ -14,10 +14,10 @@
 
 ## 2026-09-20 · MeowX 壳（P1 第一轮）
 - `lib/main.dart`：`runApp` 前 `LiquidGlassWidgets.initialize()` 预热液态玻璃 shader，App 外层包 `LiquidGlassWidgets.wrap`（让玻璃跟随 App 的深浅色）；手机底栏换成 `liquid_glass_widgets` 的 `GlassTabBar.bottom`（Impeller 上真折射，Skia 上自动降级为模糊 + 高光）。
-- `lib/application.dart`：`home` 由 Bettbox `HomePage` 换成 `lib/meowx/app/meow_root.dart` 的 `MeowRoot`（手机底部 5 Tab / 宽屏左侧图标栏），主题改为 `meowThemeData`（系统蓝强调色 + MM token，不再动态取色）。Bettbox 原页面经「设置 → 高级」`ToolsView` 原样进入；Bettbox 内部 `toPage(PageLabel)` 经 `currentPageLabelProvider` 映射到 Tab 或 push。
+- `lib/application.dart`：`home` 由 Bettbox `HomePage` 换成 `lib/meowx/app/meow_root.dart` 的 `MeowRoot`（手机底部 4 Tab 的液态玻璃底栏 / 宽屏左侧栏 `MeowSidebar`），主题改为 `meowThemeData`（奶白 / 樱粉 / 墨色的 MM token，不再动态取色）。Bettbox 原页面经「我的 → 高级」`ToolsView` 原样进入；Bettbox 内部 `toPage(PageLabel)` 经 `currentPageLabelProvider` 映射到 Tab 或 push。
 - `lib/models/config.dart`：`Config` 增加 `meow: MeowSettings`（`lib/models/meow.dart`，MeowX 自己的设置：DNS 模式 / 测速方式 / 节点卡片档位 / 同步间隔 / 覆写 / 本地代理 / 账户）；`openLogs` 默认 `false`，`safeFromJson` 不再强制打开日志流。
 - `lib/providers/state.dart`：`configState` 纳入 `meow`，随 Bettbox 偏好一起落盘。
-- 新增 `lib/meowx/`：主题 token / GlassCard / LatencyChip / TypeBadge / PageTitle / IconRail / TwoPane / Sparkline；首页、代理页、设置页（P1）；连接页与配置页暂时嵌入 Bettbox 原视图（P2 替换）。
+- 新增 `lib/meowx/`：主题 token / GlassCard / TypeBadge / PageTitle / TwoPane 与共用元件（`theme/widgets.dart`：线性图标、分段、电源键、地区码标签）；壳（`app/`：四个 Tab、侧栏）；首页 / 节点 / 动态 / 我的四页及二级页；共用状态 `state/connection.dart`（电源键、当前节点、连接计数轮询、Windows 接管方式）。
 
 ## 2026-09-20 · 面板集成与 P2 页面
 - `core/hub.go`：测速三档（`TestDelayParams.mode`：url / url-full / tcping），桥层自己做 unified 口径与 TCPing，不翻 mihomo 全局 `unified-delay`；`lib/clash/{interface,core}.dart` 透传 `mode`；`lib/views/proxies/common.dart` 按 MeowX 设置传 mode。
@@ -38,7 +38,10 @@
 - `build.yaml`：Windows job 额外产出 `MeowX-<ver>-windows-amd64-portable.zip`。
 
 ## 2026-09-21 · 宽屏布局
-- `lib/manager/app_manager.dart`：关掉 Bettbox 桌面侧栏（MeowX 壳自带图标栏）。
+- `lib/manager/app_manager.dart`：关掉 Bettbox 桌面侧栏（MeowX 壳自带侧栏）；去掉右上角的 DEBUG / PRE 斜角标。
+- `lib/manager/window_manager.dart`：窗口标题栏底色并进页面底（不再是一条色带）；`lib/models/config.dart`：新装默认窗口 1100×720（放得下完整侧栏）。
+- `lib/common/tray.dart`：托盘菜单按设计稿重排（显示 / 启停 → 模式 → TUN / 系统代理 → 代理组 → 开机启动 / 终端代理命令 / 重启内核 → 更多 → 退出）。
+- `lib/common/request.dart`、`lib/controller.dart`：手动检查更新区分「已是最新」与「检查失败」（`manualCheckUpdate`）；新版本弹窗写明当前版本与安装包（文件名 · 大小），Android 按钮为「下载 APK」。
 - 首页（仅 Windows）：网速图位置换成「接管方式」卡（TUN / 系统代理，开关沿用 Bettbox 的 provider）。
 
 ## 2026-09-27 · 悬空规则引用不再废掉整份配置

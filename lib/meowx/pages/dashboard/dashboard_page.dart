@@ -1,272 +1,140 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
-import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
-import 'package:bett_box/providers/providers.dart';
-import 'package:bett_box/state.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/meow_root.dart';
-import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
-import '../../config/direct_profile.dart';
-import '../../config/meow_patch.dart';
+import '../../state/connection.dart';
 import '../../state/exit_ip.dart';
-import '../../state/format.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
-import '../../theme/glass_card.dart';
 import '../../theme/page_title.dart';
-import '../../theme/sparkline.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
+import '../../theme/widgets.dart';
+import 'active_connections_card.dart';
+import 'hero_card.dart';
+import 'info_cards.dart';
+import 'speed_card.dart';
+import 'takeover_card.dart';
 
 const _gap = 12.0;
 const _pad = 16.0;
 
-/// 宽布局右列一行（指标卡）的高度。之前写死 104：只够 1.0 倍字号，App 字号跟随系统（最大 1.4 倍）时
-/// 右列 Column 没有弹性项，每张指标卡越出底边十几 px。按当前字样和文字缩放量出来，最小仍是 104。
-/// 标题继承页面默认样式（M3 bodyMedium，行高 1.43）；数值 / 说明套的是 DefaultTextStyle（替换、不合并），
-/// 不带 height，行高取决于字体自身的度量，所以只用它们自己的样式量。样例带中文：CJK 字体的行高比拉丁字母高。
-double _wideRowExtent(BuildContext context) {
-  final scaler = MediaQuery.textScalerOf(context);
-  final base = DefaultTextStyle.of(context).style;
-  double lineHeight(TextStyle style) {
-    final tp = TextPainter(
-      text: TextSpan(text: '上传 12.3', style: style),
-      textDirection: TextDirection.ltr,
-      textScaler: scaler,
-      maxLines: 1,
-    )..layout();
-    final h = tp.height;
-    tp.dispose();
-    return h;
-  }
+/// 首页（设计稿 design/ui-redesign/boards/Main.dc.html、WHome.dc.html）。
+/// 手机：一列——品牌顶栏 → 连接主卡 → 网速 → 订阅 → 代理应用（Android）→ 指标 → 出口 IP。
+/// 宽屏（有侧栏）：5 : 7 两列——左：连接主卡 → 接管方式（Windows）/ 代理应用（Android 平板）→ 网速（撑满）；
+/// 右：订阅 → 指标 → 出口 IP → 活跃连接（撑满）。700–899 宽放不下两列，退成一列。
+///
+/// 「首页卡片」开关（[HomeCard]）与新布局的对应：上传 / 下载 = 网速卡里的两列，网速图 = 网速卡里的折线（三个都关，网速卡不出现）；
+/// 代理连接 / 直连连接 / 内存 / DNS 模式 = 指标行里的四格（剩下的等分一行）；出口 IP = 那两格 + 标题行的重查钮。
+/// Windows 上折线恒在（它撑满左列），不给关。
+class DashboardPage extends ConsumerWidget {
+  const DashboardPage({super.key, this.fetchConnections});
 
-  final title = math.max(lineHeight(base.merge(const TextStyle(fontSize: MeowFont.caption))), MeowFont.footnote + 2);   // 图标 15
-  final value = lineHeight(
-    const TextStyle(fontSize: MeowFont.title2, fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
-  );
-  final desc = lineHeight(const TextStyle(fontSize: MeowFont.caption2));
-  return math.max(104.0, (28 + title + 6 + value + 4 + desc + 2).ceilToDouble());   // 上下 padding 14、行距 6 / 4、余量 2
-}
-
-/// 首页：compact 顺序 标题 → 上传|下载 → 网速图 → 连接主卡 → 代理|直连 → 内存|DNS → 出口 IP；
-/// wide 左列「连接主卡 / 网速图」各 = 两行 + 12，右列四行各一个行高（按字号量出，至少 104，见 [_wideRowExtent]）。
-class DashboardPage extends ConsumerStatefulWidget {
-  const DashboardPage({super.key});
+  /// 「活跃连接」取连接快照；默认问核心，只有测试会换掉。
+  @visibleForTesting
+  final Future<List<TrackerInfo>> Function()? fetchConnections;
 
   @override
-  ConsumerState<DashboardPage> createState() => _DashboardPageState();
-}
-
-class _DashboardPageState extends ConsumerState<DashboardPage> {
-  int _proxyConns = 0, _directConns = 0;
-  int _memory = 0;
-  late final VoidCallback _tick1, _tick2;
-  bool _polling = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _tick1 = () => unawaited(_pollConnections());
-    _tick2 = () => unawaited(_pollMemory());
-    dashboardRefreshManager.tick1s.addListener(_tick1);
-    dashboardRefreshManager.tick2s.addListener(_tick2);
-  }
-
-  @override
-  void dispose() {
-    dashboardRefreshManager.tick1s.removeListener(_tick1);
-    dashboardRefreshManager.tick2s.removeListener(_tick2);
-    super.dispose();
-  }
-
-  bool get _visible => ref.read(meowTabProvider) == MeowTab.home || ref.read(isWideLayoutProvider);
-
-  Future<void> _pollConnections() async {
-    if (_polling || !mounted) return;
-    if (!ref.read(isRunningProvider)) {
-      if (_proxyConns != 0 || _directConns != 0) setState(() => _proxyConns = _directConns = 0);
-      ref.read(connectionCountProvider.notifier).state = 0;
-      return;
-    }
-    _polling = true;
-    try {
-      final conns = await clashCore.getConnections();
-      var proxy = 0, direct = 0;
-      for (final c in conns) {
-        final first = c.chains.firstOrNull ?? '';
-        if (first == 'DIRECT') {
-          direct++;
-        } else if (!first.startsWith('REJECT')) {
-          proxy++;
-        }
-      }
-      if (!mounted) return;
-      ref.read(connectionCountProvider.notifier).state = conns.length;
-      if (_visible && (proxy != _proxyConns || direct != _directConns)) {
-        setState(() {
-          _proxyConns = proxy;
-          _directConns = direct;
-        });
-      }
-    } catch (_) {
-    } finally {
-      _polling = false;
-    }
-  }
-
-  Future<void> _pollMemory() async {
-    if (!mounted || !_visible || !ref.read(isRunningProvider)) return;
-    try {
-      final m = await clashCore.getMemory();
-      if (mounted && m != _memory) setState(() => _memory = m);
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final wide = ref.watch(isTwoPaneProvider);
-    final running = ref.watch(isRunningProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wide = ref.watch(isWideLayoutProvider);
+    final twoPane = wide && ref.watch(isTwoPaneProvider);
     final hidden = ref.watch(meowSettingProvider.select((s) => s.homeHiddenCards));
-    // Windows 上「网速图」的位置是接管卡（TUN / 系统代理），不给关
-    final desktop = system.isWindows || const bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
-    bool shows(HomeCard c) => (c == HomeCard.chart && desktop) || !hidden.contains(c.name);
-    final title = PageTitle(
-      S.home,
-      trailing: RoundGlassButton(
-        icon: Icons.tune_rounded,
-        tooltip: S.homeCards,
-        onTap: () => _showCardSettings(context, desktop),
-      ),
+    bool shows(HomeCard c) => (c == HomeCard.chart && isDesktopUi) || !hidden.contains(c.name);
+
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (shows(HomeCard.ip)) ...[const _RefreshIpButton(), const SizedBox(width: 8)],
+        _RoundButton(glyph: MeowGlyph.sliders, tooltip: S.homeCards, onTap: () => _showCardSettings(context)),
+      ],
     );
-    final upload = _MetricCard(
-      icon: Icons.arrow_upward_rounded,
-      title: S.upload,
-      color: context.mm.accent,
-      value: const _RateValue(up: true),
-      descWidget: const _SessionTotal(up: true),
-    );
-    final download = _MetricCard(
-      icon: Icons.arrow_downward_rounded,
-      title: S.download,
-      color: context.mm.down,
-      value: const _RateValue(up: false),
-      descWidget: const _SessionTotal(up: false),
-    );
-    final proxyCard = _MetricCard(
-      icon: Icons.alt_route_rounded,
-      title: S.proxyConnections,
-      color: context.mm.pur,
-      value: Text('${running ? _proxyConns : 0}'),
-      desc: S.viaNodeGroup,
-      onTap: () {
-        ref.read(meowTabProvider.notifier).state = MeowTab.connections;
-        ref.read(currentPageLabelProvider.notifier).value = PageLabel.connections;
-      },
-    );
-    final directCard = _MetricCard(
-      icon: Icons.arrow_forward_rounded,
-      title: S.directConnections,
-      color: context.mm.good,
-      value: Text('${running ? _directConns : 0}'),
-      desc: S.directBypass,
-    );
-    final memoryCard = _MetricCard(
-      icon: Icons.memory_rounded,
-      title: S.memory,
-      color: context.mm.teal,
-      value: Text(running ? fmtSize(_memory) : '—'),
-      desc: S.coreMemory,
-    );
-    const dnsCard = _DnsModeCard();
-    const exitIp = _ExitIpCard();
-    const main = _ConnectionCard();
-    // Windows：网速图的位置换成「TUN / 系统代理」接管卡（桌面端专有，两个开关沿用 Bettbox 的实现）
-    // MEOWX_PREVIEW_DESKTOP：只用于在 Android 模拟器上预览这张桌面卡，正式包不带
-    final Widget speed = desktop ? const _TakeoverCard() : _SpeedCard(expand: wide);
+    final hero = HomeHeroCard(dense: wide);
+    final up = shows(HomeCard.upload), down = shows(HomeCard.download), chart = shows(HomeCard.chart);
+    final speed = up || down || chart
+        ? HomeSpeedCard(up: up, down: down, chart: chart, dense: wide, expand: twoPane)
+        : null;
+    final subscription = HomeSubscriptionCard(dense: wide);
+    // MEOWX_PREVIEW_DESKTOP 在 Android 模拟器上预览的是 Windows 的样子，不带这行
+    final apps = system.isAndroid && !isDesktopUi ? HomeProxyAppsRow(dense: wide) : null;
+    final takeover = isDesktopUi ? const HomeTakeoverCard() : null;
+    final tiles = [
+      for (final c in const [HomeCard.proxied, HomeCard.direct, HomeCard.memory, HomeCard.dns])
+        if (shows(c)) c,
+    ];
+    final metrics = tiles.isEmpty ? null : HomeMetricsRow(cards: tiles, dense: wide);
+    final exitIp = shows(HomeCard.ip) ? HomeExitIp(dense: wide) : null;
 
     if (!wide) {
       return ListView(
-        padding: EdgeInsets.fromLTRB(_pad, 0, _pad, _pad + 8 + MediaQuery.paddingOf(context).bottom),
-        children: _spaced([
-          title,
-          _pair(shows(HomeCard.upload) ? upload : null, shows(HomeCard.download) ? download : null),
-          if (shows(HomeCard.chart)) speed,
-          main,
-          _pair(shows(HomeCard.proxied) ? proxyCard : null, shows(HomeCard.direct) ? directCard : null),
-          _pair(shows(HomeCard.memory) ? memoryCard : null, shows(HomeCard.dns) ? dnsCard : null),
-          if (shows(HomeCard.ip)) exitIp,
-        ]),
+        // 悬浮底栏盖在内容上（壳 extendBody）：底部留白要把它的高度（MediaQuery.padding.bottom）加进去
+        padding: EdgeInsets.fromLTRB(_pad, 0, _pad, _pad + MediaQuery.paddingOf(context).bottom),
+        children: _spaced([_BrandBar(actions: actions), hero, speed, subscription, apps, metrics, exitIp]),
       );
     }
-    // 出口 IP 行也用同一个行高：它的底边要和左列网速图卡的底边对齐
-    final rowH = _wideRowExtent(context);
-    Widget? wideRow(Widget? row) => row == null ? null : SizedBox(height: rowH, child: row);
-    final right = _spaced([
-      wideRow(_pair(shows(HomeCard.upload) ? upload : null, shows(HomeCard.download) ? download : null, bounded: true)),
-      wideRow(_pair(shows(HomeCard.proxied) ? proxyCard : null, shows(HomeCard.direct) ? directCard : null, bounded: true)),
-      wideRow(_pair(shows(HomeCard.memory) ? memoryCard : null, shows(HomeCard.dns) ? dnsCard : null, bounded: true)),
-      if (shows(HomeCard.ip)) wideRow(exitIp),
-    ]);
-    final leftHeight = rowH * 2 + _gap;
+
+    final title = PageTitle(S.home, trailing: actions);
+    final pad = widePagePadding();
+    if (!twoPane) {
+      return PageWidth(
+        child: ListView(
+          padding: pad,
+          children: _spaced([
+            title,
+            hero,
+            takeover,
+            apps,
+            speed,
+            subscription,
+            metrics,
+            exitIp,
+            HomeActiveConnections(minRows: 5, fetch: fetchConnections),
+          ]),
+        ),
+      );
+    }
+
+    // 够高：整页正好一屏，「网速」「活跃连接」撑满两列剩下的高度；不够高（最小窗口、手机横屏、大字号）：按内容高度排、整页滚动。
+    // 用 IntrinsicHeight 量内容自己要多高（两个撑满的卡各报一个最小高度），和视口高度取大者——所以这棵子树里不能出现 LayoutBuilder。
+    final left = _spaced([hero, takeover, apps, if (speed != null) chart ? Expanded(child: speed) : speed]);
+    final right = _spaced([subscription, metrics, exitIp, Expanded(child: HomeActiveConnections(expand: true, fetch: fetchConnections))]);
     return PageWidth(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(0, _pad, _pad, _pad),
-        children: [
-          title,
-          const SizedBox(height: _gap),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    SizedBox(height: leftHeight, child: main),
-                    if (shows(HomeCard.chart)) ...[
-                      const SizedBox(height: _gap),
-                      SizedBox(height: leftHeight, child: speed),
-                    ],
-                  ],
-                ),
+      child: LayoutBuilder(
+        builder: (context, c) => SingleChildScrollView(
+          padding: pad,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: math.max(0, c.maxHeight - pad.vertical)),
+            child: IntrinsicHeight(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  title,
+                  const SizedBox(height: _gap),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(flex: 5, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
+                        const SizedBox(width: 14),
+                        Expanded(flex: 7, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              if (right.isNotEmpty) ...[
-                const SizedBox(width: _gap),
-                Expanded(child: Column(children: right)),
-              ],
-            ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  /// 两卡并排、等高。compact 下 ListView 的高度无界，Row 的 stretch 会把子项撑成无限高
-  /// （release 不断言，表现为该行之后整页空白），所以套 IntrinsicHeight 取两卡中较高者；wide 下外层已给定高度。
-  /// 关掉的卡传 null：只剩一张就占满整行，两张都关返回 null（整行不出现）。
-  Widget? _pair(Widget? a, Widget? b, {bool bounded = false}) {
-    final cards = [?a, ?b];
-    if (cards.isEmpty) return null;
-    final row = Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final (i, c) in cards.indexed) ...[
-          if (i > 0) const SizedBox(width: _gap),
-          Expanded(child: c),
-        ],
-      ],
-    );
-    return bounded ? row : IntrinsicHeight(child: row);
-  }
-
   /// 去掉 null，并在相邻两项之间插入间距。
-  List<Widget> _spaced(List<Widget?> items) {
+  static List<Widget> _spaced(List<Widget?> items) {
     final out = <Widget>[];
     for (final w in items.nonNulls) {
       if (out.isNotEmpty) out.add(const SizedBox(height: _gap));
@@ -275,7 +143,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     return out;
   }
 
-  void _showCardSettings(BuildContext context, bool desktop) {
+  void _showCardSettings(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -297,7 +165,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ),
                 ),
                 for (final c in HomeCard.values)
-                  if (!(desktop && c == HomeCard.chart))
+                  if (!(isDesktopUi && c == HomeCard.chart))
                     SwitchListTile(
                       dense: true,
                       title: Text(c.label, style: TextStyle(fontSize: MeowFont.body, color: mm.t1)),
@@ -326,789 +194,88 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
-/// 指标卡：图标 footnote + 标题 caption t2 / 数值 title2 semibold 等宽 / 说明 caption2 t3，padding 14。
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.title,
-    required this.color,
-    required this.value,
-    this.desc = '',
-    this.descWidget,
-    this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final Color color;
-  final Widget value;
-  final String desc;
-
-  /// 需要实时刷新的说明（如「会话 12 MB」）；给了就不用 [desc]。
-  final Widget? descWidget;
-  final VoidCallback? onTap;
+/// 手机端顶栏：品牌头像 + 「MeowX」+ 本页的操作钮（宽屏的品牌在侧栏里，标题行用 [PageTitle]）。
+class _BrandBar extends StatelessWidget {
+  const _BrandBar({required this.actions});
+  final Widget actions;
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    return GlassCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(icon, size: MeowFont.footnote + 2, color: color),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          DefaultTextStyle(
-            style: TextStyle(
-              fontSize: MeowFont.title2,
-              fontWeight: FontWeight.w600,
-              color: mm.t1,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            // 放不下时整体缩小，不截成「12.3 M…」（FittedBox 的 intrinsic 取子项，不影响手机端的 IntrinsicHeight）
-            child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: value),
-          ),
-          const SizedBox(height: 4),
-          DefaultTextStyle(
-            style: TextStyle(fontSize: MeowFont.caption2, color: mm.t3),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            child: descWidget ?? Text(desc),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 实时速率（上传 / 下载卡的大字）。
-class _RateValue extends ConsumerWidget {
-  const _RateValue({required this.up});
-  final bool up;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final list = ref.watch(trafficsProvider).list;
-    final last = list.isEmpty ? null : list.last;
-    return Text(fmtRate((up ? last?.up.value : last?.down.value) ?? 0));
-  }
-}
-
-/// 「会话 X」：本次连接累计流量。
-class _SessionTotal extends ConsumerWidget {
-  const _SessionTotal({required this.up});
-  final bool up;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final total = ref.watch(totalTrafficProvider);
-    return Text('${S.session} ${fmtSize(up ? total.up.value : total.down.value)}');
-  }
-}
-
-/// DNS 模式卡：跟随订阅 / Redir-Host / Fake-IP，点按循环 follow → redir → fake；生效模式变了才重载。
-class _DnsModeCard extends ConsumerWidget {
-  const _DnsModeCard();
-
-  static String _effective(MeowDnsMode mode, String? declared) =>
-      effectiveDnsMode(mode, declared) == 'fake-ip' ? S.dnsFakeIp : S.dnsRedirHost;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(meowSettingProvider.select((s) => s.dnsMode));
-    final declared = ref.watch(declaredDnsModeProvider);
-    return _MetricCard(
-      icon: Icons.public_rounded,
-      title: S.dnsMode,
-      color: context.mm.teal,
-      value: Text(_effective(mode, declared)),
-      desc: mode == MeowDnsMode.follow ? S.dnsFollow : '${mode.label} · 点按切换',
-      onTap: () {
-        final next = MeowDnsMode.values[(mode.index + 1) % MeowDnsMode.values.length];
-        final before = _effective(mode, declared);
-        ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(dnsMode: next));
-        if (_effective(next, declared) != before && ref.read(isRunningProvider)) {
-          globalState.appController.applyProfileDebounce();
-        }
-      },
-    );
-  }
-}
-
-/// Windows 专用：TUN（虚拟网卡，接管全部流量，需管理员 / helper 服务）与系统代理两个开关 + 当前网速。
-class _TakeoverCard extends ConsumerStatefulWidget {
-  const _TakeoverCard();
-
-  @override
-  ConsumerState<_TakeoverCard> createState() => _TakeoverCardState();
-}
-
-class _TakeoverCardState extends ConsumerState<_TakeoverCard> {
-  /// Windows 的 TUN 要靠 MeowX 服务（helper）以 SYSTEM 拉起核心。
-  /// （Bettbox 的 checkIsAdmin 在 Windows 上也只是「服务在跑且 ping 通」，不看进程是否提权，所以这里只认服务状态。）
-  /// null = 还没查 / 非 Windows（不检测）。
-  WindowsHelperServiceStatus? _service;
-  bool _installing = false;
-
-  bool get _tunReady => windows == null || _service == WindowsHelperServiceStatus.running;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_checkService());
-  }
-
-  Future<void> _checkService() async {
-    final w = windows;
-    if (w == null) return;
-    try {
-      final status = await w.checkService();
-      if (mounted) setState(() => _service = status);
-    } catch (e) {
-      commonPrint.log('check helper service failed: $e');
-    }
-  }
-
-  /// 安装并启动服务（弹一次 UAC）。成功返回 true。
-  Future<bool> _installService() async {
-    final w = windows;
-    if (w == null) return true;
-    setState(() => _installing = true);
-    try {
-      final ok = await w.registerService();
-      await _checkService();
-      if (!ok) globalState.showNotifier('MeowX 服务安装失败或已取消授权，TUN 未开启');
-      return ok;
-    } finally {
-      if (mounted) setState(() => _installing = false);
-    }
-  }
-
-  Future<void> _setTun(bool on) async {
-    if (on && !_tunReady) {
-      await _checkService();   // 可能刚被安装包 / 别的窗口装好
-      if (!mounted) return;
-      if (!_tunReady) {
-        final go = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('安装 MeowX 服务'),
-            content: const Text('虚拟网卡（TUN）需要 MeowX 服务以系统权限运行核心。\n安装只需管理员授权一次，之后开关 TUN 不再弹窗。'),
-            actions: [
-              TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
-              FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('安装并开启')),
-            ],
-          ),
-        );
-        if (go != true || !mounted) return;
-        if (!await _installService() || !mounted) return;
-        // 服务刚装好，说明现在跑着的核心是启动时服务不可用、以当前用户身份回落拉起的——它建不了网卡。
-        // 必须重启核心，让 helper 以 SYSTEM 重新拉起；否则后面的 authorizeCore 看到服务已就绪返回 none、不重启，TUN 会下发给这个无权限的核心。
-        ref.read(patchClashConfigProvider.notifier).updateState((s) => s.copyWith.tun(enable: true));
-        try {
-          await globalState.appController.restartCore();
-        } catch (_) {}   // 失败已由 restartCore 自己上报
-        return;
-      }
-    }
-    ref.read(patchClashConfigProvider.notifier).updateState((s) => s.copyWith.tun(enable: on));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final tun = ref.watch(patchClashConfigProvider.select((s) => s.tun.enable));
-    final realTun = ref.watch(realTunEnableProvider);
-    final running = ref.watch(isRunningProvider);
-    final sysProxy = ref.watch(networkSettingProvider.select((s) => s.systemProxy));
-    final port = ref.watch(patchClashConfigProvider.select((s) => s.mixedPort));
-    final traffics = ref.watch(trafficsProvider).list;
-    final last = traffics.isEmpty ? null : traffics.last;
-
-    final String tunDesc;
-    if (_installing) {
-      tunDesc = '正在安装 MeowX 服务…';
-    } else if (!_tunReady && _service != null) {
-      tunDesc = _service == WindowsHelperServiceStatus.presence ? 'MeowX 服务未运行 · 开启时修复' : '未安装 MeowX 服务 · 开启时安装';
-    } else if (tun && running && !realTun) {
-      tunDesc = '未生效：没有拿到管理员权限';
-    } else {
-      tunDesc = '接管全部应用的流量${_service == WindowsHelperServiceStatus.running ? ' · 服务已就绪' : ''}';
-    }
-
-    Widget tile({
-      required IconData icon,
-      required Color color,
-      required String title,
-      required String desc,
-      required bool value,
-      required ValueChanged<bool>? onChanged,
-      bool warn = false,
-    }) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-        decoration: BoxDecoration(color: mm.t1.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            Container(
-              width: 29,
-              height: 29,
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(7)),
-              child: Icon(icon, size: 17, color: Colors.white),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w600, color: mm.t1)),
-                  Text(desc, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: MeowFont.caption2, color: warn ? mm.mid : mm.t3)),
-                ],
-              ),
-            ),
-            Switch.adaptive(value: value, onChanged: onChanged),
-          ],
-        ),
-      );
-    }
-
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.hub_rounded, size: MeowFont.footnote + 2, color: mm.accent),
-              const SizedBox(width: 5),
-              // 窄窗口 + 大字号时标题让位给两个网速，省略而不是整行越界
-              Expanded(
-                child: Text('接管方式', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: MeowFont.caption, color: mm.t2)),
-              ),
-              Text('↑ ${fmtRate(last?.up.value ?? 0)}', style: MeowFont.mono(size: MeowFont.caption2, weight: FontWeight.w600, color: mm.accent)),
-              const SizedBox(width: 8),
-              Text('↓ ${fmtRate(last?.down.value ?? 0)}', style: MeowFont.mono(size: MeowFont.caption2, weight: FontWeight.w600, color: mm.down)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          tile(
-            icon: Icons.lan_rounded,
-            color: mm.pur,
-            title: '虚拟网卡（TUN）',
-            desc: tunDesc,
-            warn: (!_tunReady && _service != null) || (tun && running && !realTun),
-            value: tun,
-            onChanged: _installing ? null : (v) => unawaited(_setTun(v)),
-          ),
-          const SizedBox(height: 8),
-          tile(
-            icon: Icons.settings_ethernet_rounded,
-            color: mm.good,
-            title: '系统代理',
-            desc: '把系统 HTTP 代理指向 127.0.0.1:$port',
-            value: sysProxy,
-            onChanged: (v) => ref.read(networkSettingProvider.notifier).updateState((s) => s.copyWith(systemProxy: v)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 网速图卡：60 点双线 + 「峰值 X」/「每秒采样 | 未连接」。
-/// [expand]：宽布局外层给了定高，图吃掉标题与底栏以外的全部高度（字号变大时自动让出空间）；
-/// 手机端这张卡是 ListView 的直接子项、高度无界，不能用 Expanded，图固定 84。
-class _SpeedCard extends ConsumerWidget {
-  const _SpeedCard({this.expand = false});
-  final bool expand;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final running = ref.watch(isRunningProvider);
-    final traffics = ref.watch(trafficsProvider).list;
-    final recent = traffics.length > 60 ? traffics.sublist(traffics.length - 60) : traffics;
-    final up = [for (final t in recent) t.up.value.toDouble()];
-    final down = [for (final t in recent) t.down.value.toDouble()];
-    final peak = [...up, ...down].fold<double>(0, (m, v) => v > m ? v : m);
-    Widget legend(String text, Color color) => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
-      ],
-    );
-    final chart = Sparkline(up: up, down: down, height: expand ? double.infinity : 84);
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.monitor_heart_outlined, size: MeowFont.footnote + 2, color: mm.accent),
-              const SizedBox(width: 5),
-              // 窄屏 + 大字号时标题让位给图例，省略而不是整行越界
-              Expanded(
-                child: Text(
-                  '网速 · 近 60 秒',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
-                ),
-              ),
-              legend(S.upload, mm.accent),
-              const SizedBox(width: 12),
-              legend(S.download, mm.down),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (expand) Expanded(child: chart) else chart,
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text('${S.peak} ${fmtRate(peak)}', style: MeowFont.mono(size: MeowFont.caption2, color: mm.t3)),
-              const Spacer(),
-              Text(
-                running ? S.samplingPerSecond : S.disconnected,
-                style: TextStyle(fontSize: MeowFont.caption2, color: mm.t3),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 连接主卡：状态点 + 文案 + 已运行；电源键 54；订阅栏；「规则 | 直连」分段。
-class _ConnectionCard extends ConsumerStatefulWidget {
-  const _ConnectionCard();
-
-  @override
-  ConsumerState<_ConnectionCard> createState() => _ConnectionCardState();
-}
-
-class _ConnectionCardState extends ConsumerState<_ConnectionCard> {
-  bool _busy = false;
-  bool? _optimistic;
-
-  Future<void> _toggle() async {
-    if (_busy) return;
-    final isStart = ref.read(isRunningProvider);
-    setState(() {
-      _busy = true;
-      _optimistic = !isStart;
-    });
-    try {
-      await globalState.appController.updateStatus(!isStart);
-    } catch (e) {
-      commonPrint.log('updateStatus failed: $e');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _optimistic = null;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final runTime = ref.watch(runTimeProvider);
-    final selector = ref.watch(startButtonSelectorStateProvider);
-    final restarting = ref.watch(isRestartingCoreProvider);
-    final profile = ref.watch(currentProfileProvider);
-    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
-    final hasProfile = selector.hasProfile && profile != null;
-    final running = runTime != null;
-    final connecting = (_optimistic == true && !running) || restarting;
-
-    final Color dot;
-    final String status;
-    final String sub;
-    if (running) {
-      dot = mm.good;
-      status = S.connected;
-      sub = '${S.running} ${fmtUptime(Duration(milliseconds: runTime))}';
-    } else if (connecting) {
-      dot = mm.orange;
-      status = S.connecting;
-      sub = S.ready;
-    } else {
-      dot = mm.t3;
-      status = S.disconnected;
-      sub = hasProfile ? S.ready : S.notConfigured;
-    }
-
-    final powerColor = running ? mm.slow : (hasProfile ? mm.t2.withValues(alpha: 0.55) : mm.t3.withValues(alpha: 0.28));
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(width: 10, height: 10, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-                        const SizedBox(width: 8),
-                        Text(status, style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w600, color: mm.t1)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(sub, style: MeowFont.mono(size: MeowFont.footnote, color: mm.t2)),
-                  ],
-                ),
-              ),
-              _PowerButton(
-                color: powerColor,
-                glow: running,
-                enabled: hasProfile && !_busy && !restarting,
-                onTap: _toggle,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (profile != null) _SubscriptionBar(profile: profile) else _EmptySubscriptionBar(),
-          const SizedBox(height: 12),
-          _ModeSegment(
-            mode: mode,
-            onChanged: (m) {
-              ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(autoDirectMode: false));
-              globalState.appController.changeMode(m);
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PowerButton extends StatelessWidget {
-  const _PowerButton({required this.color, required this.glow, required this.enabled, required this.onTap});
-  final Color color;
-  final bool glow, enabled;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 54,
-        height: 54,
-        decoration: BoxDecoration(
-          color: color,
-          shape: BoxShape.circle,
-          boxShadow: glow ? [BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 18, spreadRadius: 2)] : null,
-        ),
-        child: const Icon(Icons.power_settings_new_rounded, color: Colors.white, size: 28),
-      ),
-    );
-  }
-}
-
-/// 订阅栏：名称 + 「已用 / 总量」等宽 + 4pt 进度条，圆角 12 底 primary 0.05。
-class _SubscriptionBar extends ConsumerWidget {
-  const _SubscriptionBar({required this.profile});
-  final Profile profile;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final info = profile.subscriptionInfo;
-    final used = (info?.upload ?? 0) + (info?.download ?? 0);
-    final total = info?.total ?? 0;
-    final frac = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
-    final hasUsage = info != null && (total > 0 || used > 0 || (info.expire) > 0);
-    final profiles = withDirectProfileLast(ref.watch(profilesProvider));
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(color: mm.t1.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LayoutBuilder(
-            builder: (context, c) => Row(
-              children: [
-                Icon(Icons.copy_all_rounded, size: 14, color: mm.t2),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: PopupMenuButton<String>(
-                    tooltip: '',
-                    padding: EdgeInsets.zero,
-                    // 改 currentProfileId 即切换（ClashManager 监听后自动重载）。
-                    // 之前调的 setProfileAndAutoApply 只是「更新并重载当前档」，选了别的订阅不会切过去。
-                    onSelected: (id) {
-                      if (profiles.getProfile(id) != null && ref.read(currentProfileIdProvider) != id) {
-                        ref.read(currentProfileIdProvider.notifier).value = id;
-                      }
-                    },
-                    itemBuilder: (_) => [
-                      for (final p in profiles)
-                        PopupMenuItem(value: p.id, child: Text(p.label ?? p.id, maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    ],
-                    child: Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            profile.label ?? profile.id,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w500, color: mm.t1),
-                          ),
-                        ),
-                        Icon(Icons.expand_more_rounded, size: 16, color: mm.t3),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 用量最多占一半宽、放不下就缩小：TB 级套餐 + 窄屏 + 大字号时不再把订阅名挤没 / 整行越界
-                if (hasUsage)
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: c.maxWidth * 0.5),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        total > 0 ? '${fmtSize(used)} / ${fmtSize(total)}' : '${fmtSize(used)} / ${S.unlimited}',
-                        style: MeowFont.mono(size: MeowFont.caption, color: mm.t2),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          if (hasUsage) ...[
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: LinearProgressIndicator(
-                value: frac,
-                minHeight: 4,
-                backgroundColor: mm.t3.withValues(alpha: 0.15),
-                color: frac > 0.9 ? mm.slow : mm.accent,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptySubscriptionBar extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final wide = ref.watch(isTwoPaneProvider);
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: () {
-        ref.read(meowTabProvider.notifier).state = MeowTab.profiles;
-        ref.read(currentPageLabelProvider.notifier).value = PageLabel.profiles;
-      },
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        decoration: BoxDecoration(color: mm.t1.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
-        child: Row(
-          children: [
-            Icon(Icons.add_circle_outline_rounded, size: 16, color: mm.accent),
-            const SizedBox(width: 6),
-            // 手机端连接主卡在 ListView 里能撑高，允许折两行；宽布局主卡定高，只给一行
-            Expanded(
-              child: Text(
-                '${S.noSubscription} · ${S.goImport}',
-                maxLines: wide ? 1 : 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 「规则 | 全局 | 直连」分段。全局 = 全部流量走 GLOBAL 组选中的节点（代理页顶部会出现 GLOBAL 组）。
-class _ModeSegment extends StatelessWidget {
-  const _ModeSegment({required this.mode, required this.onChanged});
-  final Mode mode;
-  final ValueChanged<Mode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    Widget seg(Mode m, String label) {
-      final on = mode == m;
-      return Expanded(
-        child: GestureDetector(
-          onTap: () => onChanged(m),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            decoration: BoxDecoration(
-              color: on ? mm.elev : Colors.transparent,
-              borderRadius: BorderRadius.circular(9),
-              boxShadow: on ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 4)] : null,
-            ),
+          const BrandHead(),
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: on ? mm.t1 : mm.t2),
+              'MeowX',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: MeowFont.pageTitle,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                height: 1.15,
+                color: context.mm.t1,
+                fontFamilyFallback: meowRounded,
+              ),
             ),
           ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(color: mm.t1.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(11)),
-      child: Row(children: [seg(Mode.rule, S.modeRule), seg(Mode.global, S.modeGlobal), seg(Mode.direct, S.modeDirect)]),
-    );
-  }
-}
-
-/// 出口 IP：两列「国内 · 直连出口」|「国际 · 经 代理」；国旗 + 标题 caption2 + IP footnote 等宽；右上刷新。
-/// 连接状态或节点变化（checkIpNum）后延迟 1.5s 重查；国内列不需要连接。
-class _ExitIpCard extends ConsumerStatefulWidget {
-  const _ExitIpCard();
-
-  @override
-  ConsumerState<_ExitIpCard> createState() => _ExitIpCardState();
-}
-
-class _ExitIpCardState extends ConsumerState<_ExitIpCard> {
-  Timer? _debounce;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listenManual(isRunningProvider, (prev, next) => _schedule(running: next));
-    ref.listenManual(checkIpNumProvider, (prev, next) => _schedule(running: ref.read(isRunningProvider)));
-    WidgetsBinding.instance.addPostFrameCallback((_) => _schedule(running: ref.read(isRunningProvider), delay: Duration.zero));
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    super.dispose();
-  }
-
-  void _schedule({required bool running, Duration delay = const Duration(milliseconds: 1500)}) {
-    _debounce?.cancel();
-    if (!running) ref.read(exitIpProvider.notifier).clearGlobal();
-    _debounce = Timer(delay, () {
-      if (!mounted) return;
-      unawaited(ref.read(exitIpProvider.notifier).refresh(running: ref.read(isRunningProvider)));
-    });
-  }
-
-  static String flag(String code) {
-    final c = code.toUpperCase();
-    if (c.length != 2) return '🌐';
-    return String.fromCharCodes(c.codeUnits.map((u) => 0x1F1E6 + (u - 65)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final running = ref.watch(isRunningProvider);
-    final st = ref.watch(exitIpProvider);
-    final wide = ref.watch(isTwoPaneProvider);
-    Widget col(String title, IpInfo? info, {required bool loading, required String placeholder}) {
-      final text = info?.ip ?? (loading ? S.querying : placeholder);
-      final style = MeowFont.mono(size: MeowFont.footnote, color: info == null ? mm.t3 : mm.t1);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              if (info != null) ...[Text(flag(info.countryCode), style: const TextStyle(fontSize: 14)), const SizedBox(width: 5)],
-              Expanded(
-                // IP 要完整显示，不能截成「2001:db8:…」。IPv6 在手机端折两行（这张卡在 ListView 里能撑高）；
-                // 其余（IPv4、占位文案、宽布局定高行里的 IPv6）一行放不下就整体缩小。
-                // FittedBox 里的 Text 保留 maxLines: 1：外层 IntrinsicHeight 量的是子项在列宽下的高度，不限行会按折行算高
-                child: text.contains(':') && !wide
-                    ? Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: style)
-                    : FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(text, maxLines: 1, style: style),
-                      ),
-              ),
-            ],
-          ),
-        ],
-      );
-    }
-
-    final busy = st.loadingDomestic || st.loadingGlobal;
-    return GlassCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.language_rounded, size: MeowFont.footnote + 2, color: mm.accent),
-              const SizedBox(width: 5),
-              Text(S.exitIp, style: TextStyle(fontSize: MeowFont.caption, color: mm.t2)),
-              const Spacer(),
-              InkWell(
-                borderRadius: BorderRadius.circular(999),
-                onTap: busy ? null : () => _schedule(running: running, delay: Duration.zero),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: busy
-                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: mm.t3))
-                      : Icon(Icons.refresh_rounded, size: 16, color: mm.t2),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          IntrinsicHeight(
-            child: Row(
-              children: [
-                Expanded(child: col(S.domesticDirect, st.domestic, loading: st.loadingDomestic, placeholder: '—')),
-                Container(width: 1, margin: const EdgeInsets.symmetric(horizontal: 10), color: mm.t3.withValues(alpha: 0.2)),
-                Expanded(child: col('${S.globalVia} ${st.globalVia ?? '代理'}', st.global, loading: st.loadingGlobal, placeholder: running ? '—' : S.disconnected)),
-              ],
-            ),
-          ),
+          const SizedBox(width: 8),
+          actions,
         ],
       ),
     );
   }
 }
 
+/// 标题行的圆钮（44，卡片底）：和 [RoundGlassButton] 同形，图标换成设计稿的线性图标。
+class _RoundButton extends StatelessWidget {
+  const _RoundButton({required this.glyph, required this.tooltip, required this.onTap, this.busy = false});
+  final MeowGlyph glyph;
+  final String tooltip;
+  final VoidCallback onTap;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: mm.elev,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: busy ? null : onTap,
+          child: SizedBox(
+            width: 44,
+            height: 44,
+            child: Center(
+              child: busy
+                  ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: mm.t2))
+                  : MeowIcon(glyph, size: 20, color: mm.t1),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 「重新查询出口 IP」：立即重查两格（未连接时只查国内那格）。
+class _RefreshIpButton extends ConsumerWidget {
+  const _RefreshIpButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(exitIpProvider.select((s) => s.loadingDomestic || s.loadingGlobal));
+    return _RoundButton(
+      glyph: MeowGlyph.refresh,
+      tooltip: '重新查询出口 IP',
+      busy: busy,
+      onTap: () => unawaited(ref.read(exitIpProvider.notifier).refresh(running: ref.read(isRunningProvider))),
+    );
+  }
+}

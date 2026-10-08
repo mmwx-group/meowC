@@ -31,6 +31,7 @@ import 'meowx/app/strings.dart';
 import 'meowx/config/direct_profile.dart';
 import 'meowx/panel/account.dart';
 import 'meowx/update/update_dialog.dart';
+import 'meowx/update/update_state.dart';
 import 'meowx/update/update_manifest.dart';
 import 'models/models.dart';
 import 'views/profiles/override_profile.dart';
@@ -1120,10 +1121,33 @@ class AppController {
 
     final res = await request.checkForUpdate();
     if (res != null) {
+      _ref.read(availableUpdateProvider.notifier).state = res['tag_name'] as String?;
       checkUpdateResultHandle(data: res);
     }
 
     await prefs?.setInt('last_check_update_time', now);
+  }
+
+  /// MeowX：手动检查更新（「我的 → 关于」与 Bettbox 关于页共用）。
+  /// 检查失败单独报「检查更新失败」——以前失败也走到「当前应用已经是最新版了」，网络不通时是句假话。
+  Future<void> manualCheckUpdate() async {
+    Map<String, dynamic>? data;
+    _ref.read(loadingProvider.notifier).value = true;
+    try {
+      data = await request.checkForUpdate(throwOnError: true);
+    } catch (e) {
+      _ref.read(loadingProvider.notifier).value = false;
+      await globalState.showMessage(
+        title: S.checkUpdateFailed,
+        message: TextSpan(text: '${S.checkUpdateFailedHint}\n\n${e.formatError}'),
+        cancelable: false,
+      );
+      return;
+    } finally {
+      _ref.read(loadingProvider.notifier).value = false;
+    }
+    _ref.read(availableUpdateProvider.notifier).state = data?['tag_name'] as String?;
+    await checkUpdateResultHandle(data: data, handleError: true);
   }
 
   Future<void> checkUpdateResultHandle({
@@ -1139,7 +1163,10 @@ class AppController {
       final submits = utils.parseReleaseBody(body);
       final textTheme = context.textTheme;
       // MeowX：Windows 有选中的包条目就走 App 内一键更新；Android / 匹配不到包时仍打开下载地址
-      final updateFile = system.isWindows ? UpdateFile.fromJson(data['file']) : null;
+      final file = UpdateFile.fromJson(data['file']);
+      final updateFile = system.isWindows ? file : null;
+      // 版本号下面写清楚当前版本和要下的包（文件名 · 大小）；Android 有匹配的包时按钮直接叫「下载 APK」
+      final summary = updateSummaryLines(current: globalState.packageInfo.version, file: file);
       final res = await globalState.showMessage(
         title: appLocalizations.discoverNewVersion,
         message: TextSpan(
@@ -1147,11 +1174,15 @@ class AppController {
           style: textTheme.headlineSmall,
           children: [
             TextSpan(text: '\n', style: textTheme.bodyMedium),
+            for (final line in summary)
+              TextSpan(text: '$line\n', style: textTheme.bodyMedium),
             for (final submit in submits)
               TextSpan(text: '- $submit \n', style: textTheme.bodyMedium),
           ],
         ),
-        confirmText: updateFile != null ? S.updateNow : appLocalizations.goDownload,
+        confirmText: updateFile != null
+            ? S.updateNow
+            : (system.isAndroid && file != null ? S.downloadApk : appLocalizations.goDownload),
       );
       if (res != true) {
         return;

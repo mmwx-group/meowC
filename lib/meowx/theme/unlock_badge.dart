@@ -5,11 +5,11 @@ import '../panel/unlock_catalog.dart';
 import 'popover.dart';
 import 'tokens.dart';
 
-/// 三态的颜色 / 图标（与 iOS / macOS 同一套 RGB：绿开锁 = 全部解锁，橙开锁 = 部分解锁，灰闭锁 = 一个都没解锁）。
-Color unlockLevelColor(UnlockLevel level) => switch (level) {
-  UnlockLevel.full => const Color(0xFF33A85C),
-  UnlockLevel.partial => const Color(0xFFED8F21),
-  UnlockLevel.none => const Color(0xFF8F949E),
+/// 三态的颜色 / 图标（绿开锁 = 全部解锁，橙开锁 = 部分解锁，灰闭锁 = 一个都没解锁；颜色取主题 token，设计稿 --good / --warn）。
+Color unlockLevelColor(UnlockLevel level, MeowTokens mm) => switch (level) {
+  UnlockLevel.full => mm.good,
+  UnlockLevel.partial => mm.mid,
+  UnlockLevel.none => mm.t2,
 };
 
 IconData unlockLevelIcon(UnlockLevel level) => level == UnlockLevel.none ? Icons.lock_rounded : Icons.lock_open_rounded;
@@ -30,7 +30,7 @@ class UnlockBadge extends StatelessWidget {
         onTap: () => showAnchoredPopover(ctx, builder: (_) => UnlockDetail(node: node)),
         child: Padding(
           padding: const EdgeInsets.all(2),
-          child: Icon(unlockLevelIcon(level), size: size, color: unlockLevelColor(level)),
+          child: Icon(unlockLevelIcon(level), size: size, color: unlockLevelColor(level, context.mm)),
         ),
       ),
     );
@@ -73,7 +73,7 @@ class _UnlockDetailState extends State<UnlockDetail> {
         children: [
           Row(
             children: [
-              Icon(unlockLevelIcon(widget.node.level), size: 14, color: unlockLevelColor(widget.node.level)),
+              Icon(unlockLevelIcon(widget.node.level), size: 14, color: unlockLevelColor(widget.node.level, mm)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(widget.node.name, maxLines: 1, overflow: TextOverflow.ellipsis,

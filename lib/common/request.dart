@@ -258,7 +258,10 @@ class Request {
   /// 检查更新：读 dl.miaomiaowux.com/latest.json（MeowX 仓库 scripts/publish-r2.sh 发版时写），
   /// 取本平台条目比版本；有新版时 html_url 直接指向本机对应的包（按编译期 APP_ASSET_SUFFIX 匹配文件名，
   /// Windows 便携版只取便携 zip），匹配不到 / 地址不在发布域名就落到文档站下载页。
-  Future<Map<String, dynamic>?> checkForUpdate() async {
+  ///
+  /// 返回 null = 没有新版；出错时默认也返回 null（启动时的自动检查不打扰），[throwOnError] 为 true 则把错误抛给调用方
+  /// （手动检查要区分「已是最新」和「检查失败」）。
+  Future<Map<String, dynamic>?> checkForUpdate({bool throwOnError = false}) async {
     try {
       final t = DateTime.now().millisecondsSinceEpoch;
       final response = await _updateDio.get(
@@ -298,6 +301,7 @@ class Request {
       };
     } catch (e) {
       commonPrint.log('Check update failed: ${e.formatErrorLog}');
+      if (throwOnError) rethrow;
     }
     return null;
   }

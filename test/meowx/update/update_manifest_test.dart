@@ -96,4 +96,23 @@ void main() {
     expect(back.sha256, f.sha256);
     expect(UpdateFile.fromJson(null), isNull);
   });
+
+  test('新版本弹窗的说明行：当前版本 + 选中的包（文件名 · 大小）', () {
+    final apk = UpdateFile.fromJson({
+      'kind': 'apk',
+      'name': 'MeowX-0.1.9-android-arm64-v8a.apk',
+      'url': 'https://dl.miaomiaowux.com/meowx/android/MeowX-0.1.9-android-arm64-v8a.apk',
+      'size': 62143969,
+      'sha256': '02abab64ff90ff9d8aedb4ec6d01468ec24b747b032cfbe729aba0cff8a36440',
+    });
+    expect(updateSummaryLines(current: '0.1.8', file: apk), [
+      '当前版本 v0.1.8',
+      '安装包 MeowX-0.1.9-android-arm64-v8a.apk · 59.3 MB',
+    ]);
+    // 没匹配到本机的包（会改去下载页）：只有当前版本一行
+    expect(updateSummaryLines(current: '0.1.8'), ['当前版本 v0.1.8']);
+    // 清单缺 size / name 时不写出「0 KB」这类假数字
+    final bare = UpdateFile.fromJson({'kind': 'apk', 'url': 'https://dl.miaomiaowux.com/meowx/android/x.apk'});
+    expect(updateSummaryLines(current: '0.1.8', file: bare), ['当前版本 v0.1.8', '安装包 apk']);
+  });
 }

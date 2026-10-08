@@ -16,4 +16,4 @@ python3 design/ui-redesign/build-preview.py   # 生成 design/ui-redesign/previe
 open design/ui-redesign/preview.html
 ```
 
-状态：设计稿，尚未实现。
+状态：已实现（`lib/meowx/**`）。与画板的出入：Windows 保留全局 40 高的窗口标题栏（窗口按钮没有并进各页标题行）；Android 底栏沿用液态玻璃（`liquid_glass_widgets`），没有换成画板里的纯色胶囊。

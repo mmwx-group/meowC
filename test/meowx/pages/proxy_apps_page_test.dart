@@ -1,6 +1,7 @@
 import 'package:bett_box/controller.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/pages/settings/proxy_apps_page.dart';
+import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -186,11 +187,11 @@ void main() {
     expect(container.read(vpnSettingProvider).accessControl, initialAccess);
     expect(
       tester
-          .widget<SegmentedButton<AccessControlMode>>(
-            find.byType(SegmentedButton<AccessControlMode>),
+          .widget<MeowSegment<AccessControlMode>>(
+            find.byType(MeowSegment<AccessControlMode>),
           )
-          .selected,
-      {AccessControlMode.rejectSelected},
+          .value,
+      AccessControlMode.rejectSelected,
     );
     expect(
       tester.widget<Checkbox>(_checkboxFor('com.example.beta')).value,
@@ -215,11 +216,11 @@ void main() {
 
     expect(
       tester
-          .widget<SegmentedButton<AccessControlMode>>(
-            find.byType(SegmentedButton<AccessControlMode>),
+          .widget<MeowSegment<AccessControlMode>>(
+            find.byType(MeowSegment<AccessControlMode>),
           )
-          .selected,
-      {AccessControlMode.rejectSelected},
+          .value,
+      AccessControlMode.rejectSelected,
     );
     expect(
       tester.widget<Checkbox>(_checkboxFor('com.example.alpha')).value,

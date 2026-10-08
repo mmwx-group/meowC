@@ -140,7 +140,7 @@ abstract class MeowSettings with _$MeowSettings {
     /// 当前的 mode=direct 是切到内置直连档时自动设的（不是用户手选）：离开直连档时据此恢复 rule
     @Default(false) bool autoDirectMode,
 
-    /// 首页关掉的卡片（HomeCard.name）；网速图默认不显示（Windows 上该位置是接管卡，不受此影响）
+    /// 首页关掉的卡片（HomeCard.name）；网速图默认不显示（Windows 上折线恒在，不受此影响）
     @Default(['chart']) List<String> homeHiddenCards,
 
     /// 订阅同步间隔（小时），0 = 手动

@@ -883,7 +883,7 @@ return $default(_that.width,_that.height,_that.top,_that.left,_that.isPinned);ca
 @JsonSerializable()
 
 class _WindowProps implements WindowProps {
-  const _WindowProps({this.width = 910, this.height = 620, this.top, this.left, this.isPinned = false});
+  const _WindowProps({this.width = 1100, this.height = 720, this.top, this.left, this.isPinned = false});
   factory _WindowProps.fromJson(Map<String, dynamic> json) => _$WindowPropsFromJson(json);
 
 @override@JsonKey() final  double width;

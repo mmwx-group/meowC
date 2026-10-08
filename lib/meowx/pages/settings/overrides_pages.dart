@@ -5,8 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../state/meow_settings.dart';
 import '../../state/overrides.dart';
 import '../../state/status.dart';
-import '../../theme/glass_card.dart';
-import '../../theme/tokens.dart';
+import '../../theme/page_title.dart';
+import '../me/me_kit.dart';
 
 /// 改了覆写后：连着就重载（覆写只在 patchRawConfig 里生效）。
 void _reloadIfRunning(WidgetRef ref) {
@@ -19,55 +19,33 @@ class DnsHijackPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
     final map = ref.watch(meowSettingProvider.select((s) => s.dnsHijack));
     final entries = map.entries.toList();
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('DNS 劫持'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_rounded),
-            onPressed: map.length >= overridesLimit
-                ? null
-                : () => _addHijack(context, ref),
-          ),
-        ],
-      ),
-      body: entries.isEmpty
-          ? Center(child: Text('把某个域名的解析结果固定为指定 IPv4\n右上角「+」添加', textAlign: TextAlign.center, style: TextStyle(color: mm.t2)))
-          : ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                GlassCard(
-                  radius: 18,
-                  padding: EdgeInsets.zero,
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < entries.length; i++) ...[
-                        if (i > 0) Divider(height: 1, indent: 14, color: mm.t3.withValues(alpha: 0.2)),
-                        Dismissible(
-                          key: ValueKey(entries[i].key),
-                          direction: DismissDirection.endToStart,
-                          background: Container(color: mm.slow, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 16), child: const Icon(Icons.delete_rounded, color: Colors.white)),
-                          onDismissed: (_) {
-                            ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(dnsHijack: {...s.dnsHijack}..remove(entries[i].key)));
-                            _reloadIfRunning(ref);
-                          },
-                          // 域名 / IP 上下两行：长域名不再和右侧 IP 抢宽度
-                          child: ListTile(
-                            title: Text(entries[i].key, maxLines: 2, overflow: TextOverflow.ellipsis, style: MeowFont.mono(size: MeowFont.subheadline, color: mm.t1)),
-                            subtitle: Text(entries[i].value, style: MeowFont.mono(size: MeowFont.subheadline, color: mm.t2)),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text('${map.length} / $overridesLimit · 左滑删除', style: TextStyle(fontSize: MeowFont.caption, color: mm.t3)),
-              ],
-            ),
+    return MeSubPage.list(
+      title: 'DNS 劫持',
+      actions: [
+        RoundGlassButton(
+          icon: Icons.add_rounded,
+          filled: true,
+          tooltip: '添加',
+          onTap: map.length >= overridesLimit ? null : () => _addHijack(context, ref),
+        ),
+      ],
+      children: [
+        // 域名 / IP 上下两行：长域名不和 IP 抢宽度
+        MeItemsCard(
+          items: [for (final e in entries) e.key],
+          subtitles: [for (final e in entries) e.value],
+          empty: '把某个域名的解析结果固定为指定 IPv4，点右上角「+」添加',
+          onDelete: (i) {
+            ref
+                .read(meowSettingProvider.notifier)
+                .updateState((s) => s.copyWith(dnsHijack: {...s.dnsHijack}..remove(entries[i].key)));
+            _reloadIfRunning(ref);
+          },
+        ),
+        MeCaption('${map.length} / $overridesLimit'),
+      ],
     );
   }
 
@@ -123,55 +101,39 @@ class BypassPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final meow = ref.watch(meowSettingProvider);
-    final total = meow.bypassDomains.length + meow.bypassCidrs.length;
-    Widget section(String title, List<String> items, void Function(List<String>) save) => Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(padding: const EdgeInsets.only(left: 14, bottom: 6), child: Text(title, style: TextStyle(fontSize: MeowFont.footnote, color: mm.t2))),
-          GlassCard(
-            radius: 18,
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                for (var i = 0; i < items.length; i++) ...[
-                  if (i > 0) Divider(height: 1, indent: 14, color: mm.t3.withValues(alpha: 0.2)),
-                  Dismissible(
-                    key: ValueKey('$title-${items[i]}'),
-                    direction: DismissDirection.endToStart,
-                    background: Container(color: mm.slow, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 16), child: const Icon(Icons.delete_rounded, color: Colors.white)),
-                    onDismissed: (_) {
-                      save([...items]..removeAt(i));
-                      _reloadIfRunning(ref);
-                    },
-                    child: ListTile(dense: true, title: Text(items[i], style: MeowFont.mono(size: MeowFont.subheadline, color: mm.t1))),
-                  ),
-                ],
-                if (items.isEmpty) ListTile(dense: true, title: Text('暂无', style: TextStyle(color: mm.t3))),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('绕过代理'),
-        actions: [
-          IconButton(icon: const Icon(Icons.add_rounded), onPressed: total >= overridesLimit ? null : () => _add(context, ref)),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          section('域名', meow.bypassDomains, (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(bypassDomains: v))),
-          section('IP / CIDR', meow.bypassCidrs, (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(bypassCidrs: v))),
-          Text('$total / $overridesLimit · 命中的域名 / IP 直连，不经代理 · 左滑删除', style: TextStyle(fontSize: MeowFont.caption, color: mm.t3)),
-        ],
-      ),
+    final domains = ref.watch(meowSettingProvider.select((s) => s.bypassDomains));
+    final cidrs = ref.watch(meowSettingProvider.select((s) => s.bypassCidrs));
+    final total = domains.length + cidrs.length;
+    final notifier = ref.read(meowSettingProvider.notifier);
+    return MeSubPage.list(
+      title: '绕过代理',
+      actions: [
+        RoundGlassButton(
+          icon: Icons.add_rounded,
+          filled: true,
+          tooltip: '添加',
+          onTap: total >= overridesLimit ? null : () => _add(context, ref),
+        ),
+      ],
+      children: [
+        MeItemsCard(
+          title: '域名',
+          items: domains,
+          onDelete: (i) {
+            notifier.updateState((s) => s.copyWith(bypassDomains: [...s.bypassDomains]..removeAt(i)));
+            _reloadIfRunning(ref);
+          },
+        ),
+        MeItemsCard(
+          title: 'IP / CIDR',
+          items: cidrs,
+          onDelete: (i) {
+            notifier.updateState((s) => s.copyWith(bypassCidrs: [...s.bypassCidrs]..removeAt(i)));
+            _reloadIfRunning(ref);
+          },
+        ),
+        MeCaption('$total / $overridesLimit · 命中的域名 / IP 直连，不经代理'),
+      ],
     );
   }
 

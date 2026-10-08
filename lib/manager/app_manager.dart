@@ -7,7 +7,6 @@ import 'package:bett_box/manager/window_manager.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -220,26 +219,10 @@ class AppEnvManager extends StatelessWidget {
 
   const AppEnvManager({super.key, required this.child});
 
+  // MeowX：不再在右上角画 DEBUG / PRE 斜角标（会压住标题行右侧的按钮和窗口按钮）。
+  // 调试包 / 预发布包从「我的 → 关于」的版本号辨认。
   @override
-  Widget build(BuildContext context) {
-    if (kDebugMode) {
-      if (globalState.isPre) {
-        return Banner(
-          message: 'DEBUG',
-          location: BannerLocation.topEnd,
-          child: child,
-        );
-      }
-    }
-    if (globalState.isPre) {
-      return Banner(
-        message: 'PRE',
-        location: BannerLocation.topEnd,
-        child: child,
-      );
-    }
-    return child;
-  }
+  Widget build(BuildContext context) => child;
 }
 
 /// MeowX 壳自己负责导航（手机底栏 / 宽屏 IconRail）。留成函数而不是常量，方便以后按设置切回 Bettbox 原界面。

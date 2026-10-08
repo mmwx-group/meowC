@@ -1,5 +1,7 @@
 import 'package:bett_box/common/constant.dart' show updateManifestUrl;
 
+import '../state/format.dart';
+
 /// latest.json（MeowX 仓库 scripts/publish-r2.sh 发版时写到 dl.miaomiaowux.com/meowx/）里一个包的条目：
 /// kind 是 setup / portable / apk 之类的包类型，size 与 sha256 用来校验下载结果。
 class UpdateFile {
@@ -74,3 +76,11 @@ UpdateFile? pickUpdateFile(
   }
   return null;
 }
+
+/// 「发现新版本」弹窗里版本号下面的说明行：当前版本 + 选中的安装包（文件名 · 大小）。
+/// 没匹配到本机的包（[file] 为 null，会改去下载页）就只有当前版本一行。
+List<String> updateSummaryLines({required String current, UpdateFile? file}) => [
+  '当前版本 v$current',
+  if (file != null)
+    '安装包 ${file.name.isEmpty ? file.kind : file.name}${file.size > 0 ? ' · ${fmtSize(file.size)}' : ''}',
+];

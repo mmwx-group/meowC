@@ -19,7 +19,7 @@ class Window {
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = WindowOptions(
       size: Size(props.width, props.height),
-      minimumSize: const Size(900, 600),   // MeowX 平板式三栏布局（图标栏 88 + 左栏 360 + 详情）需要的最小宽度
+      minimumSize: const Size(900, 600),   // MeowX：图标栏 84 + 左栏 360 + 详情需要的最小宽度（≥ 1000 才是完整侧栏）
     );
     await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
     await windowManager.setAlwaysOnTop(props.isPinned);

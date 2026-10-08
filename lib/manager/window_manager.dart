@@ -387,7 +387,7 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
                 _updateMaximized();
               },
               child: Container(
-                color: context.colorScheme.secondary.opacity15,
+                color: Colors.transparent,   // MeowX：标题栏并进页面底色，不再是一条色带
                 alignment: Alignment.centerLeft,
                 height: kHeaderHeight,
               ),

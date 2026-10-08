@@ -9,7 +9,10 @@ import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
+import '../../theme/widgets.dart';
+import '../me/me_kit.dart';
 
 /// 代理应用（Android 分应用代理）：支持仅代理勾选应用的白名单，以及勾选应用直连的黑名单。
 /// 两份名单沿用 Bettbox 的 `VpnProps.accessControl`，切换模式或开关时保留各自的选择。
@@ -120,210 +123,239 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
         return a.label.toLowerCase().compareTo(b.label.toLowerCase());
       });
 
-    return Scaffold(
-      backgroundColor: mm.bg,
-      appBar: AppBar(
-        title: const Text('代理应用'),
-        backgroundColor: mm.bg,
-        surfaceTintColor: Colors.transparent,
-      ),
-      body: Column(
+    final small = TextStyle(fontSize: MeowFont.caption, color: mm.t2);
+    // 总开关 + 模式（樱粉主卡）
+    final hero = Container(
+      decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(24)),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Material(
-              color: mm.elev,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: mm.cardEdge),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: SwitchListTile.adaptive(
-                title: Text('启用应用分流', style: TextStyle(fontSize: MeowFont.body, color: mm.t1)),
-                subtitle: Text(
-                  !access.enable
-                      ? '关闭时全部应用都走代理'
-                      : isWhitelist
-                          ? '白名单：仅代理已选的 ${selected.length} 个应用，其余应用直连'
-                          : '黑名单：已选的 ${selected.length} 个应用直连，其余应用走代理',
-                  style: TextStyle(fontSize: MeowFont.caption, color: mm.t3),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _setEnabled(!access.enable),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '启用应用分流',
+                        style: TextStyle(fontSize: MeowFont.callout, fontWeight: FontWeight.w600, color: mm.t1),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        !access.enable
+                            ? '关闭时全部应用都走代理'
+                            : '${isWhitelist ? '白名单：只有选中的应用走代理' : '黑名单：选中的应用不走代理'}。修改后重新连接生效',
+                        style: small,
+                      ),
+                    ],
+                  ),
                 ),
-                value: access.enable,
-                onChanged: _setEnabled,
-              ),
+                const SizedBox(width: 10),
+                Switch(value: access.enable, onChanged: _setEnabled),
+              ],
             ),
           ),
           if (access.enable) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<AccessControlMode>(
-                  segments: const [
-                    ButtonSegment(value: AccessControlMode.acceptSelected, label: Text('白名单')),
-                    ButtonSegment(value: AccessControlMode.rejectSelected, label: Text('黑名单')),
-                  ],
-                  selected: {access.mode},
-                  onSelectionChanged: (modes) => _setMode(modes.single),
-                  style: SegmentedButton.styleFrom(
-                    foregroundColor: mm.t2,
-                    selectedForegroundColor: mm.accent,
-                    selectedBackgroundColor: mm.accent.withValues(alpha: 0.10),
-                    textStyle: const TextStyle(fontSize: MeowFont.subheadline),
-                  ),
-                ),
-              ),
+            const SizedBox(height: 12),
+            MeowSegment<AccessControlMode>(
+              items: const [(AccessControlMode.acceptSelected, '白名单'), (AccessControlMode.rejectSelected, '黑名单')],
+              value: access.mode,
+              onChanged: _setMode,
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(
-                '修改模式或名单后，重新连接生效。',
-                style: TextStyle(fontSize: MeowFont.caption, color: mm.t3),
-              ),
+          ],
+        ],
+      ),
+    );
+
+    final scroll = CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          sliver: SliverToBoxAdapter(child: hero),
+        ),
+        if (!access.enable)
+          _fill(
+            Text(
+              '开启后可选择白名单或黑名单，并勾选对应应用。\n修改模式或名单后需要重新连接才会生效。',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
+          )
+        else ...[
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _search,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        hintText: '搜索应用 / 包名',
-                        prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                        filled: true,
-                        fillColor: mm.elev,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: mm.cardEdge)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: mm.cardEdge)),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _search,
+                          onChanged: (_) => setState(() {}),
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            hintText: '搜索应用名 / 包名',
+                            prefixIcon: Icon(Icons.search_rounded, size: 20, color: mm.t2),
+                            filled: true,
+                            fillColor: mm.elev,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(22),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      MePill(
+                        label: '系统应用',
+                        selected: _showSystem,
+                        onTap: () => setState(() => _showSystem = !_showSystem),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  FilterChip(
-                    label: const Text('系统应用'),
-                    selected: _showSystem,
-                    onSelected: (v) => setState(() => _showSystem = v),
+                  const SizedBox(height: 12),
+                  // 两段放不下一行（大字号）时折成两行
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    spacing: 8,
+                    runSpacing: 2,
+                    children: [
+                      Text('已选 ${selected.length} 个 · 已选的排在前面', style: small),
+                      Text('共 ${packages.where((p) => p.internet).length} 个可联网应用', style: small),
+                    ],
                   ),
                 ],
               ),
             ),
-            Expanded(child: _list(mm, visible, selected)),
-          ] else
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    '开启后可选择白名单或黑名单，并勾选对应应用。\n修改模式或名单后需要重新连接才会生效。',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t3),
-                  ),
-                ),
-              ),
-            ),
+          ),
+          _list(mm, visible, selected),
         ],
-      ),
+      ],
+    );
+
+    return MeSubPage(
+      title: '代理应用',
+      actions: [
+        if (access.enable)
+          RoundGlassButton(
+            icon: Icons.refresh_rounded,
+            tooltip: '重新读取应用列表',
+            busy: _loading,
+            onTap: () => _load(force: true),
+          ),
+      ],
+      body: access.enable ? RefreshIndicator(onRefresh: () => _load(force: true), child: scroll) : scroll,
     );
   }
 
+  /// 占满列表剩余高度的居中提示；可滚：横屏 / 大字号时高度不够，按钮也要能滚到
+  Widget _fill(Widget child) => SliverFillRemaining(
+    hasScrollBody: false,
+    child: Center(
+      child: Padding(padding: const EdgeInsets.all(32), child: child),
+    ),
+  );
+
   Widget _list(MeowTokens mm, List<Package> visible, Set<String> selected) {
     if (_loading && visible.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return _fill(const CircularProgressIndicator());
     }
     if (_denied) {
-      // 可滚：横屏 / 大字号时高度不够，「去授权」按钮也要能滚到
-      return Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.apps_outage_rounded, size: 46, color: mm.t3),
-              const SizedBox(height: 12),
-              Text('读不到应用列表', style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w600, color: mm.t1)),
-              const SizedBox(height: 4),
-              Text(
-                '部分系统需要单独授予「读取应用列表」权限',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => app.requestPackageListPermission(),
-                child: const Text('去授权'),
-              ),
-            ],
-          ),
+      return _fill(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.apps_outage_rounded, size: 46, color: mm.t2),
+            const SizedBox(height: 12),
+            Text('读不到应用列表', style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w600, color: mm.t1)),
+            const SizedBox(height: 4),
+            Text(
+              '部分系统需要单独授予「读取应用列表」权限',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () => app.requestPackageListPermission(),
+              child: const Text('去授权'),
+            ),
+          ],
         ),
       );
     }
     if (visible.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            _showSystem ? '没有匹配的应用' : '没有匹配的应用，试试打开右上的「系统应用」',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t3),
-          ),
+      return _fill(
+        Text(
+          _showSystem ? '没有匹配的应用' : '没有匹配的应用，试试打开右上的「系统应用」',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
         ),
       );
     }
-    return RefreshIndicator(
-      onRefresh: () => _load(force: true),
-      child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        itemCount: visible.length,
-        itemBuilder: (_, i) {
-          final p = visible[i];
-          final on = selected.contains(p.packageName);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Material(
-              color: on ? mm.accent.withValues(alpha: 0.10) : mm.elev,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: on ? mm.accent.withValues(alpha: 0.55) : mm.cardEdge),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => _toggle(p.packageName, !on),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
-                  child: Row(
-                    children: [
-                      _AppIcon(packageName: p.packageName),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              p.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w500, color: mm.t1),
+    // 一整张白卡装全部应用行：底画在 sliver 上，行仍然按需构建
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
+      sliver: DecoratedSliver(
+        decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(24)),
+        sliver: SliverPadding(
+          padding: const EdgeInsets.all(6),
+          sliver: SliverList.separated(
+            itemCount: visible.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 2),
+            itemBuilder: (_, i) {
+              final p = visible[i];
+              final on = selected.contains(p.packageName);
+              return Material(
+                color: on ? mm.soft : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => _toggle(p.packageName, !on),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 58),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
+                      child: Row(
+                        children: [
+                          _AppIcon(packageName: p.packageName),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w600, color: mm.t1),
+                                ),
+                                Text(
+                                  p.packageName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: MeowFont.mono(size: MeowFont.caption2, color: mm.t2),
+                                ),
+                              ],
                             ),
-                            Text(
-                              p.packageName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: MeowFont.mono(size: MeowFont.caption2, color: mm.t3),
-                            ),
-                          ],
-                        ),
+                          ),
+                          Checkbox(value: on, onChanged: (v) => _toggle(p.packageName, v ?? false)),
+                        ],
                       ),
-                      Checkbox(value: on, onChanged: (v) => _toggle(p.packageName, v ?? false)),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        },
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -351,21 +383,21 @@ class _AppIconState extends State<_AppIcon> {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final size = 36 * MediaQuery.devicePixelRatioOf(context);
+    final size = 38 * MediaQuery.devicePixelRatioOf(context);
     return SizedBox(
-      width: 36,
-      height: 36,
+      width: 38,
+      height: 38,
       child: FutureBuilder<Uint8List?>(
         future: _icon,
         builder: (_, snap) {
           final data = snap.data;
-          if (data == null) return Icon(Icons.android_rounded, size: 26, color: mm.t3);
+          if (data == null) return Icon(Icons.android_rounded, size: 26, color: mm.t2);
           return Image.memory(
             data,
             gaplessPlayback: true,
             cacheWidth: size.ceil(),
             cacheHeight: size.ceil(),
-            errorBuilder: (_, _, _) => Icon(Icons.android_rounded, size: 26, color: mm.t3),
+            errorBuilder: (_, _, _) => Icon(Icons.android_rounded, size: 26, color: mm.t2),
           );
         },
       ),
