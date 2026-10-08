@@ -3,7 +3,6 @@ import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../panel/client.dart';
 import '../../state/connection.dart';
@@ -13,6 +12,7 @@ import '../../theme/glass_card.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
+import '../../theme/widgets.dart';
 import '../../update/update_state.dart';
 import '../settings/proxy_apps_page.dart';
 import 'account_card.dart';
@@ -192,6 +192,10 @@ enum _Glyph {
   final String d;
 }
 
+/// 入口行图标的全部路径（测试拿它逐个核对画出来的形状）。
+@visibleForTesting
+List<String> get meEntryGlyphPaths => [for (final g in _Glyph.values) g.d];
+
 /// 手机上的设置入口：每行 = 图标方块 + 名字 + 当前值摘要 + 箭头，点进二级页。
 /// 平台专属的几行（Android：代理应用 / VPN 与系统；Windows：启动与窗口 / 接管方式 / 全局快捷键）用粉色图标方块。
 class _EntryList extends ConsumerWidget {
@@ -217,13 +221,7 @@ class _EntryList extends ConsumerWidget {
         height: 32,
         alignment: Alignment.center,
         decoration: BoxDecoration(color: platform ? mm.soft : mm.card2, borderRadius: BorderRadius.circular(10)),
-        child: SvgPicture.string(
-          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${glyph.d}" fill="none" stroke="#000" '
-          'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-          width: 17,
-          height: 17,
-          colorFilter: ColorFilter.mode(platform ? mm.accent : mm.t1, BlendMode.srcIn),
-        ),
+        child: MeowIcon.path(glyph.d, size: 17, color: platform ? mm.accent : mm.t1),
       ),
       label: label,
       value: value,

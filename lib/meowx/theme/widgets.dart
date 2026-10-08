@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
+import 'svg_path.dart';
 import 'tokens.dart';
 
 /// 设计稿里的线性图标（24 网格、1.9 描边、圆头圆角）。Material 图标集里没有同形的，按稿子的路径画。
@@ -30,29 +30,72 @@ enum MeowGlyph {
 }
 
 class MeowIcon extends StatelessWidget {
-  const MeowIcon(this.glyph, {super.key, double this.size = 22, this.color, this.stroke = 1.9});
+  const MeowIcon(MeowGlyph this.glyph, {super.key, double this.size = 22, this.color, this.stroke = 1.9}) : _d = null;
 
   /// 尺寸和颜色都跟外层 [IconTheme] 走（放进液态玻璃底栏这类由容器给图标定色定大小的地方）。
-  const MeowIcon.themed(this.glyph, {super.key, this.stroke = 1.9}) : size = null, color = null;
+  const MeowIcon.themed(MeowGlyph this.glyph, {super.key, this.stroke = 1.9}) : size = null, color = null, _d = null;
 
-  final MeowGlyph glyph;
+  /// 直接给路径（24 网格的 SVG path `d`）：个别页面自己的图标，不进 [MeowGlyph]。
+  const MeowIcon.path(String d, {super.key, double this.size = 22, this.color, this.stroke = 1.9}) : glyph = null, _d = d;
+
+  final MeowGlyph? glyph;
+  final String? _d;
   final double? size;
   final Color? color;
   final double stroke;
+
+  /// 路径只解析一次（按 `d` 字符串）；描边粗细和颜色是画的时候才给的，不进这张表。
+  static final _paths = <String, Path>{};
 
   @override
   Widget build(BuildContext context) {
     final theme = IconTheme.of(context);
     final c = color ?? theme.color ?? context.mm.t1;
     final size = this.size ?? theme.size ?? 22;
-    return SvgPicture.string(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${glyph.d}" fill="none" stroke="#000" '
-      'stroke-width="$stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-      width: size,
-      height: size,
-      colorFilter: ColorFilter.mode(c, BlendMode.srcIn),
+    final d = glyph?.d ?? _d!;
+    // 直接把路径画到画布上、颜色进画笔。以前是 SvgPicture.string + colorFilter：每个图标每次光栅化都要开一个离屏层，
+    // 每种图标第一次出现还要起一个 isolate 解析 SVG、晚一两帧才出图。
+    // 外面这层语义是 flutter_svg 原来就带的（标成图片、没有文字），留着，读屏听到的不变。
+    return Semantics(
+      image: true,
+      child: CustomPaint(
+        size: Size.square(size),
+        painter: _GlyphPainter(_paths[d] ??= parseSvgPath(d), c, stroke),
+      ),
     );
   }
+}
+
+class _GlyphPainter extends CustomPainter {
+  const _GlyphPainter(this.path, this.color, this.stroke);
+
+  final Path path;
+  final Color color;
+  final double stroke;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 和 SVG 的摆法一样：24 网格等比缩进盒子、居中；描边粗细是网格里的数，跟着图标一起缩放。
+    // 路径连描边都在 24 网格以内，不再另外裁一刀
+    final scale = size.shortestSide / 24;
+    canvas
+      ..save()
+      ..translate((size.width - 24 * scale) / 2, (size.height - 24 * scale) / 2)
+      ..scale(scale)
+      ..drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..color = color,
+      )
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_GlyphPainter old) => old.path != path || old.color != color || old.stroke != stroke;
 }
 
 /// 分段选择：卡片底胶囊里放等宽分段，选中 = 墨色底配页面底色的字。
