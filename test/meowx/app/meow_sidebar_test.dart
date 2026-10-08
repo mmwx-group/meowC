@@ -75,7 +75,7 @@ void main() {
     expect(find.text('节点'), findsOneWidget);
     expect(find.text('128'), findsOneWidget);
     expect(find.text('64'), findsOneWidget);
-    expect(find.text('规则模式 · 02:14:36'), findsOneWidget);
+    expect(find.text('规则 · 02:14:36'), findsOneWidget);
 
     (container.read(connStatsProvider.notifier) as _Stats).setTotal(65);
     await tester.pump();
@@ -94,7 +94,7 @@ void main() {
 
     container.read(runTimeProvider.notifier).value = 8077000;
     await tester.pump();
-    expect(find.text('规则模式 · 02:14:37'), findsOneWidget);
+    expect(find.text('规则 · 02:14:37'), findsOneWidget);
   });
 
   testWidgets('完整形态：计数为 0 不画角标，超过 999 写成 999+', (tester) async {

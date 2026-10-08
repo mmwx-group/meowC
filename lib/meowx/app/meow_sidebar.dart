@@ -200,7 +200,8 @@ class _ConnectionCard extends ConsumerWidget {
       ConnPhase.off => ('未连接', mm.t2),
     };
     final sub = on && seconds != null
-        ? '${modeLabel(mode)}模式 · ${fmtUptime(Duration(seconds: seconds))}'
+        // 已连接时不写「模式」二字：220 宽的侧栏里「规则模式 · 00:00:31」放不下，时长会被截成「00:00:…」
+        ? '${modeLabel(mode)} · ${fmtUptime(Duration(seconds: seconds))}'
         : (ref.watch(hasProfileProvider) ? '${modeLabel(mode)}模式 · 已就绪' : '还没有订阅');
     final nodeName = switch (mode) {
       Mode.direct => '直连',

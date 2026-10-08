@@ -39,10 +39,12 @@ class HomeSpeedCard extends ConsumerWidget {
     final hasRates = up || down;
     final caption = TextStyle(fontSize: 11, color: mm.t2);
 
+    // 两列各自居中（与 iOS / iPad 首页一致；之前照画板靠左）
     Widget rate(MeowGlyph glyph, Color color, String label, int value, int session) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             MeowIcon(glyph, size: dense ? 12 : 13, color: color),
             const SizedBox(width: 4),
@@ -50,7 +52,6 @@ class HomeSpeedCard extends ConsumerWidget {
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
                 child: Text(
                   '$label · ${S.session} ${fmtSize(session)}',
                   maxLines: 1,
@@ -64,7 +65,6 @@ class HomeSpeedCard extends ConsumerWidget {
         // 放不下时整体缩小，不截成「12.3 M…」
         FittedBox(
           fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
           child: Text(
             fmtRate(value),
             maxLines: 1,

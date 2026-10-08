@@ -265,19 +265,18 @@ class _Tile extends StatelessWidget {
       radius: 18,
       padding: EdgeInsets.symmetric(horizontal: dense ? 12 : 10, vertical: 10),
       onTap: onTap,
+      // 标题与数值在格子里居中（与 iOS / iPad 首页一致；之前照画板靠左）
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
             child: Text(label, maxLines: 1, style: TextStyle(fontSize: 11, color: mm.t2)),
           ),
           SizedBox(height: dense ? 1 : 2),
           FittedBox(
             fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
             child: Text(
               value,
               maxLines: 1,
@@ -432,21 +431,28 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
       return GlassCard(
         radius: 18,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        // 标题与地址在格子里居中（与 iOS / iPad 首页一致）
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: mm.t2)),
+            Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: mm.t2),
+            ),
             SizedBox(height: dense ? 4 : 5),
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (code.length == 2) ...[RegionTag(code), const SizedBox(width: 6)],
-                Expanded(
+                Flexible(
                   // IP 要完整显示：放不下就整体缩小，长的 IPv6 先折成两行再缩（半格宽排不下 39 个字符）
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(info == null ? text : _wrapIp(text), maxLines: 2, style: style),
+                    child: Text(info == null ? text : _wrapIp(text), maxLines: 2, textAlign: TextAlign.center, style: style),
                   ),
                 ),
               ],
