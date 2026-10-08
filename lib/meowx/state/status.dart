@@ -3,6 +3,7 @@ import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 图标栏布局（对齐 iPad 的 regular 宽度类）：视口宽 ≥ 700 —— 平板横竖屏、Windows 窗口都走左侧 IconRail。
@@ -25,13 +26,28 @@ final isTwoPaneProvider = Provider<bool>((ref) {
 /// 是否已连接（核心运行中）。
 final isRunningProvider = Provider<bool>((ref) => ref.watch(runTimeProvider) != null);
 
-/// 当前订阅解析后的原始配置（mihomo 自己的解析器），按 profileId 缓存；
+/// 取订阅解析后的原始配置；默认问核心，只有测试会换掉。
+@visibleForTesting
+final rawConfigFetcherProvider = Provider<Future<Map<String, dynamic>> Function(String profileId, String? ageSecretKey)>(
+  (ref) => (profileId, ageSecretKey) => clashCore.getConfig(profileId, ageSecretKey: ageSecretKey),
+);
+
+/// 当前订阅解析后的原始配置（mihomo 自己的解析器），按 profileId 缓存，没人用了（切走的订阅）就释放；
 /// 用于：节点安全性副标题（tls / reality / flow / network）、DNS 模式的「跟随订阅」判定。
-final profileRawConfigProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, profileId) async {
-  final profile = ref.watch(profilesProvider.select((s) => s.getProfile(profileId)));
-  if (profile == null) return const {};
+///
+/// 只盯决定文件内容的两个字段：档案文件每次落盘都会更新 lastUpdateDate（`Profile.saveFile` / `saveFileWithString`），
+/// 解密用 ageSecretKey。不能订阅整个 Profile——点一次节点（selectedMap）、换一次组（currentGroupName）它都变，
+/// 每变一次核心就要重读重解析整份订阅、整份配置的 JSON 再回到 UI isolate 上解码。
+final profileRawConfigProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, profileId) async {
+  final key = ref.watch(
+    profilesProvider.select((s) {
+      final p = s.getProfile(profileId);
+      return p == null ? null : (p.lastUpdateDate, p.ageSecretKey);
+    }),
+  );
+  if (key == null) return const {};
   try {
-    return await clashCore.getConfig(profileId, ageSecretKey: profile.ageSecretKey);
+    return await ref.read(rawConfigFetcherProvider)(profileId, key.$2);
   } catch (e) {
     commonPrint.log('profileRawConfig($profileId) failed: $e');
     return const {};
