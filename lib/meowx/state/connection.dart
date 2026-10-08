@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
+import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/meow_tab.dart';
 import 'meow_settings.dart';
 import 'status.dart';
 
@@ -155,8 +159,84 @@ class ConnStats {
   int get hashCode => Object.hash(total, proxied, direct, memory);
 }
 
+/// 三个连接计数。
+typedef ConnCounts = ({int total, int proxied, int direct});
+
+const ConnCounts _noConns = (total: 0, proxied: 0, direct: 0);
+
+/// 计数口径（两种取法共用）：chains 首项 = 实际落地的出站——DIRECT 记直连，REJECT 开头的两边都不记，其余记代理。
+ConnCounts _tally(Iterable<String> firstHops) {
+  var total = 0, proxied = 0, direct = 0;
+  for (final first in firstHops) {
+    total++;
+    if (first == 'DIRECT') {
+      direct++;
+    } else if (!first.startsWith('REJECT')) {
+      proxied++;
+    }
+  }
+  return (total: total, proxied: proxied, direct: direct);
+}
+
+/// 一份连接列表的三个计数。
+ConnCounts countConnections(List<TrackerInfo> conns) => _tally(conns.map((c) => c.chains.firstOrNull ?? ''));
+
+/// 直接从核心回的快照 JSON（`{"connections":[…]}`）里数，不建 TrackerInfo。
+ConnCounts countConnectionsJson(String raw) {
+  final data = json.decode(raw);
+  final list = data is Map ? data['connections'] : null;
+  if (list is! List) return _noConns;
+  return _tally(
+    list.map((c) {
+      final chains = c is Map ? c['chains'] : null;
+      final first = chains is List ? chains.firstOrNull : null;
+      return first is String ? first : '';
+    }),
+  );
+}
+
+/// 顶层函数：交给新 isolate 的闭包只带着 [raw] 这一个字符串。
+Future<ConnCounts> _countOffMain(String raw) => Isolate.run(() => countConnectionsJson(raw));
+
+/// 向核心要连接快照的两种取法。默认问核心，只有测试会换掉。
+class ConnSource {
+  const ConnSource();
+
+  /// 完整列表：动态页、宽屏首页的「活跃连接」卡要逐条显示。
+  Future<List<TrackerInfo>> list() => clashCore.getConnections();
+
+  /// 只要三个计数（壳自己轮询时）：解析和计数都在后台 isolate 里做完，回到 UI 线程的只有三个整数，
+  /// 不把 N 个 TrackerInfo 建出来再搬回主堆。
+  Future<ConnCounts> counts() async {
+    final raw = await clashCore.clashInterface.getConnections();
+    if (raw.isEmpty) return _noConns;
+    try {
+      return await _countOffMain(raw);
+    } catch (e) {
+      commonPrint.log('Failed to count connections: $e');
+      return _noConns;
+    }
+  }
+}
+
+final connSourceProvider = Provider<ConnSource>((ref) => const ConnSource());
+
 class ConnStatsController extends Notifier<ConnStats> {
+  /// 可见页面取到的完整快照在这么久之内算新鲜，壳不再自己问核心。
+  /// 比动态页的轮询间隔（1.5s）略长：它在取的时候，壳每秒的那一拍总是落在这个窗口里。
+  static const _fedFresh = Duration(milliseconds: 1600);
+
   bool _polling = false;
+
+  /// 正在经 [fetchConnections] 取快照的页面数
+  int _feeding = 0;
+
+  /// 上一次经 [fetchConnections] 取到快照的时间
+  DateTime? _fedAt;
+
+  /// 现在几点；只有测试会换掉。
+  @visibleForTesting
+  DateTime Function() now = DateTime.now;
 
   @override
   ConnStats build() {
@@ -168,7 +248,34 @@ class ConnStatsController extends Notifier<ConnStats> {
       dashboardRefreshManager.tick1s.removeListener(t1);
       dashboardRefreshManager.tick2s.removeListener(t2);
     });
+    // 手机上离开首页期间不拉（见 _shown）：切回首页立即补一次，不等下一拍。宽屏一直在拉，不用补
+    ref.listen(meowTabProvider, (prev, next) {
+      if (next == MeowTab.home && !ref.read(isWideLayoutProvider)) t1();
+    });
     return const ConnStats();
+  }
+
+  /// NotifierProvider 默认按 identical 判断要不要通知，copyWith 每次都是新对象；改成按值比，数字没变就不重建首页指标格 / 侧栏角标。
+  @override
+  bool updateShouldNotify(ConnStats previous, ConnStats next) => previous != next;
+
+  /// 这三个数此刻有没有界面在显示：宽屏的侧栏角标每一页都在；手机布局只有首页的指标格用。
+  bool get _shown => ref.read(isWideLayoutProvider) || ref.read(meowTabProvider) == MeowTab.home;
+
+  void _setCounts(ConnCounts c) => state = state.copyWith(total: c.total, proxied: c.proxied, direct: c.direct);
+
+  /// 可见页面（动态页、宽屏首页的「活跃连接」卡）取完整快照的入口：列表交给页面，三个计数顺手记到这里，
+  /// 壳在这之后的 [_fedFresh] 内不再自己问核心——同一份连接表不各拉各的。
+  Future<List<TrackerInfo>> fetchConnections() async {
+    _feeding++;
+    try {
+      final list = await ref.read(connSourceProvider).list();
+      _fedAt = now();
+      _setCounts(countConnections(list));
+      return list;
+    } finally {
+      _feeding--;
+    }
   }
 
   Future<void> _pollConnections() async {
@@ -177,19 +284,18 @@ class ConnStatsController extends Notifier<ConnStats> {
       if (state.total != 0 || state.proxied != 0 || state.direct != 0) state = ConnStats(memory: state.memory);
       return;
     }
+    // 没有界面在显示就不拉：一次要核心序列化整张连接表、这边再解一遍，只为三个数字——手机上停在节点 / 我的页时纯属空转
+    if (!_shown) return;
+    // 可见页面正在取、或刚取过完整快照：计数已经顺手更新了（时钟往回拨时差值为负，按过期算）
+    if (_feeding > 0) return;
+    final fedAt = _fedAt;
+    if (fedAt != null) {
+      final age = now().difference(fedAt);
+      if (!age.isNegative && age < _fedFresh) return;
+    }
     _polling = true;
     try {
-      final conns = await clashCore.getConnections();
-      var proxy = 0, direct = 0;
-      for (final c in conns) {
-        final first = c.chains.firstOrNull ?? '';
-        if (first == 'DIRECT') {
-          direct++;
-        } else if (!first.startsWith('REJECT')) {
-          proxy++;
-        }
-      }
-      state = state.copyWith(total: conns.length, proxied: proxy, direct: direct);
+      _setCounts(await ref.read(connSourceProvider).counts());
     } catch (_) {
     } finally {
       _polling = false;
@@ -205,7 +311,7 @@ class ConnStatsController extends Notifier<ConnStats> {
   }
 }
 
-/// 壳里常驻 watch（MeowRoot），所以任何页面都在轮询；值不变时不通知。
+/// 壳里常驻 listen（MeowRoot）。内存每 2s 问一次；连接计数只在有界面显示它时才问核心，值不变时不通知。
 final connStatsProvider = NotifierProvider<ConnStatsController, ConnStats>(ConnStatsController.new);
 
 // ---------------------------------------------------------------------------

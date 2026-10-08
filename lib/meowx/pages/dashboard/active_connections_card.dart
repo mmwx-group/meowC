@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +19,7 @@ const _maxRows = 30;
 
 /// 宽屏首页右列底部的「活跃连接」：最近建立的几条连接（入站 / 主机 / 出站 / 下载速率），点了去「动态」。
 /// 每秒取一次连接表，只在首页可见且核心运行中时取；速率 = 相邻两次快照的下载字节差。
+/// 取数经壳的 ConnStatsController：这份快照顺手更新连接计数，壳同一拍不再另拉一次。
 /// [expand]：外层给了定高（两列布局里撑满右列），能排几行排几行，至少 [minRows] 行的高度；否则固定排 [minRows] 行。
 class HomeActiveConnections extends ConsumerStatefulWidget {
   const HomeActiveConnections({super.key, this.expand = false, this.minRows = 3, this.fetch});
@@ -70,7 +70,7 @@ class _HomeActiveConnectionsState extends ConsumerState<HomeActiveConnections> {
     }
     _polling = true;
     try {
-      final list = await (widget.fetch ?? clashCore.getConnections)();
+      final list = await (widget.fetch ?? ref.read(connStatsProvider.notifier).fetchConnections)();
       if (!mounted) return;
       final now = DateTime.now();
       final secs = _lastAt == null ? 0.0 : now.difference(_lastAt!).inMilliseconds / 1000;

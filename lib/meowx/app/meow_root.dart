@@ -203,7 +203,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     final tab = ref.watch(meowTabProvider);
     final wide = ref.watch(isWideLayoutProvider);
     final mm = context.mm;
-    // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标、动态页共用，切到哪一页都在跑
+    // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标共用；连接数只在有界面显示它时才问核心（见 ConnStatsController）
     ref.listen(connStatsProvider, (_, _) {});
     final content = IndexedStack(
       index: tab.index,

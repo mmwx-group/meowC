@@ -170,6 +170,23 @@ final _conns = [
   _conn(9, 'discord.com', '东京 01 · IIJ'),
 ];
 
+/// 假的核心（不注入 fetchConnections、让卡片走默认取数时用）：记两种取法各被问了几次。
+class _Source extends ConnSource {
+  int lists = 0, countCalls = 0;
+
+  @override
+  Future<List<TrackerInfo>> list() async {
+    lists++;
+    return _conns;
+  }
+
+  @override
+  Future<ConnCounts> counts() async {
+    countCalls++;
+    return countConnections(_conns);
+  }
+}
+
 const _node = CurrentNode(group: '节点选择', path: ['节点选择', '自动选择'], leaf: '🇭🇰 香港 01 · IEPL 专线（名字很长很长很长的节点）');
 
 List<Override> _overrides({
@@ -183,6 +200,7 @@ List<Override> _overrides({
   AccessControl access = const AccessControl(),
   _ExitIp? exitIp,
   bool inited = true,
+  bool realStats = false,
 }) => [
   initProvider.overrideWith(() => _Init(inited)),
   isRunningProvider.overrideWithValue(running),
@@ -207,7 +225,8 @@ List<Override> _overrides({
   profilesProvider.overrideWith(() => _Profiles([?profile])),
   currentProfileIdProvider.overrideWith(() => _ProfileId(profile?.id)),
   checkIpNumProvider.overrideWith(_CheckIpNum.new),
-  connStatsProvider.overrideWith(_Stats.new),
+  // realStats：用真的连接计数控制器（取数走 connSourceProvider），验壳与卡片共用一份快照
+  if (!realStats) connStatsProvider.overrideWith(_Stats.new),
   exitIpProvider.overrideWith(
     () =>
         exitIp ??
@@ -431,6 +450,34 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.text('0 KB/s'), findsWidgets);
+  });
+
+  testWidgets('两列：「活跃连接」默认经壳取数，同一份快照顺手更新连接计数，壳这一拍不再另拉', (tester) async {
+    final source = _Source();
+    await _pump(
+      tester,
+      const DashboardPage(),
+      size: const Size(868, 680),
+      overrides: [
+        ..._overrides(running: true, wide: true, twoPane: true, profile: _profile, hidden: const ['chart'], realStats: true),
+        connSourceProvider.overrideWithValue(source),
+      ],
+      textScale: 1,
+    );
+
+    expect(source.lists, 1);
+    expect(find.text('discord.com:443'), findsOneWidget);
+    // 「查看全部 N 条」与指标格用的是卡片这份快照的计数（9 条：代理 6、直连 3），不是另外拉的
+    expect(find.text('查看全部 9 条'), findsOneWidget);
+    expect(find.text('6'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+
+    // 每秒节拍：壳和卡片挂在同一拍上，卡片取完整快照，壳不再问一次核心
+    dashboardRefreshManager.tick1s.value++;
+    await tester.pump();
+    await tester.pump();
+    expect(source.lists, 2);
+    expect(source.countCalls, 0);
   });
 
   testWidgets('两列 · 不够高（矮窗口、1.4 倍字号）：按内容高度排、整页滚动，不溢出', (tester) async {
