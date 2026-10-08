@@ -318,7 +318,8 @@ class HomeMetricsRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final running = ref.watch(isRunningProvider);
-    final stats = ref.watch(connStatsProvider);
+    // 计数 / 内存每一两秒变一次：不在首页时不跟
+    final stats = ref.watchOnTab(MeowTab.home, connStatsProvider);
     void toActivity() => goTab(ref, MeowTab.connections);
     return _tileRow([
       for (final c in cards)

@@ -120,10 +120,12 @@ class _SubLine extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final runTime = ref.watch(runTimeProvider);
+    // 不在首页时不跟每秒的跳动；起停本身经 connPhaseProvider / 切回首页时的重建照样跟得上。
+    // 只订阅到秒：运行时长有两路在写（每秒节拍 + 任务循环），按毫秒订阅的话每秒要重建两次
+    final seconds = ref.watchOnTab(MeowTab.home, runTimeProvider.select((t) => t == null ? null : t ~/ 1000));
     final String text;
-    if (runTime != null) {
-      text = '${S.running} ${fmtUptime(Duration(milliseconds: runTime))}';
+    if (seconds != null) {
+      text = '${S.running} ${fmtUptime(Duration(seconds: seconds))}';
     } else if (ref.watch(connPhaseProvider) == ConnPhase.connecting) {
       text = '请稍候…';
     } else {

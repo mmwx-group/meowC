@@ -23,7 +23,9 @@ final isTwoPaneProvider = Provider<bool>((ref) {
 });
 
 /// 是否已连接（核心运行中）。
-final isRunningProvider = Provider<bool>((ref) => ref.watch(runTimeProvider) != null);
+/// 只订阅「有没有」：运行时长每秒都在变，整个 watch 的话这个 provider 每秒失效一次——值没变、没有 widget 重建，
+/// 但 Riverpod 安排重算靠的是让 ProviderScope 重建，于是连接着的时候不管停在哪一页，每秒都白出一两帧。
+final isRunningProvider = Provider<bool>((ref) => ref.watch(runTimeProvider.select((t) => t != null)));
 
 /// 当前订阅解析后的原始配置（mihomo 自己的解析器），按 profileId 缓存；
 /// 用于：节点安全性副标题（tls / reality / flow / network）、DNS 模式的「跟随订阅」判定。

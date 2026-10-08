@@ -1,5 +1,6 @@
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
+import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/pages/dashboard/active_connections_card.dart';
 import 'package:bett_box/meowx/pages/dashboard/dashboard_page.dart';
 import 'package:bett_box/meowx/pages/dashboard/info_cards.dart';
@@ -15,6 +16,8 @@ import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/release_frames.dart';
 
 // 各 Notifier 换成不碰 globalState / 核心 / 网络的替身，页面本身的布局与交互保持真实。
 
@@ -137,6 +140,8 @@ class _ExitIp extends ExitIpController {
 class _Stats extends ConnStatsController {
   @override
   ConnStats build() => const ConnStats(total: 64, proxied: 23, direct: 41, memory: 60817408);
+
+  void set(ConnStats value) => state = value;
 }
 
 final _profile = Profile(
@@ -299,6 +304,94 @@ void main() {
     // 悬浮底栏的高度让进了列表底部留白
     final list = tester.widget<ListView>(find.byType(ListView));
     expect(list.padding, const EdgeInsets.fromLTRB(16, 0, 16, 16 + 96));
+  });
+
+  testWidgets('不在首页：每秒的数据（网速 / 运行时长 / 计数）不带着首页重建、不要帧；切回首页那一帧就是最新的', (tester) async {
+    await _pump(
+      tester,
+      _page(),
+      size: const Size(412, 1400),
+      overrides: [
+        ..._overrides(running: true, profile: _profile),
+        meowTabProvider.overrideWith((ref) => MeowTab.proxies),
+      ],
+      textScale: 1,
+    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
+    // 首次构建用的是当时的值
+    expect(find.text('已运行 02:14:36'), findsOneWidget);
+    expect(find.text('上传 · 会话 86.2 MB'), findsOneWidget);
+    expect(find.text('23'), findsOneWidget);
+
+    useReleaseProviderFrames();
+    await tester.pump();
+    // 和控制器一样的写法：每秒 read(notifier) 再写
+    void tick(int second) {
+      container.read(runTimeProvider.notifier).value = 8076000 + second * 1000;
+      container.read(totalTrafficProvider.notifier).value = Traffic(up: 1024 * 1024 * (200 + second), down: 1524713390);
+      container.read(trafficsProvider.notifier).addTraffic(Traffic(up: 1024 * second, down: 1024 * 1024 * 9));
+      (container.read(connStatsProvider.notifier) as _Stats).set(ConnStats(total: 70, proxied: 30 + second, direct: 40, memory: 60817408));
+    }
+
+    for (var second = 1; second <= 3; second++) {
+      tick(second);
+      await expectNoFrameRequested(tester, reason: '第 $second 秒');
+      await tester.pump();
+    }
+    expect(find.text('已运行 02:14:36'), findsOneWidget);
+    expect(find.text('上传 · 会话 86.2 MB'), findsOneWidget);
+    expect(find.text('23'), findsOneWidget);
+
+    // 切回首页：这一帧就是最新值（数据一直在 provider 里攒着），之后照常每秒跟
+    container.read(meowTabProvider.notifier).state = MeowTab.home;
+    await tester.pump();
+    expect(find.text('已运行 02:14:39'), findsOneWidget);
+    expect(find.text('上传 · 会话 203.0 MB'), findsOneWidget);
+    expect(find.text('33'), findsOneWidget);
+    expect(container.read(trafficsProvider).list.last.up.value, 1024 * 3);
+    tick(4);
+    await tester.pump();
+    expect(find.text('已运行 02:14:40'), findsOneWidget);
+    expect(find.text('上传 · 会话 204.0 MB'), findsOneWidget);
+    expect(find.text('34'), findsOneWidget);
+
+    // 运行时长有两路在写，同一秒里的第二次写入不重建
+    await tester.pump();
+    container.read(runTimeProvider.notifier).value = 8080400;
+    await expectNoFrameRequested(tester, reason: '同一秒的第二次写入');
+  });
+
+  testWidgets('不在首页时起停：主卡照常跟上（连接状态不是每秒数据）', (tester) async {
+    await _pump(
+      tester,
+      _page(),
+      size: const Size(412, 1400),
+      overrides: [
+        ..._overrides(running: false, profile: _profile),
+        meowTabProvider.overrideWith((ref) => MeowTab.me),
+        // 这两个在 _overrides 里是定值，这里要跟着 runTime 走
+        isRunningProvider.overrideWith((ref) => ref.watch(runTimeProvider.select((t) => t != null))),
+        connPhaseProvider.overrideWith((ref) => ref.watch(isRunningProvider) ? ConnPhase.on : ConnPhase.off),
+      ],
+      textScale: 1,
+    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
+    expect(find.text('点按右侧按钮开始'), findsOneWidget);
+
+    // 别的页上点了连接（侧栏电源键 / 通知栏开关）
+    container.read(runTimeProvider.notifier).value = 0;
+    await tester.pump();
+    expect(find.text('已连接'), findsOneWidget);
+    expect(find.text('已运行 00:00:00'), findsOneWidget);
+
+    // 又断开：运行时长那行在隐藏时停在旧值，回到首页的那一帧改正
+    container.read(runTimeProvider.notifier).value = null;
+    await tester.pump();
+    expect(find.text('未连接'), findsWidgets);
+    container.read(meowTabProvider.notifier).state = MeowTab.home;
+    await tester.pump();
+    expect(find.text('点按右侧按钮开始'), findsOneWidget);
+    expect(find.textContaining('已运行'), findsNothing);
   });
 
   testWidgets('刚启动、核心还没装载代理组：当前节点行显示「正在加载…」而不是「没有代理组」', (tester) async {
