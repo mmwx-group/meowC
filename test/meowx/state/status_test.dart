@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/models/models.dart';
@@ -62,19 +64,25 @@ void main() {
   group('profileRawConfigProvider', () {
     late List<(String, String?)> calls;
     late ProviderContainer container;
+    // 核心怎么答；默认每份订阅各有一份配置，个别用例换成丢包 / 报错 / 空表
+    late Future<Map<String, dynamic>> Function(String id, String? key) respond;
 
     void setProfiles(List<Profile> profiles) => container.read(profilesProvider.notifier).value = profiles;
     Profile profile(String id) => container.read(profilesProvider).firstWhere((p) => p.id == id);
 
     setUp(() {
       calls = [];
+      respond = (id, key) async => id == 'p1' ? _config('fake-ip', 'vless') : _config('redir-host', 'trojan');
+      final delays = rawConfigRetryDelays;
+      rawConfigRetryDelays = const [Duration(milliseconds: 5), Duration(milliseconds: 5)];
+      addTearDown(() => rawConfigRetryDelays = delays);
       container = ProviderContainer(
         overrides: [
           profilesProvider.overrideWith(() => _Profiles([_profile('p1'), _profile('p2')])),
           currentProfileIdProvider.overrideWith(() => _CurrentId('p1')),
-          rawConfigFetcherProvider.overrideWithValue((id, key) async {
+          rawConfigFetcherProvider.overrideWithValue((id, key) {
             calls.add((id, key));
-            return id == 'p1' ? _config('fake-ip', 'vless') : _config('redir-host', 'trojan');
+            return respond(id, key);
           }),
         ],
       );
@@ -128,6 +136,89 @@ void main() {
       await _settle();
       expect(calls, [('p1', null), ('p2', null), ('p1', null)]);
       expect(container.read(declaredDnsModeProvider), 'fake-ip');
+    });
+
+    test('核心硬重启期间不发请求，重启完问新核心；重启前发出去、丢在旧 socket 上的那次不作数', () async {
+      await _settle();
+      // 桌面切订阅：请求先发出去，随后核心硬重启把 socket 关了，这次请求永远等不到回包
+      var lost = 0;
+      final ok = respond;
+      respond = (id, key) {
+        if (id == 'p2' && lost++ == 0) return Completer<Map<String, dynamic>>().future;
+        return ok(id, key);
+      };
+      container.read(currentProfileIdProvider.notifier).value = 'p2';
+      await _settle();
+      expect(calls, [('p1', null), ('p2', null)]);
+      expect(container.read(declaredDnsModeProvider), isNull);
+
+      container.read(isRestartingCoreProvider.notifier).state = true;
+      await _settle();
+      expect(calls, hasLength(2));
+
+      container.read(isRestartingCoreProvider.notifier).state = false;
+      await _settle();
+      expect(calls, [('p1', null), ('p2', null), ('p2', null)]);
+      expect(container.read(declaredDnsModeProvider), 'redir-host');
+      expect(container.read(proxyMetaProvider)['香港 01']?.type, 'trojan');
+    });
+
+    test('重启标志先立起来再切订阅：重启完才发第一次；已有的那份在重启期间照旧显示', () async {
+      await _settle();
+      container.read(isRestartingCoreProvider.notifier).state = true;
+      await _settle();
+      // 重启核心（没换订阅）期间沿用上一份，不闪成空表
+      expect(container.read(declaredDnsModeProvider), 'fake-ip');
+      expect(calls, hasLength(1));
+
+      container.read(currentProfileIdProvider.notifier).value = 'p2';
+      await _settle();
+      expect(calls, hasLength(1));
+
+      container.read(isRestartingCoreProvider.notifier).state = false;
+      await _settle();
+      expect(calls, [('p1', null), ('p2', null)]);
+      expect(container.read(declaredDnsModeProvider), 'redir-host');
+    });
+
+    test('超时回来的空表 / 核心报错不当成结果存下，隔一会儿重试到取到为止', () async {
+      await _settle();
+      var n = 0;
+      final ok = respond;
+      respond = (id, key) async {
+        if (id != 'p2') return ok(id, key);
+        n++;
+        if (n == 1) return <String, dynamic>{};
+        if (n == 2) throw 'open profile: no such file';
+        return ok(id, key);
+      };
+      container.read(currentProfileIdProvider.notifier).value = 'p2';
+      await _settle();
+      expect(container.read(declaredDnsModeProvider), isNull);
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(calls.where((c) => c.$1 == 'p2'), hasLength(3));
+      expect(container.read(declaredDnsModeProvider), 'redir-host');
+    });
+
+    test('一直取不到：重试次数有上限，之后认空表；切走的订阅不再重试', () async {
+      await _settle();
+      respond = (id, key) async => <String, dynamic>{};
+      container.read(currentProfileIdProvider.notifier).value = 'p2';
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(calls.where((c) => c.$1 == 'p2'), hasLength(1 + rawConfigRetryDelays.length));
+      expect(container.read(profileRawConfigProvider('p2')).hasValue, isTrue);
+      expect(container.read(proxyMetaProvider), isEmpty);
+
+      // 还在重试途中就切走：那份已释放，剩下的重试不发
+      rawConfigRetryDelays = const [Duration(milliseconds: 20), Duration(milliseconds: 20)];
+      setProfiles([profile('p1'), profile('p2'), _profile('p3')]);
+      container.read(currentProfileIdProvider.notifier).value = 'p3';
+      await _settle();
+      expect(calls.where((c) => c.$1 == 'p3'), hasLength(1));
+      container.read(currentProfileIdProvider.notifier).value = 'missing';
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      expect(calls.where((c) => c.$1 == 'p3'), hasLength(1));
     });
 
     test('订阅不存在 → 空表，不问核心', () async {
