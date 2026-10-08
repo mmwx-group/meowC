@@ -102,11 +102,47 @@ mixin AndroidClashInterface {
   Future<DateTime?> getRunTime();
 }
 
+/// MeowX：超过这个长度（UTF-16 码元）的核心回包放到后台 isolate 解信封。
+/// 连接快照（内层 JSON 以转义字符串嵌在信封里，几百条连接就是几百 KB）、代理组、整份配置都在这一档；
+/// 日志 / 测速 / 普通回包只有几十到几百字节，起一个 isolate 反而更慢，照旧同步解。
+const offMainDecodeThreshold = 32 * 1024;
+
+/// 顶层函数：交给新 isolate 的闭包只带着 [message] 这一个字符串。
+/// 写在监听回调里的话，闭包会连同所在对象（带 ReceivePort / Socket，发不过去）一起被捕获。
+Future<Object?> _decodeOffMain(String message) =>
+    Isolate.run(() => json.decode(message));
+
 abstract class ClashHandlerInterface with ClashInterface {
   Map<String, Completer> callbackCompleterMap = {};
 
+  /// MeowX：核心发来的一条原始消息（回包或推送）。Android 的 ReceivePort 与 Windows 的 socket 两处监听都走这里。
+  void handleMessage(String message) {
+    // 没人看请求页时，request 推送连信封都不解（见 ClashMessage.deferRequest）
+    if (clashMessage.deferRequest(message)) return;
+    if (message.length <= offMainDecodeThreshold) {
+      handleResult(ActionResult.fromJson(json.decode(message)));
+      return;
+    }
+    // 大回包按 id 配对，晚一点、与后面的小消息乱序到达都不影响
+    unawaited(_handleLargeMessage(message));
+  }
+
+  Future<void> _handleLargeMessage(String message) async {
+    Object? decoded;
+    try {
+      decoded = await _decodeOffMain(message);
+    } catch (e) {
+      // isolate 起不来 / 结果传不回：退回原来的做法，在这边解
+      commonPrint.log('decode core message off main failed: $e');
+      decoded = json.decode(message);
+    }
+    handleResult(ActionResult.fromJson(decoded as Map<String, Object?>));
+  }
+
   Future<void> handleResult(ActionResult result) async {
-    final completer = callbackCompleterMap[result.id];
+    // MeowX：取出即移除。以前只 complete 不移除，要等 safeFuture 的清理定时器（默认 30s 后）才删，
+    // 已完成的 Completer 一直攥着回包——每秒一份连接快照要多活 30 秒，连接多时常驻几十 MB
+    final completer = callbackCompleterMap.remove(result.id);
     try {
       switch (result.method) {
         case ActionMethod.message:
@@ -144,7 +180,9 @@ abstract class ClashHandlerInterface with ClashInterface {
   }) async {
     final id = '${method.name}#${utils.id}';
 
-    callbackCompleterMap[id] = Completer<T>();
+    // MeowX：handleResult 现在取出即移除，这里攥着局部变量，不再回头去表里取
+    final completer = Completer<T>();
+    callbackCompleterMap[id] = completer;
 
     dynamic mDefaultValue = defaultValue;
     if (mDefaultValue == null) {
@@ -159,7 +197,7 @@ abstract class ClashHandlerInterface with ClashInterface {
 
     sendMessage(json.encode(Action(id: id, method: method, data: data)));
 
-    return (callbackCompleterMap[id] as Completer<T>).safeFuture(
+    return completer.safeFuture(
       timeout: timeout,
       onLast: () {
         callbackCompleterMap.remove(id);

@@ -732,6 +732,7 @@ class AppController {
       }
       _ref.read(logsProvider.notifier).value = FixedList(maxLength);
       _ref.read(requestsProvider.notifier).value = FixedList(maxLength);
+      clashMessage.clearPendingRequests();   // MeowX：还没解码的 request 消息一并清掉
       globalState.computeHeightMapCache = {};
       addCheckIpNumDebounce();
     });
