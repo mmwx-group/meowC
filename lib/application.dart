@@ -41,6 +41,9 @@ class ApplicationState extends ConsumerState<Application>
     },
   );
 
+  // MeowX：亮 / 暗两份主题的缓存，见 build 里的说明
+  final _themes = MeowThemes();
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +54,13 @@ class ApplicationState extends ConsumerState<Application>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_initApp());
     });
+  }
+
+  // MeowX：热重载后重建主题，改了 token / 主题代码能立刻看到
+  @override
+  void reassemble() {
+    super.reassemble();
+    _themes.clear();
   }
 
   bool get _isForeground {
@@ -195,6 +205,13 @@ class ApplicationState extends ConsumerState<Application>
             final fontFamily = themeProps.useHarmonyFont
                 ? 'HarmonyOS_Sans'
                 : null;
+            // MeowX：两份主题走缓存（MeowThemes）。每次重建都现建的话新旧 ThemeData 永不相等，
+            // 切语言、改无关的主题设置都会让 MaterialApp 做一次 200ms 的主题插值，期间全树逐帧重建。
+            // 上面仍然整体 watch themeSettingProvider：ThemeManager 的文字缩放是在 build 里 ref.read 的，靠这里重建带动。
+            final themes = _themes.of(
+              fontFamily: fontFamily,
+              pageTransitionsTheme: _pageTransitionsTheme,
+            );
 
             return MaterialApp(
               debugShowCheckedModeBanner: false,
@@ -231,16 +248,8 @@ class ApplicationState extends ConsumerState<Application>
                   utils.getLocaleForString(locale) ?? utils.getSystemLocale(),
               supportedLocales: AppLocalizations.delegate.supportedLocales,
               themeMode: themeProps.themeMode,
-              theme: meowThemeData(
-                brightness: Brightness.light,
-                fontFamily: fontFamily,
-                pageTransitionsTheme: _pageTransitionsTheme,
-              ),
-              darkTheme: meowThemeData(
-                brightness: Brightness.dark,
-                fontFamily: fontFamily,
-                pageTransitionsTheme: _pageTransitionsTheme,
-              ),
+              theme: themes.light,
+              darkTheme: themes.dark,
               home: child!,
             );
           },
