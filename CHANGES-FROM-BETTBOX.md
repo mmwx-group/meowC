@@ -62,3 +62,8 @@
 - `lib/enum/enum.dart`（`ActionMethod.meowPo0Report`）与生成文件 `lib/models/generated/core.g.dart`（枚举映射手动补一行，与 build_runner 输出一致）。
 - 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型在 `lib/meowx/panel/po0.dart`。
 - `lib/models/meow.dart MeowSettings`：新增 `po0Enabled`（默认 false）与 `po0DirectIps`（最近一次 po0 服务器 IP 缓存；开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve`，列表变化时与其它覆写同样 `applyProfileDebounce` 热生效）；设置页「订阅」组加「po0 加白」开关，所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化）以它为准。
+
+## 2026-10-08 · 界面性能：核心回包与连接快照
+- `lib/clash/interface.dart`：新增 `handleMessage`（Android 的 ReceivePort 与 Windows 的 socket 两处监听的统一入口，`lib/clash/lib.dart` / `lib/clash/service.dart` 改为调它）——超过 32KB 的回包（连接快照、代理组、整份配置）放到后台 isolate 解信封，小消息照旧同步解；`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，回包被多留 30 秒）。
+- `lib/clash/message.dart`：核心每关一条连接推一条的 `request` 消息，没有界面在看时只留原文（最近 256 条，与请求列表容量一致）、不逐条解码入库；`lib/views/connection/requests.dart`（旧「请求」页）打开时补解并恢复逐条处理，`lib/controller.dart` 换配置清空请求列表时一并清掉。
+- 连接快照的取用在 `lib/meowx/state/connection.dart`（`ConnStatsController`）：没有界面显示连接数时不拉，可见页面取到的完整快照顺手更新计数。

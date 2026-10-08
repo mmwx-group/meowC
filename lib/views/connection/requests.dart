@@ -1,3 +1,4 @@
+import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -22,10 +23,13 @@ class _RequestsViewState extends ConsumerState<RequestsView> {
   void initState() {
     super.initState();
     _scrollController = ReverseScrollController();
+    // MeowX：request 消息平时只留原文不解码（见 ClashMessage.deferRequest），本页打开时补上并恢复逐条处理
+    clashMessage.watchRequests();
   }
 
   @override
   void dispose() {
+    clashMessage.unwatchRequests();
     _scrollController.dispose();
     super.dispose();
   }

@@ -205,7 +205,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     final tab = ref.watch(meowTabProvider);
     final wide = ref.watch(isWideLayoutProvider);
     final mm = context.mm;
-    // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标、动态页共用，切到哪一页都在跑
+    // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标共用；连接数只在有界面显示它时才问核心（见 ConnStatsController）
     ref.listen(connStatsProvider, (_, _) {});
     // 网速的两份数据也在壳上留住：它们是 autoDispose 的，首页网速卡不在树上时（关掉了、滚出了列表）没人听，
     // 控制器每秒写一次、Riverpod 就排一次回收——它排回收靠的是让 ProviderScope 重建，等于连接着就每秒白出一两帧
