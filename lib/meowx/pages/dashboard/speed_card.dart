@@ -2,6 +2,7 @@ import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
@@ -27,8 +28,9 @@ class HomeSpeedCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mm = context.mm;
     final running = ref.watch(isRunningProvider);
-    final traffics = ref.watch(trafficsProvider).list;
-    final total = ref.watch(totalTrafficProvider);
+    // 两份数据每秒各变一次：不在首页时不跟（数据照常在 provider 里攒着，切回来那一帧折线直接画到最新）
+    final traffics = ref.watchOnTab(MeowTab.home, trafficsProvider).list;
+    final total = ref.watchOnTab(MeowTab.home, totalTrafficProvider);
     final last = traffics.isEmpty ? null : traffics.last;
     final recent = traffics.length > 60 ? traffics.sublist(traffics.length - 60) : traffics;
     final ups = [for (final t in recent) t.up.value.toDouble()];

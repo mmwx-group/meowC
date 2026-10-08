@@ -5,9 +5,9 @@ import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../pages/proxies/proxies_page.dart' show allLeafProxies;
 import '../state/connection.dart';
 import '../state/format.dart';
+import '../state/node_count.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 import 'meow_tab.dart';
@@ -18,7 +18,7 @@ const sidebarFullMinWidth = 1000.0;
 /// 宽屏左侧栏（Windows 窗口、Android 平板）：品牌 → 四个目的地 → 常驻连接控制。
 /// 完整形态 220 宽：导航带名称和计数，底部是连接卡（状态、电源键、当前节点、Windows 上的 TUN / 系统代理）；
 /// 紧凑形态 84 宽：只有图标，底部只留电源键。
-class MeowSidebar extends ConsumerWidget {
+class MeowSidebar extends StatelessWidget {
   const MeowSidebar({super.key, required this.selected, required this.onSelect, required this.compact});
 
   final MeowTab selected;
@@ -29,22 +29,13 @@ class MeowSidebar extends ConsumerWidget {
   static const compactWidth = 84.0;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final mm = context.mm;
-    // 和节点页标题「N 个节点」同一口径：只数当前模式下可见组里的叶子节点
-    final nodeCount = ref.watch(currentGroupsStateProvider.select((s) => allLeafProxies(s.value).length));
-    final connCount = ref.watch(connStatsProvider.select((s) => s.total));
-    int? badge(MeowTab t) => switch (t) {
-      MeowTab.proxies => nodeCount,
-      MeowTab.connections => connCount,
-      _ => null,
-    };
-
     final nav = [
       for (final t in MeowTab.values)
         Padding(
           padding: const EdgeInsets.only(bottom: 4),
-          child: _NavItem(tab: t, on: t == selected, compact: compact, badge: badge(t), onTap: () => onSelect(t)),
+          child: _NavItem(tab: t, on: t == selected, compact: compact, onTap: () => onSelect(t)),
         ),
     ];
 
@@ -99,10 +90,9 @@ class MeowSidebar extends ConsumerWidget {
 }
 
 class _NavItem extends StatelessWidget {
-  const _NavItem({required this.tab, required this.on, required this.compact, required this.badge, required this.onTap});
+  const _NavItem({required this.tab, required this.on, required this.compact, required this.onTap});
   final MeowTab tab;
   final bool on, compact;
-  final int? badge;
   final VoidCallback onTap;
 
   @override
@@ -132,16 +122,7 @@ class _NavItem extends StatelessWidget {
                     style: TextStyle(fontSize: 14, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: ink),
                   ),
                 ),
-                if ((badge ?? 0) > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                    decoration: BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(8)),
-                    child: Text(
-                      badge! > 999 ? '999+' : '$badge',
-                      textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
-                      style: MeowFont.mono(size: 11, weight: FontWeight.w700, color: mm.t2),
-                    ),
-                  ),
+                if (tab == MeowTab.proxies || tab == MeowTab.connections) _NavBadge(tab),
               ],
             ],
           ),
@@ -150,6 +131,33 @@ class _NavItem extends StatelessWidget {
     );
     if (compact) body = Tooltip(message: tab.label, child: body);
     return Semantics(selected: on, child: body);
+  }
+}
+
+/// 导航项右侧的计数角标：「节点」= 叶子节点数，「动态」= 连接数；0 不显示。只有完整形态才在树上。
+/// 自己订阅计数：连接数几乎每秒都变，只重建这一小块，不带着整条侧栏（四个导航项 + 连接卡）重建重排。
+class _NavBadge extends ConsumerWidget {
+  const _NavBadge(this.tab);
+  final MeowTab tab;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = switch (tab) {
+      // 和节点页标题「N 个节点」同一口径：只数当前模式下可见组里的叶子节点
+      MeowTab.proxies => ref.watch(leafNodeCountProvider),
+      _ => ref.watch(connStatsProvider.select((s) => s.total)),
+    };
+    if (count <= 0) return const SizedBox.shrink();
+    final mm = context.mm;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+      decoration: BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(8)),
+      child: Text(
+        count > 999 ? '999+' : '$count',
+        textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
+        style: MeowFont.mono(size: 11, weight: FontWeight.w700, color: mm.t2),
+      ),
+    );
   }
 }
 
@@ -183,15 +191,16 @@ class _ConnectionCard extends ConsumerWidget {
     final phase = ref.watch(connPhaseProvider);
     final on = phase == ConnPhase.on;
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
-    final runTime = ref.watch(runTimeProvider);
+    // 只订阅到秒：运行时长有两路在写（每秒节拍 + 任务循环），按毫秒订阅的话每秒要重建两次
+    final seconds = ref.watch(runTimeProvider.select((t) => t == null ? null : t ~/ 1000));
     final node = ref.watch(currentNodeProvider);
     final (label, dot) = switch (phase) {
       ConnPhase.on => ('已连接', mm.good),
       ConnPhase.connecting => ('连接中', mm.mid),
       ConnPhase.off => ('未连接', mm.t2),
     };
-    final sub = on && runTime != null
-        ? '${modeLabel(mode)}模式 · ${fmtUptime(Duration(milliseconds: runTime))}'
+    final sub = on && seconds != null
+        ? '${modeLabel(mode)}模式 · ${fmtUptime(Duration(seconds: seconds))}'
         : (ref.watch(hasProfileProvider) ? '${modeLabel(mode)}模式 · 已就绪' : '还没有订阅');
     final nodeName = switch (mode) {
       Mode.direct => '直连',

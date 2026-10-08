@@ -30,6 +30,7 @@ import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 import 'meow_sidebar.dart';
 import 'meow_tab.dart';
+import 'tab_stack.dart';
 
 /// MeowX 壳：手机 = 悬浮的液态玻璃底栏 4 Tab；宽屏（Windows 窗口、平板）= 左侧栏 + 内容。
 /// Bettbox 内部的 toPage(PageLabel) 经 currentPageLabelProvider 映射到 Tab；非 Tab 页（日志 / 请求 / 资源 / 脚本）走 push。
@@ -194,7 +195,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   Widget _page(MeowTab tab) => switch (tab) {
     MeowTab.home => const DashboardPage(),
     MeowTab.proxies => const ProxiesPage(),
-    MeowTab.connections => const ConnectionsPage(),
+    // 四个常驻页里只有动态页有内联输入框（搜索）：键盘只挤它，其余三页的尺寸不随键盘变
+    MeowTab.connections => const KeyboardInset(child: ConnectionsPage()),
     MeowTab.me => const MePage(),
   };
 
@@ -205,20 +207,25 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     final mm = context.mm;
     // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标、动态页共用，切到哪一页都在跑
     ref.listen(connStatsProvider, (_, _) {});
-    final content = IndexedStack(
-      index: tab.index,
-      children: [for (final t in MeowTab.values) _page(t)],
-    );
+    // 网速的两份数据也在壳上留住：它们是 autoDispose 的，首页网速卡不在树上时（关掉了、滚出了列表）没人听，
+    // 控制器每秒写一次、Riverpod 就排一次回收——它排回收靠的是让 ProviderScope 重建，等于连接着就每秒白出一两帧
+    ref.listen(trafficsProvider, (_, _) {});
+    ref.listen(totalTrafficProvider, (_, _) {});
+    final content = MeowTabStack(current: tab, pageBuilder: _page);
 
     final Widget body;
     if (wide) {
-      final compact = ref.watch(viewWidthProvider) < sidebarFullMinWidth;
+      // 只要「够不够放完整侧栏」这一个 bool：直接看宽度的话，拖窗口边缘的每一帧壳和整条侧栏都要重建
+      final compact = ref.watch(viewWidthProvider.select((w) => w < sidebarFullMinWidth));
       body = Row(
         children: [
-          Padding(
-            // Windows 顶上已有 40 高的窗口标题栏，侧栏不再留上边距
-            padding: EdgeInsets.only(left: 12, top: system.isDesktop ? 0 : 12, bottom: 12),
-            child: MeowSidebar(selected: tab, onSelect: _select, compact: compact),
+          // 侧栏照旧跟着键盘收（Android 平板）：矮了栏内滚动，电源键留在键盘上面
+          KeyboardInset(
+            child: Padding(
+              // Windows 顶上已有 40 高的窗口标题栏，侧栏不再留上边距
+              padding: EdgeInsets.only(left: 12, top: system.isDesktop ? 0 : 12, bottom: 12),
+              child: MeowSidebar(selected: tab, onSelect: _select, compact: compact),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(child: content),
@@ -233,6 +240,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         backgroundColor: mm.bg,
         // 手机：底栏是悬浮的液态玻璃胶囊，内容从它下面滚过去（extendBody），各页自己把 MediaQuery.padding.bottom 加进底部留白
         extendBody: !wide,
+        // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
+        resizeToAvoidBottomInset: false,
         body: SafeArea(bottom: wide, child: body),   // 状态栏下留白
         // liquid_glass_widgets：Impeller（Android 10+）上高亮胶囊是真折射 + 高光，按住放大、拖动带果冻形变；
         // Skia（Android 8–9、Windows 3.44）自动降级为模糊 + 双高光，仍可拖动。底轨也用 premium：边缘亮线 + 暗带只有它画得出来。

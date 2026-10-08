@@ -122,3 +122,28 @@ ThemeData meowThemeData({
     textTheme: base.textTheme.apply(bodyColor: tokens.t1, displayColor: tokens.t1),
   );
 }
+
+/// 亮 / 暗两份主题，记住上一次的结果：参数没变就还是同一对实例。
+///
+/// [meowThemeData] 每次现建的主题彼此不相等（里面有 WidgetStateProperty.resolveWith 的闭包）。MaterialApp 一重建——
+/// 切语言、改任何一项主题设置——AnimatedTheme 就认为主题变了，在两份看起来一样的主题之间做 200ms 插值，
+/// 这期间每一帧所有用到主题的 widget（常驻的四个 Tab 页都是）全部重建。拿到的是同一份实例它就直接跳过。
+/// 切浅色 / 深色只是在这两份之间换，渐变照旧。
+class MeowThemes {
+  String? _fontFamily;
+  PageTransitionsTheme? _transitions;
+  ThemeData? _light, _dark;
+
+  ({ThemeData light, ThemeData dark}) of({String? fontFamily, PageTransitionsTheme? pageTransitionsTheme}) {
+    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme) {
+      _fontFamily = fontFamily;
+      _transitions = pageTransitionsTheme;
+      _light = meowThemeData(brightness: Brightness.light, fontFamily: fontFamily, pageTransitionsTheme: pageTransitionsTheme);
+      _dark = meowThemeData(brightness: Brightness.dark, fontFamily: fontFamily, pageTransitionsTheme: pageTransitionsTheme);
+    }
+    return (light: _light!, dark: _dark!);
+  }
+
+  /// 丢掉记住的那一对，下次重新建（热重载后用：改了 token / 主题代码要立刻看到）。
+  void clear() => _light = _dark = null;
+}

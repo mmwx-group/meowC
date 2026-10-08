@@ -378,7 +378,8 @@ class _GroupTabsState extends ConsumerState<_GroupTabs> {
     Scrollable.ensureVisible(
       ctx,
       alignment: 0.5,
-      duration: const Duration(milliseconds: 220),
+      // 本页不可见时壳把这里的 Ticker 静音了，动画走不动、会攒到切回来才当着用户滚一下：这时直接跳到位
+      duration: TickerMode.getValuesNotifier(context).value.enabled ? const Duration(milliseconds: 220) : Duration.zero,
       curve: Curves.easeOut,
     );
   }
