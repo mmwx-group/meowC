@@ -80,6 +80,7 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
           await c.updateProfile(p);
         case _ProfileAction.view:
           final content = await (await p.getFile()).readAsString();
+          await ensureEditorRuntime();   // 编辑器的 Rust 库按需加载，进页面前等它就绪
           if (!mounted) return;
           await BaseNavigator.push<String>(
             context,

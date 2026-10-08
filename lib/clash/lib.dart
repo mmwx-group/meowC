@@ -59,7 +59,9 @@ class ClashLib extends ClashHandlerInterface with AndroidClashInterface {
           .timeout(const Duration(seconds: 2), onTimeout: () => false);
       if (connected) return;
       commonPrint.log('ClashLib: IPC attempt ${attempt + 1}/3 failed, retrying...');
-      _canSendCompleter = Completer();
+      // MeowX：超时后不换 _canSendCompleter——它还没完成，换掉的话 preload() / sendMessage() 早先拿到的
+      // 那个 future 就再没有人完成：慢机器上服务引擎 2 秒没连上，main() 会永远停在启动页。
+      // 继续等同一个，端口一到监听里就会完成它。
       await service?.reconnectIpc();
     }
     commonPrint.log('ClashLib: IPC failed after 3 attempts');

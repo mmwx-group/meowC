@@ -4,16 +4,49 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:bett_box/common/common.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'client.dart';
 import 'crypto.dart';
 
+/// 断线重连的退避：连续失败依次等 5 → 10 → 20 → 40 秒，之后封顶 60 秒。
+/// 主控连不上（没网、被拦）或鉴权被拒时，原来固定 5 秒一次的重连会一直空转（每次一轮握手、唤醒一次射频）。
+/// 一条连接稳住 [stableAfter] 以上才算「连上过」并复位——鉴权被拒时主控是握手成功后立刻关，那种不能算。
+class ReconnectBackoff {
+  static const stableAfter = Duration(seconds: 30);
+  static const _maxSeconds = 60;
+
+  int _failures = 0;
+
+  /// 一条连接断开（或压根没连上）之后调用，返回下次重连前等多久。[uptime] 是它活了多久，没连上传 null。
+  Duration next({Duration? uptime}) {
+    if (uptime != null && uptime >= stableAfter) _failures = 0;
+    final seconds = 5 << (_failures < 4 ? _failures : 4);
+    _failures++;
+    return Duration(seconds: seconds > _maxSeconds ? _maxSeconds : seconds);
+  }
+
+  /// 网络变了：之前的失败不再说明问题，从头退避。
+  void reset() => _failures = 0;
+}
+
 /// 主控实时通道 `wss://host/api/secure/ws`：
-/// 帧 1 明文 ePub(32B)；帧 2 加密 `{ts, nonce, token?}`；此后每帧 `counter‖ct‖tag`；25s 加密 ping；断线 5s 重连。
+/// 帧 1 明文 ePub(32B)；帧 2 加密 `{ts, nonce, token?}`；此后每帧 `counter‖ct‖tag`；55s 加密 ping；
+/// 断线按 [ReconnectBackoff] 退避重连，网络变化时立刻重连。
 class RealtimeClient {
-  RealtimeClient({required this.client, required this.token, required this.onEvent});
+  RealtimeClient({
+    required this.client,
+    required this.token,
+    required this.onEvent,
+    @visibleForTesting Stream<Object?>? networkChanges,
+  }) : _networkChanges = networkChanges;
+
+  /// 加密 ping 的间隔。主控对这条通道的空闲窗口是 70 秒（appWSIdleWindow），必须小于它，
+  /// 留出余量给迟到的定时器（后台 / 息屏时会迟到）。原来是 25 秒，多出来的只是射频唤醒。
+  static const pingInterval = Duration(seconds: 55);
 
   final PanelClient client;
   final String token;
@@ -23,12 +56,31 @@ class RealtimeClient {
   SecureSession? _session;
   Timer? _ping, _reconnect;
   bool _running = false;
+  final _backoff = ReconnectBackoff();
+  DateTime? _connectedAt;
+  StreamSubscription<Object?>? _networkSub;
+
+  /// 网络变化事件的来源；测试注入，平时是 connectivity_plus。
+  final Stream<Object?>? _networkChanges;
 
   bool get isRunning => _running;
 
   void start() {
     if (_running) return;
     _running = true;
+    // 网络变了（换 Wi-Fi / 蜂窝、恢复联网）不等完退避：正等着重连的话立刻连，退避从头算
+    _networkSub = (_networkChanges ?? Connectivity().onConnectivityChanged).listen((_) => _onNetworkChanged(), onError: (_) {});
+    unawaited(_connect());
+  }
+
+  void _onNetworkChanged() {
+    if (!_running) return;
+    // 退避无条件复位：重连定时器刚触发、握手还在途中时（_reconnect 已是 null）也算，
+    // 否则旧网络上那次握手失败后还接着按涨上去的间隔排（最长 60 秒）。
+    _backoff.reset();
+    if (_reconnect == null) return;
+    _reconnect?.cancel();
+    _reconnect = null;
     unawaited(_connect());
   }
 
@@ -37,6 +89,8 @@ class RealtimeClient {
     _ping?.cancel();
     _reconnect?.cancel();
     _ping = _reconnect = null;
+    unawaited(_networkSub?.cancel());
+    _networkSub = null;
     final ch = _channel;
     _channel = null;
     _session = null;
@@ -68,7 +122,8 @@ class RealtimeClient {
         'nonce': DateTime.now().microsecondsSinceEpoch.toRadixString(36),
         if (token.isNotEmpty) 'token': token,
       }))));
-      _ping = Timer.periodic(const Duration(seconds: 25), (_) => _send({'type': 'ping'}));
+      _connectedAt = DateTime.now();
+      _ping = Timer.periodic(pingInterval, (_) => _send({'type': 'ping'}));
       ch.stream.listen(_onFrame, onError: (_) => _scheduleReconnect(), onDone: _scheduleReconnect, cancelOnError: true);
       commonPrint.log('realtime connected: ${uri.host}');
     } catch (e) {
@@ -113,8 +168,11 @@ class RealtimeClient {
     _ping = null;
     _channel = null;
     _session = null;
+    final connectedAt = _connectedAt;
+    _connectedAt = null;
     if (!_running || _reconnect != null) return;
-    _reconnect = Timer(const Duration(seconds: 5), () {
+    final delay = _backoff.next(uptime: connectedAt == null ? null : DateTime.now().difference(connectedAt));
+    _reconnect = Timer(delay, () {
       _reconnect = null;
       unawaited(_connect());
     });

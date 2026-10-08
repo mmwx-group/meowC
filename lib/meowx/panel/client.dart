@@ -169,7 +169,8 @@ class PanelClient {
     );
     if (res.statusCode != 200 || res.data is! Map) throw PanelException('无法获取主控证书（HTTP ${res.statusCode}）');
     final json = (res.data as Map).cast<String, dynamic>();
-    final pub = await MeowCrypto.verifyCert(json, host: host);
+    // 验签在后台 isolate 里做：每个实例用缓存证书起步后的这次后台重拉，不该卡界面线程
+    final pub = await MeowCrypto.verifyCertOffThread(json, host: host);
     final expire = switch (json['expireUnix']) {
       int v => v,
       num v => v.toInt(),
@@ -197,7 +198,14 @@ class PanelClient {
       'nonce': _uuid(),
     };
     final ephemeral = await MeowCrypto.newEphemeral();
-    final envelope = await MeowCrypto.sealRpcRequest(ephemeral: ephemeral, masterPub: pub, plain: utf8.encode(json.encode(inner)));
+    // 上行 / 下行两把密钥一次派生（共享密钥只做一次标量乘），下面解包时不再重算
+    final keys = await MeowCrypto.rpcKeys(ephemeral: ephemeral, masterPub: pub);
+    final envelope = await MeowCrypto.sealRpcRequest(
+      ephemeral: ephemeral,
+      masterPub: pub,
+      plain: utf8.encode(json.encode(inner)),
+      key: keys.c2s,
+    );
     final Response<List<int>> res;
     try {
       res = await _send(
@@ -225,7 +233,7 @@ class PanelClient {
     }
     final Uint8List plain;
     try {
-      plain = await MeowCrypto.openRpcResponse(ephemeral: ephemeral, masterPub: pub, body: body);
+      plain = await MeowCrypto.openRpcResponse(ephemeral: ephemeral, masterPub: pub, body: body, key: keys.s2c);
     } catch (_) {
       // 主控可能换了密钥：丢弃缓存证书重拉一次
       await _cache.clear(host);
