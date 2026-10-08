@@ -174,8 +174,9 @@ class AboutView extends StatelessWidget {
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(12),
+                        // MeowX：48dp 用 256 的小图就够，不为它整张解码 1024 的原图（4MB 多）
                         child: Image.asset(
-                          'assets/images/icon.png',
+                          'assets/images/icon_256.png',
                           width: 48,
                           height: 48,
                         ),

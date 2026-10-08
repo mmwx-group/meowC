@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bett_box/controller.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/pages/settings/proxy_apps_page.dart';
@@ -45,8 +47,12 @@ class _TestVpnSetting extends VpnSetting {
 }
 
 class _TestPackages extends Packages {
+  _TestPackages(this.initial);
+
+  final List<Package> initial;
+
   @override
-  List<Package> build() => _packages;
+  List<Package> build() => initial;
 
   @override
   void onUpdate(List<Package> value) {}
@@ -54,8 +60,9 @@ class _TestPackages extends Packages {
 
 Future<ProviderContainer> _pumpPage(
   WidgetTester tester,
-  AccessControl access,
-) async {
+  AccessControl access, {
+  List<Package> packages = _packages,
+}) async {
   final wasInitialized = globalState.isInit;
   final previousController = wasInitialized ? globalState.appController : null;
   addTearDown(() async {
@@ -71,7 +78,7 @@ Future<ProviderContainer> _pumpPage(
     ProviderScope(
       overrides: [
         vpnSettingProvider.overrideWith(() => _TestVpnSetting(access)),
-        packagesProvider.overrideWith(_TestPackages.new),
+        packagesProvider.overrideWith(() => _TestPackages(packages)),
       ],
       child: MaterialApp(
         home: Consumer(
@@ -87,12 +94,62 @@ Future<ProviderContainer> _pumpPage(
   return ProviderScope.containerOf(tester.element(find.byType(ProxyAppsPage)));
 }
 
-Finder _checkboxFor(String packageName) => find.descendant(
-  of: find
-      .ancestor(of: find.text(packageName), matching: find.byType(Row))
-      .first,
-  matching: find.byType(Checkbox),
-);
+Finder _rowOf(String packageName) =>
+    find.ancestor(of: find.text(packageName), matching: find.byType(Row)).first;
+
+Finder _checkboxFor(String packageName) =>
+    find.descendant(of: _rowOf(packageName), matching: find.byType(Checkbox));
+
+/// 一屏装不下的应用列表（行滚出去会被销毁）。
+final _manyPackages = [
+  for (var i = 0; i < 40; i++)
+    Package(
+      packageName: 'com.example.app${i.toString().padLeft(2, '0')}',
+      label: 'App ${i.toString().padLeft(2, '0')}',
+      system: false,
+      internet: true,
+    ),
+];
+
+/// 每个包一份不同的「图标」字节。测试环境不真解码，只看拿到的是哪一份。
+Uint8List _iconOf(String packageName) =>
+    Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, ...packageName.codeUnits]);
+
+/// 接管原生通道：记下每个包取了几次图标；[hold] 里的包先不回（由用例自己放行）。
+Map<String, int> _mockIcons({
+  List<Package> packages = const [],
+  Map<String, Completer<void>> hold = const {},
+}) {
+  final calls = <String, int>{};
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(const MethodChannel('app'), (call) async {
+        switch (call.method) {
+          case 'getPackages':
+            return [for (final p in packages) p.toJson()];
+          case 'getPackageIcon':
+            final name = (call.arguments as Map)['packageName'] as String;
+            calls[name] = (calls[name] ?? 0) + 1;
+            await hold[name]?.future;
+            return _iconOf(name);
+        }
+        fail('没预期的通道调用：${call.method}');
+      });
+  return calls;
+}
+
+/// 这一行现在显示的图标字节（还是占位图标时为 null）。
+Uint8List? _shownIcon(WidgetTester tester, String packageName) {
+  final images = find.descendant(
+    of: _rowOf(packageName),
+    matching: find.byType(Image),
+  );
+  if (images.evaluate().isEmpty) return null;
+  final provider = tester.widget<Image>(images).image;
+  return ((provider as ResizeImage).imageProvider as MemoryImage).bytes;
+}
+
+ScrollPosition _scroll(WidgetTester tester) =>
+    tester.state<ScrollableState>(find.byType(Scrollable).first).position;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -234,5 +291,193 @@ void main() {
       tester.widget<Checkbox>(_checkboxFor('com.example.gamma')).value,
       isTrue,
     );
+  });
+
+  testWidgets('应用图标按包名只取一次：行滚出去再滚回来直接用取过的那份，首帧就有图', (tester) async {
+    final calls = _mockIcons();
+    const first = 'com.example.app00';
+    await _pumpPage(
+      tester,
+      const AccessControl(enable: true),
+      packages: _manyPackages,
+    );
+    expect(calls[first], 1);
+    final shown = _shownIcon(tester, first);
+    expect(shown, _iconOf(first));
+
+    // 滚到底：第一行已经被销毁
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.text(first), findsNothing);
+    expect(calls['com.example.app39'], 1);
+
+    // 滚回来只 pump 一帧：没有再走通道，也没有先闪占位图标；还是同一份字节对象（解码结果才能在图片缓存里命中）
+    _scroll(tester).jumpTo(0);
+    await tester.pump();
+    expect(find.text(first), findsOneWidget);
+    expect(calls[first], 1);
+    expect(
+      find.descendant(
+        of: _rowOf(first),
+        matching: find.byIcon(Icons.android_rounded),
+      ),
+      findsNothing,
+    );
+    expect(identical(_shownIcon(tester, first), shown), isTrue);
+  });
+
+  testWidgets('重新读取应用列表后图标重新取（应用更新后图标可能变了）', (tester) async {
+    final calls = _mockIcons(packages: _manyPackages);
+    const first = 'com.example.app00';
+    await _pumpPage(
+      tester,
+      const AccessControl(enable: true),
+      packages: _manyPackages,
+    );
+    expect(calls[first], 1);
+
+    await tester.tap(find.byTooltip('重新读取应用列表'));
+    await tester.pumpAndSettle();
+    expect(find.text(first), findsOneWidget);
+
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
+    _scroll(tester).jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(calls[first], 2);
+    expect(_shownIcon(tester, first), _iconOf(first));
+  });
+
+  testWidgets('从后台回来后图标重新取（离开期间应用可能更新过），还在屏上的行不动', (tester) async {
+    final calls = _mockIcons();
+    const first = 'com.example.app00';
+    await _pumpPage(
+      tester,
+      const AccessControl(enable: true),
+      packages: _manyPackages,
+    );
+    expect(calls[first], 1);
+
+    // 切去别的应用再切回来
+    for (final state in const [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      tester.binding.handleAppLifecycleStateChanged(state);
+    }
+    await tester.pumpAndSettle();
+    // 屏上的行没有重取，也没有闪回占位
+    expect(calls[first], 1);
+    expect(_shownIcon(tester, first), _iconOf(first));
+
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
+    _scroll(tester).jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(calls[first], 2);
+    expect(_shownIcon(tester, first), _iconOf(first));
+  });
+
+  testWidgets('搜索后同一位置换成别的应用：图标没取回来前是占位，不沿用上一个应用的', (tester) async {
+    const target = 'com.example.app39';
+    final gate = Completer<void>();
+    final calls = _mockIcons(hold: {target: gate});
+    await _pumpPage(
+      tester,
+      const AccessControl(enable: true),
+      packages: _manyPackages,
+    );
+    expect(_shownIcon(tester, 'com.example.app00'), isNotNull);
+    expect(calls[target], isNull); // 最后一个应用还没滚到过
+
+    await tester.enterText(find.byType(TextField), 'App 39');
+    await tester.pump();
+    expect(find.byType(Checkbox), findsOneWidget);
+    expect(calls[target], 1);
+    expect(_shownIcon(tester, target), isNull);
+    expect(
+      find.descendant(
+        of: _rowOf(target),
+        matching: find.byIcon(Icons.android_rounded),
+      ),
+      findsOneWidget,
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(_shownIcon(tester, target), _iconOf(target));
+
+    // 清掉搜索词：先前显示过的行回来，各自还是自己的图标，也没有重新取
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+    expect(
+      _shownIcon(tester, 'com.example.app00'),
+      _iconOf('com.example.app00'),
+    );
+    expect(
+      _shownIcon(tester, 'com.example.app01'),
+      _iconOf('com.example.app01'),
+    );
+    expect(calls['com.example.app00'], 1);
+  });
+
+  testWidgets('应用列表里包名重复（原生侧两次读取重叠）时每个应用只列一行，滚动后搜索 / 清空不抛异常', (tester) async {
+    _mockIcons();
+    // 每个应用出现两遍
+    final doubled = [
+      for (final p in _manyPackages) ...[p, p],
+    ];
+    await _pumpPage(
+      tester,
+      const AccessControl(enable: true),
+      packages: doubled,
+    );
+    expect(find.text('共 40 个可联网应用'), findsOneWidget);
+    expect(find.text('com.example.app00'), findsOneWidget);
+    expect(find.text('com.example.app01'), findsOneWidget);
+
+    // 在顶部搜索再清空
+    await tester.enterText(find.byType(TextField), 'App 2');
+    await tester.pumpAndSettle();
+    expect(find.text('com.example.app20'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.text('com.example.app00'), findsOneWidget);
+
+    // 滚到中间后搜索再清空（键盘还开着，直接往输入框里送字：列表是在滚动后的位置上重建的）
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent / 2);
+    await tester.pumpAndSettle();
+    expect(find.text('com.example.app00'), findsNothing);
+    tester.testTextInput.enterText('App 3');
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+    tester.testTextInput.enterText('');
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    // 滚到底：一共 40 行，最后一行是最后一个应用
+    _scroll(tester).jumpTo(_scroll(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.text('com.example.app39'), findsOneWidget);
+    expect(find.text('com.example.app38'), findsOneWidget);
+  });
+
+  testWidgets('图标取不到（通道报错 / 没有图标）时留着占位图标，不抛未处理的异常', (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('app'), (call) async {
+          final name = (call.arguments as Map)['packageName'] as String;
+          if (name == 'com.example.alpha') {
+            throw PlatformException(code: 'boom');
+          }
+          return null;
+        });
+    await _pumpPage(tester, const AccessControl(enable: true));
+    expect(find.byIcon(Icons.android_rounded), findsNWidgets(3));
+    expect(find.byType(Image), findsNothing);
   });
 }

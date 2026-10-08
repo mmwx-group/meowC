@@ -11,6 +11,9 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import 'me_kit.dart';
 
+/// 账户头像（网络图）的解码宽度上限，见 [AccountCard] 里的用处。
+const _avatarCacheWidth = 720;
+
 /// 账户卡（樱粉主卡）：头像 + 昵称 + 同步状态 +「退出」；未登录时下面是「扫码登录」/「账号登录」和说明。
 /// [compact] = 宽屏第 1 列里的小一号。
 class AccountCard extends ConsumerWidget {
@@ -44,6 +47,12 @@ class AccountCard extends ConsumerWidget {
                     width: avatarSize,
                     height: avatarSize,
                     fit: BoxFit.cover,
+                    // 主控给多大的图就解多大，碰上几千像素的头像要占十几 MB：解码宽度封顶（比这小的图原样解）。
+                    // 只限宽度——两个方向都限会把非正方形的头像压变形；取 60dp × 3 倍屏 × 4：引擎缩图用的是不带 mipmap 的双线性，
+                    // 一步缩太多会出锯齿，剩下的几倍交给绘制时的 mipmap。
+                    // 用常数、不跟头像大小和屏幕缩放比走：宽度是图片缓存键的一部分，一变就得重新下载一次（网络图没有磁盘缓存），
+                    // 窗口拖过两栏断点 / 换到另一块屏时头像会空一下，主控不通还会落到品牌头像
+                    cacheWidth: _avatarCacheWidth,
                     errorBuilder: (_, _, _) => fallback,
                   ),
                 ),
