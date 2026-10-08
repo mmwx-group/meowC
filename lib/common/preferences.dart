@@ -93,7 +93,14 @@ class Preferences {
 
   Future<bool> saveConfig(Config config) async {
     final preferences = await sharedPreferencesCompleter.future;
-    await preferences?.setBool('autoLaunch', config.appSetting.autoLaunch);
+    // MeowX：桌面端值没变就不写。Windows 上 SharedPreferences 的每次 set 都是「整张表重新编码 + 同步整文件写」
+    // （表里还躺着下面那份整份配置的镜像），跑在界面线程；每次存盘本来要写两遍，这样只剩镜像那一遍。
+    // getBool 读的是内存缓存。Android 照旧每次都写：那边是异步落盘、没有这笔开销，
+    // 而且开机自启的原生接收器直接读这个键、服务引擎另有一份缓存，不去动它。
+    if (Platform.isAndroid ||
+        preferences?.getBool('autoLaunch') != config.appSetting.autoLaunch) {
+      await preferences?.setBool('autoLaunch', config.appSetting.autoLaunch);
+    }
 
     final jsonStr = json.encode(config);
 
