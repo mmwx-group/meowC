@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # 从 design/brand/ 的源图生成 Android / Windows 全部品牌资源（需要 Pillow）。与 iOS / macOS 端同一套源图。
-#   icon-art-light.png  亮色主题图标：银发猫娘 + 奶白底的完整方形画（圆角外是黑底）
-#   icon-art-dark.png   暗色主题图标：黑发猫娘 + 深色底的完整方形画（圆角外透明）
-#   glyph-mono.png      单色剪影（黑 = 实；「透明格子」是画进去的）→ Android 通知 / 磁贴 / 主题图标单色层、Windows 托盘运行态
+#   icon-art-light.png  亮色主题图标：白发猫娘（深色底的满幅正方形画，不带圆角；2026-10 换的新稿）
+#   icon-art-dark.png   暗色主题图标：黑发猫娘（同一深色底的满幅正方形画）
+#   glyph-solid.png     实心头像剪影成品（左半浅底黑图、右半深底白图，同一个形；取左半的黑色部分）
+#                       → Android 通知 / 磁贴 / 快捷方式 / 主题图标单色层、Windows 托盘运行态。与 iOS 控制中心、macOS 菜单栏同一张
+#   glyph-mono.png      早先的半身剪影，不再用，留作参考
 # 用法：python3 scripts/make-brand-assets.py
 import os
 from PIL import Image, ImageDraw
@@ -11,8 +13,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BRAND = os.path.join(ROOT, "design/brand")
 RES = os.path.join(ROOT, "android/app/src/main/res")
 IMAGES = os.path.join(ROOT, "assets/images")
-LIGHT_BG = (253, 250, 246)
-DARK_BG = (29, 29, 35)
+LIGHT_BG = (23, 24, 31)      # 两张新画同一深色底
+DARK_BG = (23, 24, 31)
 DENSITY = {"mdpi": 1, "hdpi": 1.5, "xhdpi": 2, "xxhdpi": 3, "xxxhdpi": 4}
 
 def out(path):
@@ -22,6 +24,14 @@ def full_art(path, bg, side=1024):
     # 带圆角的完整方形画 → 满幅正方形：圆角外（透明或纯黑）补成画的底色，裁到包围盒的内接正方形（水平居中、竖直贴顶）
     im = Image.open(path).convert("RGBA")
     a = im.split()[3]
+    if a.getextrema()[0] == 255 and im.width == im.height:
+        # 源图本身就是满幅正方形（没有圆角留白）：原样缩放，不裁不补——走下面的「非黑包围盒 + 四角填充」会把深色底当成
+        # 圆角外的黑边处理掉。判据只看顶边同色（带圆角留白的旧式源图，顶角是留白、顶边中点是画；左右和底边不能算，
+        # 头发衣服本来就画到边上）。与 MeowX 仓库 make-brand-assets.py 的 full_art 同一做法。
+        rgb = im.convert("RGB"); w = rgb.width
+        top = [rgb.getpixel(xy) for xy in ((0, 0), (w // 4, 0), (w // 2, 0), (w * 3 // 4, 0), (w - 1, 0))]
+        if all(max(abs(c - e) for c, e in zip(p, top[0])) < 24 for p in top):
+            return rgb.resize((side, side), Image.LANCZOS).convert("RGBA")
     if a.getextrema()[0] < 255:
         box = a.point(lambda v: 255 if v > 200 else 0).getbbox()
         flat = Image.new("RGBA", im.size, bg + (255,)); flat.alpha_composite(im); im = flat.convert("RGB")
@@ -37,8 +47,9 @@ def full_art(path, bg, side=1024):
     return crop.resize((side, side), Image.LANCZOS).convert("RGBA")
 
 def glyph_alpha():
-    # 单色剪影 → alpha 掩码（黑 = 不透明），裁到内容包围盒
-    lum = Image.open(os.path.join(BRAND, "glyph-mono.png")).convert("L")
+    # 实心头像剪影 → alpha 掩码（黑 = 不透明），裁到内容包围盒。源图左半是浅底黑图，只取这一半
+    src = Image.open(os.path.join(BRAND, "glyph-solid.png")).convert("L")
+    lum = src.crop((0, 0, src.width // 2, src.height))
     alpha = lum.point(lambda v: 255 if v < 70 else (0 if v > 150 else int((150 - v) * 255 / 80)))
     return alpha.crop(alpha.point(lambda v: 255 if v > 128 else 0).getbbox())
 
