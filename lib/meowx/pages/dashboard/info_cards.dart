@@ -81,7 +81,8 @@ class HomeSubscriptionCard extends ConsumerWidget {
     } else if (isDirectProfile(profile.id)) {
       left = '内置配置';
     } else {
-      left = profile.url.isEmpty ? '本地配置' : '';
+      // 订阅没给 subscription-userinfo：左边写明，免得只剩右边一个更新时间、卡片中间空一块
+      left = profile.url.isEmpty ? '本地配置' : '订阅未提供用量信息';
     }
     final updated = profile.url.isNotEmpty && profile.lastUpdateDate != null ? '${fmtRelative(profile.lastUpdateDate!)}更新' : '';
     final foot = TextStyle(fontSize: 11, color: mm.t2);
