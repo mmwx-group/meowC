@@ -165,6 +165,12 @@ class AccountActions {
     if (token.isEmpty) return;
     if (ifStale && _extrasAt != null && DateTime.now().difference(_extrasAt!) < const Duration(minutes: 10)) return;
     _extrasAt = DateTime.now();
+    if (ifStale) {
+      // ifStale 是切到节点页时顺带触发的那一趟（不是用户点的）：下面连着 3–4 个 RPC，封包是纯 Dart 加密、
+      // 在界面线程上算，晚一点再发，避开切页时底栏那段弹簧动画。期间登出 / 换了账号就算了。
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      if (_account.token != token) return;
+    }
     // po0 加白目标列表也在这里顺带刷新并立刻上报（不依赖 features 开关）
     unawaited(ref.read(po0ReporterProvider).refresh());
     final client = _client();

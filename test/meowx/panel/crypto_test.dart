@@ -38,6 +38,30 @@ void main() {
     expect(utf8.decode(plain), rpc['respPlain']);
   });
 
+  test('RPC 两把方向密钥一次派生（共享密钥只算一次）：密钥、信封、解包都与逐把派生一致', () async {
+    final rpc = v['rpc'] as Map<String, dynamic>;
+    final keysV = v['keys'] as Map<String, dynamic>;
+    final e = await MeowCrypto.ephemeralFromSeed(ePriv);
+    final keys = await MeowCrypto.rpcKeys(ephemeral: e, masterPub: masterPub);
+    expect(base64.encode(await keys.c2s.extractBytes()), keysV['rpc_c2s']);
+    expect(base64.encode(await keys.s2c.extractBytes()), keysV['rpc_s2c']);
+    final env = await MeowCrypto.sealRpcRequest(
+      ephemeral: e,
+      masterPub: masterPub,
+      plain: utf8.encode(rpc['reqPlain'] as String),
+      nonce: base64.decode(rpc['reqNonce'] as String),
+      key: keys.c2s,
+    );
+    expect(base64.encode(env), rpc['reqEnvelope']);
+    final plain = await MeowCrypto.openRpcResponse(
+      ephemeral: e,
+      masterPub: masterPub,
+      body: base64.decode(rpc['respBody'] as String),
+      key: keys.s2c,
+    );
+    expect(utf8.decode(plain), rpc['respPlain']);
+  });
+
   test('WS 帧：计数器 nonce、单调校验', () async {
     final ws = v['ws'] as Map<String, dynamic>;
     final e = await MeowCrypto.ephemeralFromSeed(ePriv);
@@ -59,5 +83,23 @@ void main() {
     expect(() => MeowCrypto.verifyCert(c['bad_sig'] as Map<String, dynamic>, host: 'panel.example.com', rootPub: root, nowUnix: now), throwsA(isA<CertException>()));
     expect(() => MeowCrypto.verifyCert(c['expired'] as Map<String, dynamic>, host: 'panel.example.com', rootPub: root, nowUnix: now), throwsA(isA<CertException>()));
     expect(() => MeowCrypto.verifyCert(c['other_domain'] as Map<String, dynamic>, host: 'panel.example.com', rootPub: root, nowUnix: now), throwsA(isA<CertException>()));
+  });
+
+  test('后台 isolate 验签：结果一致，失败仍是 CertException（带原文案）', () async {
+    final c = v['cert'] as Map<String, dynamic>;
+    final root = base64.decode(c['rootPub'] as String);
+    const now = 1758380000;
+    // 主控的 JSON 里还会有别的字段，不影响验签
+    final ok = {...c['ok'] as Map<String, dynamic>, 'extra': 'ignored'};
+    final pub = await MeowCrypto.verifyCertOffThread(ok, host: 'panel.example.com', rootPub: root, nowUnix: now);
+    expect(base64.encode(pub), v['masterPub']);
+    await expectLater(
+      MeowCrypto.verifyCertOffThread(c['bad_sig'] as Map<String, dynamic>, host: 'panel.example.com', rootPub: root, nowUnix: now),
+      throwsA(isA<CertException>().having((e) => e.message, 'message', '主控证书签名无效')),
+    );
+    await expectLater(
+      MeowCrypto.verifyCertOffThread(c['expired'] as Map<String, dynamic>, host: 'panel.example.com', rootPub: root, nowUnix: now),
+      throwsA(isA<CertException>().having((e) => e.message, 'message', '主控证书已过期')),
+    );
   });
 }

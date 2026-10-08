@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -37,13 +38,37 @@ class MeowCrypto {
     required List<int> masterPub,
     required String info,
   }) async {
+    return (await deriveKeys(ephemeral: ephemeral, masterPub: masterPub, infos: [info])).single;
+  }
+
+  /// 同一对（临时私钥, 主控公钥）的几把方向密钥一起派生：X25519 共享密钥只算一次，每个 info 各做一次 HKDF。
+  /// c2s / s2c 的 ikm 与 salt 相同、只有 info 不同，所以结果与逐把调 [deriveKey] 逐字节一致；
+  /// 省下的是标量乘——纯 Dart 实现里它是最贵的一步，而且跑在界面线程上。
+  static Future<List<SecretKey>> deriveKeys({
+    required SimpleKeyPair ephemeral,
+    required List<int> masterPub,
+    required List<String> infos,
+  }) async {
     final ePub = (await ephemeral.extractPublicKey()).bytes;
     final shared = await _x25519.sharedSecretKey(
       keyPair: ephemeral,
       remotePublicKey: SimplePublicKey(masterPub, type: KeyPairType.x25519),
     );
-    // cryptography 包的 `nonce:` 参数即 HKDF 的 salt
-    return _hkdf.deriveKey(secretKey: shared, nonce: [...ePub, ...masterPub], info: utf8.encode(info));
+    final salt = [...ePub, ...masterPub];
+    return [
+      for (final info in infos)
+        // cryptography 包的 `nonce:` 参数即 HKDF 的 salt
+        await _hkdf.deriveKey(secretKey: shared, nonce: salt, info: utf8.encode(info)),
+    ];
+  }
+
+  /// 一次 RPC 的上行 / 下行密钥（共享密钥只算一次）。
+  static Future<({SecretKey c2s, SecretKey s2c})> rpcKeys({
+    required SimpleKeyPair ephemeral,
+    required List<int> masterPub,
+  }) async {
+    final keys = await deriveKeys(ephemeral: ephemeral, masterPub: masterPub, infos: const [rpcC2S, rpcS2C]);
+    return (c2s: keys[0], s2c: keys[1]);
   }
 
   static Future<Uint8List> seal(List<int> plain, {required SecretKey key, required List<int> nonce}) async {
@@ -56,26 +81,28 @@ class MeowCrypto {
     return Uint8List.fromList(await _aead.decrypt(box, secretKey: key));
   }
 
-  /// RPC 上行信封：`ePub‖nonce‖ct‖tag`
+  /// RPC 上行信封：`ePub‖nonce‖ct‖tag`。[key] 是已经派生好的上行密钥（[rpcKeys]），不传就现算。
   static Future<Uint8List> sealRpcRequest({
     required SimpleKeyPair ephemeral,
     required List<int> masterPub,
     required List<int> plain,
     List<int>? nonce,
+    SecretKey? key,
   }) async {
-    final key = await deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: rpcC2S);
+    key ??= await deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: rpcC2S);
     final ePub = (await ephemeral.extractPublicKey()).bytes;
     final body = await seal(plain, key: key, nonce: nonce ?? randomBytes(12));
     return Uint8List.fromList([...ePub, ...body]);
   }
 
-  /// RPC 下行：`nonce‖ct‖tag`
+  /// RPC 下行：`nonce‖ct‖tag`。[key] 是已经派生好的下行密钥（[rpcKeys]），不传就现算。
   static Future<Uint8List> openRpcResponse({
     required SimpleKeyPair ephemeral,
     required List<int> masterPub,
     required List<int> body,
+    SecretKey? key,
   }) async {
-    final key = await deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: rpcS2C);
+    key ??= await deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: rpcS2C);
     return open(body, key: key);
   }
 
@@ -114,6 +141,21 @@ class MeowCrypto {
     if (!ok) throw const CertException('主控证书签名无效');
     return Uint8List.fromList(masterPub);
   }
+
+  /// [verifyCert] 放到后台 isolate 里跑，结果与抛出的 [CertException] 都原样带回。
+  /// 纯 Dart 的 Ed25519 验签在低端机上要几十到上百毫秒，不该压在界面线程上。
+  static Future<Uint8List> verifyCertOffThread(
+    Map<String, dynamic> json, {
+    required String host,
+    List<int>? rootPub,
+    int? nowUnix,
+  }) {
+    // 只把验签用得到的四个字段带过去（都是可跨 isolate 传的普通值）
+    final cert = <String, dynamic>{
+      for (final key in const ['masterPub', 'domain', 'expireUnix', 'sig']) key: json[key],
+    };
+    return Isolate.run(() => verifyCert(cert, host: host, rootPub: rootPub, nowUnix: nowUnix));
+  }
 }
 
 class CertException implements Exception {
@@ -132,9 +174,12 @@ class SecureSession {
   int _recv = 0;
 
   static Future<SecureSession> create({required SimpleKeyPair ephemeral, required List<int> masterPub}) async {
-    final c2s = await MeowCrypto.deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: MeowCrypto.wsC2S);
-    final s2c = await MeowCrypto.deriveKey(ephemeral: ephemeral, masterPub: masterPub, info: MeowCrypto.wsS2C);
-    return SecureSession._(c2s, s2c);
+    final keys = await MeowCrypto.deriveKeys(
+      ephemeral: ephemeral,
+      masterPub: masterPub,
+      infos: const [MeowCrypto.wsC2S, MeowCrypto.wsS2C],
+    );
+    return SecureSession._(keys[0], keys[1]);
   }
 
   static Uint8List _nonceFor(int counter) {
