@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:bett_box/common/common.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -36,7 +37,12 @@ class ReconnectBackoff {
 /// 帧 1 明文 ePub(32B)；帧 2 加密 `{ts, nonce, token?}`；此后每帧 `counter‖ct‖tag`；55s 加密 ping；
 /// 断线按 [ReconnectBackoff] 退避重连，网络变化时立刻重连。
 class RealtimeClient {
-  RealtimeClient({required this.client, required this.token, required this.onEvent});
+  RealtimeClient({
+    required this.client,
+    required this.token,
+    required this.onEvent,
+    @visibleForTesting Stream<Object?>? networkChanges,
+  }) : _networkChanges = networkChanges;
 
   /// 加密 ping 的间隔。主控对这条通道的空闲窗口是 70 秒（appWSIdleWindow），必须小于它，
   /// 留出余量给迟到的定时器（后台 / 息屏时会迟到）。原来是 25 秒，多出来的只是射频唤醒。
@@ -54,21 +60,27 @@ class RealtimeClient {
   DateTime? _connectedAt;
   StreamSubscription<Object?>? _networkSub;
 
+  /// 网络变化事件的来源；测试注入，平时是 connectivity_plus。
+  final Stream<Object?>? _networkChanges;
+
   bool get isRunning => _running;
 
   void start() {
     if (_running) return;
     _running = true;
-    // 网络变了（换 Wi-Fi / 蜂窝、恢复联网）不等完退避：正等着重连的话立刻连
-    _networkSub = Connectivity().onConnectivityChanged.listen((_) => _onNetworkChanged(), onError: (_) {});
+    // 网络变了（换 Wi-Fi / 蜂窝、恢复联网）不等完退避：正等着重连的话立刻连，退避从头算
+    _networkSub = (_networkChanges ?? Connectivity().onConnectivityChanged).listen((_) => _onNetworkChanged(), onError: (_) {});
     unawaited(_connect());
   }
 
   void _onNetworkChanged() {
-    if (!_running || _reconnect == null) return;
+    if (!_running) return;
+    // 退避无条件复位：重连定时器刚触发、握手还在途中时（_reconnect 已是 null）也算，
+    // 否则旧网络上那次握手失败后还接着按涨上去的间隔排（最长 60 秒）。
+    _backoff.reset();
+    if (_reconnect == null) return;
     _reconnect?.cancel();
     _reconnect = null;
-    _backoff.reset();
     unawaited(_connect());
   }
 
