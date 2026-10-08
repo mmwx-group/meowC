@@ -63,7 +63,14 @@
 - 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型在 `lib/meowx/panel/po0.dart`。
 - `lib/models/meow.dart MeowSettings`：新增 `po0Enabled`（默认 false）与 `po0DirectIps`（最近一次 po0 服务器 IP 缓存；开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve`，列表变化时与其它覆写同样 `applyProfileDebounce` 热生效）；设置页「订阅」组加「po0 加白」开关，所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化）以它为准。
 
-## 2026-10-08 · 界面性能：核心回包与连接快照
-- `lib/clash/interface.dart`：新增 `handleMessage`（Android 的 ReceivePort 与 Windows 的 socket 两处监听的统一入口，`lib/clash/lib.dart` / `lib/clash/service.dart` 改为调它）——超过 32KB 的回包（连接快照、代理组、整份配置）放到后台 isolate 解信封，小消息照旧同步解；`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，回包被多留 30 秒）。
+## 2026-10-08 · 界面性能（动到 Bettbox 底层的部分）
+- `lib/clash/interface.dart`：新增 `handleMessage`（Android 的 ReceivePort 与 Windows 的 socket 两处监听的统一入口，`lib/clash/lib.dart` / `lib/clash/service.dart` 改为调它）——① 没有界面在看时 `request` 推送不解码（见下）；② `getProxies` 的回包不在 UI isolate 解，原始字符串整包交给调用方（`_completeRawProxies`）；③ 其余超过 32KB 的回包（连接快照、整份配置）放到后台 isolate 解信封，小消息照旧同步解。`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，回包被多留 30 秒）。
 - `lib/clash/message.dart`：核心每关一条连接推一条的 `request` 消息，没有界面在看时只留原文（最近 256 条，与请求列表容量一致）、不逐条解码入库；`lib/views/connection/requests.dart`（旧「请求」页）打开时补解并恢复逐条处理，`lib/controller.dart` 换配置清空请求列表时一并清掉。
+- `lib/clash/core.dart`：`getProxies` 的解码、合并 provider、建 `Group` 都在 worker isolate 里做（原始回包字符串直接交过去），同时算出内容摘要；`lib/controller.dart` 的 `updateGroups` 摘要没变就不写 `groupsProvider`。`lib/manager/app_manager.dart` / `clash_manager.dart`：Android 界面不可见时不刷新代理组、回前台补一趟；界面发起的测速进行中不为每条结果再排一趟刷新；`lib/views/proxies/common.dart` 测速收尾的那一趟照旧。
+- `lib/providers/state.dart`：`getSelectedProxyNameProvider` 只取 `(type, now)`，不再把整个 `Group` 选出来逐成员深比较。
+- 启动：`lib/clash/lib.dart` 的 `_waitForIpc` 超时后不再换掉还没完成的 completer（慢机器上会永远停在启动页的死等）；`lib/main.dart` 等核心通道就绪加了 2 秒上限，内置面板解压（`uiManager.initializeUI`）挪到 `AppController._initCore` 里核心初始化之前，code_forge 的 Rust 库改为按需加载（`lib/pages/editor.dart` 的 `ensureEditorRuntime`，各编辑入口先等它）。
+- Windows：`lib/controller.dart` 的 `init()` 让主窗口在首帧后就显示（不再等核心拉起、配置应用完），静默启动 / 托盘启动的分支照旧；启动时代理组不再连拉 2–3 次。`lib/common/tray.dart` / `lib/manager/tray_manager.dart`：托盘菜单改成右键弹出前才重建，状态变化时不再整份重建原生菜单。**这两处没有在 Windows 上实跑过。**
+- `lib/common/preferences.dart`：桌面端 autoLaunch 没变就不重写，每次存盘少一遍同步整文件写。
+- `lib/main.dart`：液态玻璃底栏挂了库的自适应档位（`GlassAdaptiveScope`），目前只采数据、不降档（minQuality 仍是 premium），默认观感不变。
+- `lib/application.dart`：亮 / 暗两份主题走缓存（`MeowThemes`）；`lib/views/about.dart`：关于页图标用 256 的小图。
 - 连接快照的取用在 `lib/meowx/state/connection.dart`（`ConnStatsController`）：没有界面显示连接数时不拉，可见页面取到的完整快照顺手更新计数。

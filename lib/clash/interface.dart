@@ -120,6 +120,8 @@ abstract class ClashHandlerInterface with ClashInterface {
   void handleMessage(String message) {
     // 没人看请求页时，request 推送连信封都不解（见 ClashMessage.deferRequest）
     if (clashMessage.deferRequest(message)) return;
+    // getProxies 的回包原样交给调用方，由它自己在 worker isolate 里解（见 _completeRawProxies）
+    if (_completeRawProxies(message)) return;
     if (message.length <= offMainDecodeThreshold) {
       handleResult(ActionResult.fromJson(json.decode(message)));
       return;
@@ -158,7 +160,7 @@ abstract class ClashHandlerInterface with ClashInterface {
           completer?.complete(result.data);
           return;
         case ActionMethod.getProxies:
-          // MeowX：没走成 handleRawResult 的快路径时的兜底，重新包成同样形状的字符串
+          // MeowX：没走成 _completeRawProxies 的快路径时的兜底，重新包成同样形状的字符串
           completer?.complete(json.encode({'data': result.data}));
           return;
         default:
@@ -172,26 +174,23 @@ abstract class ClashHandlerInterface with ClashInterface {
 
   // MeowX：getProxies 的回包有几百 KB 到几 MB（每个节点带延迟历史等十几个字段），不在这里（UI isolate）解码，
   // 原样把字符串交给调用方。核心的 ActionResult 按 id、method、data 的顺序输出（core/action.go），
-  // 所以这类回包一定以下面的前缀开头；哪天对不上了就走原来的整包解码，见 handleResult 的 getProxies 分支。
+  // 所以这类回包一定以下面的前缀开头；哪天对不上了就走常规的整包解码，见 handleResult 的 getProxies 分支。
   static const _rawProxiesPrefix = '{"id":"getProxies#';
   static const _rawIdStart = 7; // '{"id":"' 之后
 
-  /// 核心发来的每条消息（回包与推送）都从这里进。
-  void handleRawResult(String raw) {
-    if (raw.startsWith(_rawProxiesPrefix)) {
-      final idEnd = raw.indexOf('"', _rawIdStart);
-      if (idEnd > 0) {
-        // 没有等它的人（已超时）就丢掉，和 handleResult 里 completer 为空时一样
-        final completer = callbackCompleterMap.remove(
-          raw.substring(_rawIdStart, idEnd),
-        );
-        if (completer != null && !completer.isCompleted) {
-          completer.complete(raw);
-        }
-        return;
-      }
+  /// 是 getProxies 的回包就把原始字符串交给等它的调用方并返回 true；不是（或前缀对不上）返回 false，走常规解码。
+  bool _completeRawProxies(String raw) {
+    if (!raw.startsWith(_rawProxiesPrefix)) return false;
+    final idEnd = raw.indexOf('"', _rawIdStart);
+    if (idEnd <= 0) return false;
+    // 没有等它的人（已超时）就丢掉，和 handleResult 里 completer 为空时一样
+    final completer = callbackCompleterMap.remove(
+      raw.substring(_rawIdStart, idEnd),
+    );
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(raw);
     }
-    handleResult(ActionResult.fromJson(json.decode(raw)));
+    return true;
   }
 
   void sendMessage(String message);

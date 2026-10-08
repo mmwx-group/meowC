@@ -200,7 +200,7 @@ void main() {
     });
   });
 
-  group('核心回包的分发（handleRawResult）', () {
+  group('核心回包的分发（handleMessage 里 getProxies 的快路径）', () {
     test('getProxies 的回包原样交回：不解码、按 id 配对，交完就不再留着', () async {
       final core = _FakeCore();
       final pending = core.getProxies();
@@ -208,13 +208,13 @@ void main() {
       expect(id, startsWith('getProxies#'));
 
       final raw = _envelope(_proxies(), id: id);
-      core.handleRawResult(raw);
+      core.handleMessage(raw);
       expect(identical(await pending, raw), isTrue);
       expect(core.callbackCompleterMap, isNot(contains(id)));
       expect(parseGroupsSnapshot(raw).groups, hasLength(3));
 
       // 没人等的回包（已超时被清掉）直接丢掉，不报错
-      core.handleRawResult(_envelope(_proxies(), id: 'getProxies#gone'));
+      core.handleMessage(_envelope(_proxies(), id: 'getProxies#gone'));
     });
 
     test('回包对不上快路径的前缀（字段顺序 / 空白变了）时退回整包解码，解析结果不变', () async {
@@ -222,7 +222,7 @@ void main() {
       final pending = core.getProxies();
       final id = core.sent.single['id'] as String;
 
-      core.handleRawResult(json.encode({'method': 'getProxies', 'id': id, 'code': 0, 'data': _proxies()}));
+      core.handleMessage(json.encode({'method': 'getProxies', 'id': id, 'code': 0, 'data': _proxies()}));
       final snapshot = parseGroupsSnapshot(await pending);
       final expected = parseGroupsSnapshot(_envelope(_proxies()));
       expect(snapshot.groups, expected.groups);
@@ -232,7 +232,7 @@ void main() {
     test('其它回包照旧整包解码', () async {
       final core = _FakeCore();
       final mode = core.getMode();
-      core.handleRawResult(json.encode({'id': core.sent.single['id'], 'method': 'getMode', 'data': 'rule', 'code': 0}));
+      core.handleMessage(json.encode({'id': core.sent.single['id'], 'method': 'getMode', 'data': 'rule', 'code': 0}));
       expect(await mode, 'rule');
     });
   });

@@ -103,10 +103,10 @@ void main() {
     expect(await conns, snapshot);
     expect(h.callbackCompleterMap, isEmpty);
 
-    // 代理组那种 data 直接是对象的大包
-    final proxies = h.invoke<Map>(method: ActionMethod.getProxies, timeout: const Duration(seconds: 5));
+    // data 直接是对象的大包（getProxies 自己另有快路径：原始字符串整包交给调用方，见 groups_snapshot_test，这里换一种回包测）
+    final proxies = h.invoke<Map>(method: ActionMethod.getExternalProviders, timeout: const Duration(seconds: 5));
     final table = {for (var i = 0; i < 600; i++) '节点 $i': {'name': '节点 $i', 'type': 'Vless', 'history': <Object>[], 'alive': true, 'udp': true}};
-    final bigMap = _reply(h.lastId, 'getProxies', table);
+    final bigMap = _reply(h.lastId, 'getExternalProviders', table);
     expect(bigMap.length, greaterThan(offMainDecodeThreshold));
     h.handleMessage(bigMap);
     final got = await proxies;
