@@ -12,7 +12,8 @@ void useReleaseProviderFrames() => debugCanModifyProviders = null;
 /// 断言刚才那些 provider 写入没有让任何东西要帧：没有 widget 重建，Riverpod 也没有排重算 / 回收
 /// （它排这两样靠的是让 ProviderScope 重建，一样是一帧）。
 Future<void> expectNoFrameRequested(WidgetTester tester, {String? reason}) async {
-  // Riverpod 是隔一个微任务才去要帧的
-  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  // Riverpod 是隔一个微任务才去要帧的。只冲微任务，不能用 runAsync 放真实时间进来：
+  // 页面里的资源图（品牌头像）解码是真异步，哪一次落进这个窗口就哪一次 setState 要帧，断言会随机失败。
+  await tester.idle();
   expect(tester.binding.hasScheduledFrame, isFalse, reason: reason);
 }
