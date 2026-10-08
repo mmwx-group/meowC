@@ -6,7 +6,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from publish_cdn import classify, merge_manifest, version_key  # noqa: E402
+import tempfile
+
+from publish_cdn import classify, collect, merge_manifest, version_key  # noqa: E402
 
 NOW = '2026-09-30T00:00:00Z'
 
@@ -75,6 +77,40 @@ class MergeTest(unittest.TestCase):
     def test_version_key(self):
         self.assertLess(version_key('0.1.9'), version_key('0.1.10'))
         self.assertEqual(version_key('0.1.6+7'), (0, 1, 6))
+
+
+class CollectTest(unittest.TestCase):
+    """dist/ 目录 → 各平台的包。CI 的 download-artifact 必须带 skip-decompress，便携版才是一个 zip 文件。"""
+
+    def _dist(self, names):
+        root = Path(tempfile.mkdtemp())
+        for name in names:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'x')
+        return root
+
+    def kinds(self, dist, platform):
+        return sorted(info['kind'] for _, info in collect(dist, '0.1.9').get(platform, []))
+
+    def test_setup_and_portable_files(self):
+        dist = self._dist([
+            'MeowX-0.1.9-windows-amd64-setup.exe', 'MeowX-0.1.9-windows-amd64-portable.zip',
+            'MeowX-0.1.9-android-arm64-v8a.apk', 'MeowX-0.1.9-android-universal.apk',
+        ])
+        self.assertEqual(self.kinds(dist, 'windows'), ['portable', 'setup'])
+        self.assertEqual(self.kinds(dist, 'android'), ['apk', 'apk'])
+
+    def test_unpacked_portable_is_not_a_package(self):
+        # 便携版 zip 被自动解压成 dist/MeowX/…（0.1.7 – 0.1.9 三次发版都这样漏掉）：散文件认不成包，
+        # 所以工作流里有一步「Check Windows packages」在这种情况下直接失败，而不是悄悄只发安装版。
+        dist = self._dist(['MeowX-0.1.9-windows-amd64-setup.exe', 'MeowX/MeowX.exe', 'MeowX/portable', 'MeowX/data/flutter_assets/x'])
+        self.assertEqual(self.kinds(dist, 'windows'), ['setup'])
+
+    def test_version_mismatch_is_fatal(self):
+        dist = self._dist(['MeowX-0.1.8-windows-amd64-setup.exe'])
+        with self.assertRaises(SystemExit):
+            collect(dist, '0.1.9')
 
 
 if __name__ == '__main__':

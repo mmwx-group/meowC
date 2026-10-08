@@ -256,12 +256,24 @@ jobs:
         with:
           fetch-depth: 1
 
+      # skip-decompress：产物都是 archive: false 直传的单个文件。不加的话 download-artifact 看到 zip 类型就自动解压——
+      # APK / exe 不受影响，唯独便携版 zip 被解成 dist/MeowX/ 目录，下游按文件名找不到它，Release 和 CDN 都漏了便携版
+      # （便携版用户的应用内更新只认 kind=portable，漏掉期间查不到新版）。
       - name: Download
         uses: actions/download-artifact@v8
         with:
           path: ./dist/
           pattern: MeowX-*
           merge-multiple: true
+          skip-decompress: true
+
+      - name: Check Windows packages
+        run: |
+          ls -la dist
+          if ls dist/MeowX-*-windows-*-setup.exe >/dev/null 2>&1; then
+            ls dist/MeowX-*-windows-*-portable.zip >/dev/null 2>&1 \
+              || { echo "::error::dist/ 里有 Windows 安装包却没有便携版 zip（被解压了，或 windows job 没打出来）"; exit 1; }
+          fi
 
       - name: Release notes
         run: |
@@ -302,12 +314,24 @@ jobs:
             pubspec.yaml
           sparse-checkout-cone-mode: false
 
+      # skip-decompress：产物都是 archive: false 直传的单个文件。不加的话 download-artifact 看到 zip 类型就自动解压——
+      # APK / exe 不受影响，唯独便携版 zip 被解成 dist/MeowX/ 目录，下游按文件名找不到它，Release 和 CDN 都漏了便携版
+      # （便携版用户的应用内更新只认 kind=portable，漏掉期间查不到新版）。
       - name: Download
         uses: actions/download-artifact@v8
         with:
           path: ./dist/
           pattern: MeowX-*
           merge-multiple: true
+          skip-decompress: true
+
+      - name: Check Windows packages
+        run: |
+          ls -la dist
+          if ls dist/MeowX-*-windows-*-setup.exe >/dev/null 2>&1; then
+            ls dist/MeowX-*-windows-*-portable.zip >/dev/null 2>&1 \
+              || { echo "::error::dist/ 里有 Windows 安装包却没有便携版 zip（被解压了，或 windows job 没打出来）"; exit 1; }
+          fi
 
       - name: Test publish script
         run: python3 -m unittest scripts/test_publish_cdn.py
