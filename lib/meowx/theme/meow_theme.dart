@@ -37,6 +37,9 @@ ThemeData meowThemeData({
     // Windows 自带字体没有国旗 emoji（显示成 CN / US 字母），回落到随包的 Twemoji
     fontFamilyFallback: Platform.isWindows ? const ['Twemoji'] : null,
     pageTransitionsTheme: pageTransitionsTheme,
+    // Android 上 M3 默认的点按水波是 InkSparkle：点一下要在整块可点区域里逐像素跑约 0.6 秒的噪声着色器，
+    // Android 8–9（Skia）首次点按还要现场编译它。换成普通的圆形水波（其它平台本来就是它）。
+    splashFactory: InkRipple.splashFactory,
     scaffoldBackgroundColor: tokens.bg,
     canvasColor: tokens.bg,
     cardColor: tokens.elev,
