@@ -105,6 +105,16 @@ Future<void> _runApp() async {
   runApp(
     lg.LiquidGlassWidgets.wrap(
       brightnessResolver: Theme.maybeBrightnessOf,
+      // MeowX：底栏默认仍是 premium 液态玻璃，只接上「跑不动时自动降一档」：库按光栅耗时实测
+      // （起步 premium；预热 P75 ≥ 20ms 或运行中 P95 > 24ms 连续两个窗口才降），最低降到 standard（轻量着色器，仍是玻璃）。
+      // allowStepUp: false = 进程内只降不升，底栏观感不会来回变；下次冷启动重新从 premium 起步。
+      // 只在 Android 的 Impeller 上接：Skia（Android 8–9）本来就走轻量路径，接了反而会让库换一套参数口径。
+      adaptiveQuality: system.isAndroid && ImageFilter.isShaderFilterSupported,
+      adaptiveConfig: const lg.GlassAdaptiveScopeConfig(
+        minQuality: lg.GlassQuality.standard,
+        allowStepUp: false,
+        onDiagnostic: _logGlassQuality,
+      ),
       child: ProviderScope(child: const Application()),
     ),
   );
@@ -112,6 +122,9 @@ Future<void> _runApp() async {
   // （ensureEditorRuntime，只初始化一次）；这里在启动忙完后预热一次，正常使用时进编辑页不用现等。
   Timer(const Duration(seconds: 5), () => unawaited(ensureEditorRuntime()));
 }
+
+/// 液态玻璃档位的实测结果（预热 P75 / 降档原因）写进日志，方便拿真机数据校阈值。
+void _logGlassQuality(lg.GlassAdaptiveDiagnostic d) => commonPrint.log('$d');
 
 @pragma('vm:entry-point')
 Future<void> _service(List<String> flags) async {
