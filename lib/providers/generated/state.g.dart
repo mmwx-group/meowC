@@ -1454,7 +1454,7 @@ class _GetProxyNameProviderElement extends AutoDisposeProviderElement<String?>
 }
 
 String _$getSelectedProxyNameHash() =>
-    r'09dce460ed393605ce2d4ad9f975a19b366e8818';
+    r'13aeae1fede234983d262d824a85c7375f9e4e78';
 
 /// See also [getSelectedProxyName].
 @ProviderFor(getSelectedProxyName)

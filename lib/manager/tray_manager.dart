@@ -38,8 +38,8 @@ class _TrayContainerState extends ConsumerState<TrayManager> with TrayListener {
   Future<void> _handleTrayIconClick({required bool isRightClick}) async {
     if (system.isWindows) {
       if (isRightClick) {
-        // MeowX：Windows 的菜单改成弹出前才重建（见 common/tray.dart 的 popUpMenu），按此刻的状态建
-        await tray.popUpMenu(ref.read(trayStateProvider));
+        // ignore: deprecated_member_use
+        await trayManager.popUpContextMenu(bringAppToFront: true);
       } else {
         window?.show();
       }

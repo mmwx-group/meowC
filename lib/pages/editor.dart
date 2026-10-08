@@ -25,21 +25,6 @@ const int _kLargeEditableLineThresholdDesktop = 5800;
 const Duration _kFindFocusDelay = Duration(milliseconds: 500);
 const Duration _kMinBusyDuration = Duration(milliseconds: 600);
 
-Future<void>? _editorRuntimeFuture;
-
-/// MeowX：code_forge 的 Rust 库只有本页用，不再在 main() 里挡首帧，改成用到时再加载。
-/// 每个 push [EditorPage] 的入口都要先 await 它——CodeForgeController 在 initState 里同步创建，库没加载会直接抛。
-/// flutter_rust_bridge 重复 init 会抛，所以全程只认这一个缓存的 Future。
-Future<void> ensureEditorRuntime() {
-  return _editorRuntimeFuture ??= () async {
-    try {
-      await RustLib.init();
-    } catch (e) {
-      commonPrint.log('Failed to initialize code_forge RustLib: $e');
-    }
-  }();
-}
-
 class EditorPage extends ConsumerStatefulWidget {
   final String title;
   final String content;

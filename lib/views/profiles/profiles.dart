@@ -237,8 +237,6 @@ class ProfileItem extends StatelessWidget {
           profile: profile,
         );
         final content = await encodeYamlTask(runtimeConfig);
-        // MeowX：编辑器的 Rust 库按需加载（pages/editor.dart），进页面前等它就绪
-        await ensureEditorRuntime();
         if (!context.mounted) {
           return;
         }

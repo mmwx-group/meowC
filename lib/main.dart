@@ -10,6 +10,7 @@ import 'package:bett_box/plugins/clipboard_ext.dart';
 import 'package:bett_box/plugins/tile.dart';
 import 'package:bett_box/plugins/vpn.dart';
 import 'package:bett_box/state.dart';
+import 'package:code_forge/code_forge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,7 +23,6 @@ import 'common/common.dart';
 import 'common/external_control.dart';
 import 'common/network_matcher.dart';
 import 'models/models.dart';
-import 'pages/editor.dart';
 
 ReceivePort? _serviceReceiverPort;
 ReceivePort? _messageReceiverPort;
@@ -53,21 +53,16 @@ Future<void> main(List<String> args) async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
 
   final version = await system.version;
-  // MeowX：等核心通道就绪设了上限。Android 上 preload 等的是服务引擎把端口发回来，
-  // 极慢的机器（或它压根没起来）不能让启动页一直挂着；界面先出来，核心调用自己会等通道（ClashLib.sendMessage）。
-  await Future.wait([
-    globalState.initApp(version),
-    clashCore.preload().timeout(_preloadWaitLimit, onTimeout: () => false),
-  ]);
+  await Future.wait([globalState.initApp(version), clashCore.preload()]);
 
-  // MeowX：内置面板的解压（uiManager.initializeUI，安装 / 升级后首启才真的解压）不再挡首帧，
-  // 挪到 AppController._initCore 里、核心初始化之前。
+  try {
+    await uiManager.initializeUI();
+  } catch (e) {
+    commonPrint.log('Failed to initialize UI: $e');
+  }
 
   await _runApp();
 }
-
-/// 首帧前最多等核心通道这么久：与 ClashLib._waitForIpc 的单次等待一致。
-const _preloadWaitLimit = Duration(seconds: 2);
 
 Future<void> _sendControlCommand(String command) async {
   for (int i = 0; i < 5; i++) {
@@ -86,6 +81,12 @@ Future<void> _sendControlCommand(String command) async {
 }
 
 Future<void> _runApp() async {
+  try {
+    await RustLib.init();
+  } catch (e) {
+    commonPrint.log('Failed to initialize code_forge RustLib: $e');
+  }
+
   if (system.isAndroid) {
     try {
       await FlutterDisplayMode.setHighRefreshRate();
@@ -105,31 +106,10 @@ Future<void> _runApp() async {
   runApp(
     lg.LiquidGlassWidgets.wrap(
       brightnessResolver: Theme.maybeBrightnessOf,
-      // MeowX：底栏仍是 premium 液态玻璃，观感不变。库的自适应档位（按光栅耗时实测：预热 P75 ≥ 20ms、
-      // 或运行中 P95 > 24ms 连续两个窗口就降一档）先只挂上来**采数据**：minQuality 与上限同为 premium = 永不降档，
-      // 只把每次预热（冷启动、每次回前台各一次）实测的 P75 经 onDiagnostic 写进日志。
-      // 没有直接放开到 standard：库量的是整帧光栅耗时（全局 FrameTiming），与底栏在不在画无关——一个本身就重的
-      // 二级页（底栏根本没画）、或回前台那几秒恰好卡，都会把底栏压下去；而为了观感不来回变只能配 allowStepUp: false，
-      // 一降就是整个进程。库自己记的中端机预热 P75 有 17–18ms，离 20ms 的线也近。
-      // 等真机日志（低端 Mali 一台、中端一台）确认只有玻璃真跑不动时才触线，再把 minQuality 改成 standard
-      // （降档后的底轨参数已备好，见 meow_root.dart 的 barGlass；届时 allowStepUp: false = 进程内只降不升）。
-      // 只在 Android 的 Impeller 上接：Skia（Android 8–9）本来就走轻量路径，接了反而会让库换一套参数口径。
-      adaptiveQuality: system.isAndroid && ImageFilter.isShaderFilterSupported,
-      adaptiveConfig: const lg.GlassAdaptiveScopeConfig(
-        minQuality: lg.GlassQuality.premium,
-        allowStepUp: false,
-        onDiagnostic: _logGlassQuality,
-      ),
       child: ProviderScope(child: const Application()),
     ),
   );
-  // MeowX：code_forge 的 Rust 库只有配置查看 / 编辑页用，不再挡首帧。进编辑页的入口都会先等它
-  // （ensureEditorRuntime，只初始化一次）；这里在启动忙完后预热一次，正常使用时进编辑页不用现等。
-  Timer(const Duration(seconds: 5), () => unawaited(ensureEditorRuntime()));
 }
-
-/// 液态玻璃档位的实测结果（预热 P75；放开降档后还有降档原因与当时的 P95）写进日志，方便拿真机数据校阈值。
-void _logGlassQuality(lg.GlassAdaptiveDiagnostic d) => commonPrint.log('$d');
 
 @pragma('vm:entry-point')
 Future<void> _service(List<String> flags) async {
