@@ -53,12 +53,12 @@ void main() {
     }
   });
 
-  testWidgets('账户头像（主控给的网络图）：解码宽度封顶在显示宽度的 4 倍，不限高度，小图不放大', (tester) async {
-    tester.view.devicePixelRatio = 2;
+  testWidgets('账户头像（主控给的网络图）：解码宽度封顶在同一个常数（两种布局、各种缩放比共用一条图片缓存），不限高度，小图不放大', (tester) async {
     addTearDown(tester.view.reset);
     const account = MeowAccount(host: 'https://panel.example.com', token: 't', nickname: 'n', avatarUrl: 'https://panel.example.com/a.png');
-    // 60dp / 52dp × 2 倍屏 × 4
-    for (final (compact, width) in const [(false, 480), (true, 416)]) {
+    final keys = <Object>{};
+    for (final (compact, ratio) in const [(false, 2.0), (true, 2.0), (false, 1.0), (true, 3.0)]) {
+      tester.view.devicePixelRatio = ratio;
       await tester.pumpWidget(
         ProviderScope(
           overrides: [meowSettingProvider.overrideWith(() => _Meow(const MeowSettings(account: account)))],
@@ -69,9 +69,12 @@ void main() {
         ),
       );
       final avatar = tester.widgetList<Image>(find.byType(Image)).map((i) => i.image).whereType<ResizeImage>().singleWhere((i) => i.imageProvider is NetworkImage);
-      expect(avatar.width, width, reason: 'compact=$compact');
+      expect(avatar.width, 720, reason: 'compact=$compact ratio=$ratio');
       expect(avatar.height, isNull);
       expect(avatar.allowUpscaling, isFalse);
+      keys.add(await avatar.obtainKey(ImageConfiguration.empty));
     }
+    // 缓存键只有一个：换布局 / 换屏不会再下载一次
+    expect(keys, hasLength(1));
   });
 }

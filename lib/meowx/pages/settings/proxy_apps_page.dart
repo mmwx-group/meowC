@@ -34,7 +34,7 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
   late Set<String> _pinned = ref.read(vpnSettingProvider).accessControl.currentList.toSet();
 
   /// 已经取回的应用图标（包名 → PNG 字节）。行滚出去就销毁，滚回来时从这里同步拿，不再走一趟平台通道；
-  /// 同一份字节对象还能让解码结果在 ImageCache 里命中。跟着页面走，重新读取应用列表时清空。
+  /// 同一份字节对象还能让解码结果在 ImageCache 里命中。跟着页面走，重新读取应用列表、从后台回来时清空。
   final _icons = <String, Uint8List>{};
 
   @override
@@ -53,8 +53,11 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    // 离开期间应用可能更新过（图标换了）：记下的图标作废，行下次出现时重新取（原生侧按「包名 + 更新时间」存了文件，没变的很快）
+    _icons.clear();
     // 从系统设置授权「读取应用列表」回来后重试
-    if (state == AppLifecycleState.resumed && _denied) unawaited(_load(force: true));
+    if (_denied) unawaited(_load(force: true));
   }
 
   Future<void> _load({bool force = false}) async {
@@ -109,7 +112,13 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
   Widget build(BuildContext context) {
     final mm = context.mm;
     final access = ref.watch(vpnSettingProvider.select((s) => s.accessControl));
-    final packages = ref.watch(packagesProvider);
+    // 原生侧两次读取重叠时（第一次进来还在转圈就退出重进）列表里每个应用会出现两遍：按包名去重。
+    // 下面的行拿包名当 key，重复的 key 会让 findItemIndexCallback 把两行指到同一个位置、把列表弄坏
+    final seen = <String>{};
+    final packages = [
+      for (final p in ref.watch(packagesProvider))
+        if (seen.add(p.packageName)) p,
+    ];
     final selected = access.currentList.toSet();
     final isWhitelist = access.mode == AccessControlMode.acceptSelected;
     final q = _search.text.trim().toLowerCase();
