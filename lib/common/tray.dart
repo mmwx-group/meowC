@@ -26,6 +26,23 @@ class Tray {
   int _loadingFrame = 0;
   final List<String> _loadingFrames = ['.', '..', '...'];
 
+  // MeowX：Windows 上托盘菜单只会由右键 → popUpMenu() 弹出，状态变化时不必每次都整份重建原生菜单
+  // （开了「托盘显示代理组」是 组 × 节点 项：建项、编码、原生逐项拷贝再 AppendMenu，全在界面线程，选一次节点要来两遍）。
+  // 平时只记「菜单已落后」，等弹出前再建；菜单正开着时照旧立即更新（测速进度、勾选）。图标 / 提示不受影响，仍即时更新。
+  // Linux / macOS 的菜单由系统直接弹出，必须预置，保持原样。
+  bool _menuStale = false;
+  TrayState? _menuState; // 原生菜单上一次是按哪份状态建的；null = 还没建过
+  int _menuPopups = 0; // 正在弹出 / 已弹出、popUpMenu() 还没返回的次数
+
+  /// 测试里顶替「是不是 Windows」（本机测不了真的 Windows 托盘）；正式运行恒为 null。
+  @visibleForTesting
+  bool? debugLazyMenu;
+
+  bool get _deferMenu =>
+      (debugLazyMenu ?? system.isWindows) &&
+      _menuPopups == 0 &&
+      !trayManager.isMenuOpen;
+
   Tray() {
     delayTestCoordinator.addListener(_handleDelayTestStateChanged);
   }
@@ -138,6 +155,62 @@ class Tray {
       if (system.isMacOS) {
         await _syncSpeedTitle(isStart: trayState.isStart);
       }
+      if (_deferMenu) {
+        _menuStale = true;
+        return;
+      }
+      await _rebuildMenu(trayState, silent: silent);
+      if (Platform.isLinux) {
+        await _updateSystemTray(
+          brightness: trayState.brightness,
+          isStart: trayState.isStart,
+          force: focus,
+        );
+      }
+    } finally {
+      _isUpdating = false;
+
+      if (_pendingState != null) {
+        final pending = _pendingState;
+        final pendingFocus = _pendingFocus;
+        final pendingSilent = _pendingSilent;
+        _pendingState = null;
+        _pendingFocus = false;
+        _pendingSilent = false;
+        await _doUpdate(
+          trayState: pending!,
+          focus: pendingFocus,
+          silent: pendingSilent,
+        );
+      }
+    }
+  }
+
+  /// MeowX：Windows 右键托盘图标时调用（manager/tray_manager.dart）：
+  /// 菜单落后于当前状态（或还没建过）就先重建，再弹出；菜单关掉后才返回。
+  Future<void> popUpMenu(TrayState trayState) async {
+    _menuPopups++;
+    try {
+      if (_menuStale || _menuState != trayState) {
+        try {
+          await _rebuildMenu(trayState);
+        } catch (e) {
+          commonPrint.log('Failed to rebuild tray menu: $e');
+        }
+      }
+      // ignore: deprecated_member_use
+      await trayManager.popUpContextMenu(bringAppToFront: true);
+    } finally {
+      _menuPopups--;
+    }
+  }
+
+  /// 按 [trayState] 从头建整棵菜单并下发给原生。
+  Future<void> _rebuildMenu(TrayState trayState, {bool silent = false}) async {
+    // 先清标记再建：建的过程中又来的更新（它会重新置位）不能被这一次的完成盖掉
+    _menuStale = false;
+    _menuState = trayState;
+    try {
     List<MenuItem> menuItems = [];
     final showMenuItem = MenuItem(
       label: appLocalizations.show,
@@ -314,29 +387,9 @@ class Tray {
       keepMenuOpen: silent,
       brightness: trayState.brightness,
     );
-    if (Platform.isLinux) {
-      await _updateSystemTray(
-        brightness: trayState.brightness,
-        isStart: trayState.isStart,
-        force: focus,
-      );
-    }
-    } finally {
-      _isUpdating = false;
-
-      if (_pendingState != null) {
-        final pending = _pendingState;
-        final pendingFocus = _pendingFocus;
-        final pendingSilent = _pendingSilent;
-        _pendingState = null;
-        _pendingFocus = false;
-        _pendingSilent = false;
-        await _doUpdate(
-          trayState: pending!,
-          focus: pendingFocus,
-          silent: pendingSilent,
-        );
-      }
+    } catch (_) {
+      _menuStale = true;
+      rethrow;
     }
   }
 

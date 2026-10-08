@@ -732,6 +732,7 @@ class AppController {
       }
       _ref.read(logsProvider.notifier).value = FixedList(maxLength);
       _ref.read(requestsProvider.notifier).value = FixedList(maxLength);
+      clashMessage.clearPendingRequests();   // MeowX：还没解码的 request 消息一并清掉
       globalState.computeHeightMapCache = {};
       addCheckIpNumDebounce();
     });
@@ -811,6 +812,30 @@ class AppController {
     }
   }
 
+  // MeowX：groupsProvider 里现在那份列表（实例）与它的内容摘要；新拉到的内容相同就不再赋值，见 _updateGroups。
+  List<Group>? _digestedGroups;
+  int _groupsDigest = 0;
+  // MeowX：最近一次成功拉到代理组的时间，与「有刷新请求被压下、还没补上」的标记；见下面两个方法。
+  DateTime? _lastGroupsUpdateTime;
+  bool _groupsUpdateDeferred = false;
+
+  /// MeowX：后台不拉代理组（没有界面在看），记一笔，回前台那次补上。
+  void deferGroupsUpdate() {
+    _groupsUpdateDeferred = true;
+  }
+
+  /// MeowX：App 没离开过、只是被通知栏 / 系统对话框盖了一下再回来时用——
+  /// 距上次成功刷新不到 [maxAge]、期间也没有被压下的刷新请求，就不必再全量拉一趟。
+  void updateGroupsIfStale(Duration maxAge) {
+    final last = _lastGroupsUpdateTime;
+    if (!_groupsUpdateDeferred &&
+        last != null &&
+        DateTime.now().difference(last) < maxAge) {
+      return;
+    }
+    updateGroupsDebounce();
+  }
+
   Future<void> updateGroups({List<ExternalProvider>? preloadedProviders}) {
     return _coreLifecycleLock.synchronized(
       () => _updateGroups(preloadedProviders: preloadedProviders),
@@ -824,19 +849,19 @@ class AppController {
     Duration(milliseconds: 400),
   ];
 
-  Future<List<Group>> _retryGetProxiesGroups(
+  Future<GroupsSnapshot> _retryGetProxiesGroups(
     List<ExternalProvider>? preloadedProviders,
   ) async {
     for (var attempt = 0; attempt < _kGroupRetryDelays.length; attempt++) {
       if (attempt > 0) {
         await Future.delayed(_kGroupRetryDelays[attempt]);
       }
-      final groups = await clashCore.getProxiesGroups(
+      final snapshot = await clashCore.getGroupsSnapshot(
         preloadedProviders: preloadedProviders,
       );
-      if (groups.isNotEmpty) return groups;
+      if (snapshot.groups.isNotEmpty) return snapshot;
     }
-    return [];
+    return emptyGroupsSnapshot;
   }
 
   void _handleUpdateGroupsError(int generation, dynamic e) {
@@ -877,11 +902,15 @@ class AppController {
     }
     _isUpdatingGroups = true;
     final generation = _coreGeneration;
+    var succeeded = false;
 
     try {
       final currentGroups = _ref.read(groupsProvider);
+      // MeowX：从这里开始才是这一趟的数据；之后再被压下的请求留给下一趟
+      _groupsUpdateDeferred = false;
 
-      final newGroups = await _retryGetProxiesGroups(preloadedProviders);
+      final snapshot = await _retryGetProxiesGroups(preloadedProviders);
+      final newGroups = snapshot.groups;
 
       if (newGroups.isEmpty) {
         _handleUpdateGroupsError(
@@ -969,7 +998,17 @@ class AppController {
         }
       }
 
-      _ref.read(groupsProvider.notifier).value = newGroups;
+      // MeowX：内容和 groupsProvider 里那份一样就不赋值。它是 identical 判等，赋一个新列表必定通知，
+      // 下游（currentGroupsState、各个 select）要把全部成员逐个深比较几遍才发现什么都没变。
+      // 列表实例对不上（别处赋过值、provider 重建过）时照常赋值。
+      if (snapshot.digest != _groupsDigest ||
+          !identical(_ref.read(groupsProvider), _digestedGroups)) {
+        _ref.read(groupsProvider.notifier).value = newGroups;
+        _digestedGroups = newGroups;
+        _groupsDigest = snapshot.digest;
+      }
+      _lastGroupsUpdateTime = DateTime.now();
+      succeeded = true;
       _updateGroupsRetryCount = 0;
       _updateGroupsRetryTimer?.cancel();
       _updateGroupsRetryTimer = null;
@@ -978,6 +1017,8 @@ class AppController {
       _handleUpdateGroupsError(generation, e);
     } finally {
       _isUpdatingGroups = false;
+      // MeowX：这一趟没拉成，欠着的刷新还在
+      if (!succeeded) _groupsUpdateDeferred = true;
     }
   }
 
@@ -1225,9 +1266,25 @@ class AppController {
 
   Future<void>? _initCoreFuture;
 
+  static Future<void>? _bundledUiFuture;
+
+  /// MeowX：内置面板（external-ui 目录）的部署。原来在 main() 里挡着首帧：平时只是查一下版本文件，
+  /// 安装 / 升级后首启要真的解压。挪到核心初始化之前等它——核心装载配置时发现面板目录是空的会自己联网下载，
+  /// 不能和本地解压同时写同一个目录，所以顺序仍是「面板就绪 → 核心装载」。只跑一次。
+  Future<void> _ensureBundledUi() {
+    return _bundledUiFuture ??= () async {
+      try {
+        await uiManager.initializeUI();
+      } catch (e) {
+        commonPrint.log('Failed to initialize UI: $e');
+      }
+    }();
+  }
+
   Future<void> _initCore() {
     return _initCoreFuture ??= () async {
       try {
+        await _ensureBundledUi();
         final isInit = await clashCore.isInit;
         if (!isInit) {
           await clashCore.init();
@@ -1331,6 +1388,25 @@ class AppController {
       commonPrint.log('Failed to check wake lock status: $e');
     }
 
+    // MeowX：Windows 上首帧出来就先把窗口显示出来，不再等核心拉起、配置应用完、代理组拉完
+    // （慢机器上那几秒桌面上只有托盘图标）。这时核心还没就绪：isStart 为 false，show() 里的
+    // resumeForegroundUpdates 不会去碰核心；界面靠 initProvider 显示「正在加载…」，电源键等入口本来就
+    // 经 _coreLifecycleLock / _initCore 排队（Android 一直是界面先出来）。静默启动不提前显示，仍由下面的分支决定。
+    var windowShownEarly = false;
+    if (system.isWindows && !_ref.read(appSettingProvider).silentLaunch) {
+      try {
+        // 等首帧光栅化完再显示，窗口一出来就有内容而不是先闪一下空白；等不到（最多半秒）也照样显示
+        await WidgetsBinding.instance.waitUntilFirstFrameRasterized.timeout(
+          const Duration(milliseconds: 500),
+          onTimeout: () {},
+        );
+        await window?.show();
+        windowShownEarly = true;
+      } catch (e) {
+        commonPrint.log('Failed to show window before core init: $e');
+      }
+    }
+
     await updateTray(true);
 
     await _initCore();
@@ -1345,14 +1421,22 @@ class AppController {
       }
     }
 
-    await updateGroups();
+    // MeowX：未连接路径下 _initStatus → applyProfile 刚拉过一遍代理组，这里不再无条件重拉（同一份数据再解码一遍）。
+    // 自动连接路径的 _backgroundLoad 不等结果、也没有空表重试，那时表还是空的，仍由这一趟兜底，
+    // 保证 initProvider 置真时组已经到了。
+    if (_ref.read(groupsProvider).isEmpty) {
+      await updateGroups();
+    }
 
     autoLaunch?.updateStatus(_ref.read(appSettingProvider).autoLaunch);
     autoUpdateProfiles();
     autoCheckUpdate();
 
     final isWindowVisible = await window?.isVisible ?? false;
-    if (isWindowVisible) {
+    if (windowShownEarly) {
+      // MeowX：窗口上面已经显示过，这里不再 show()——它会再抢一次前台焦点（等核心的这几秒用户可能已经切去别的窗口）；
+      // 用户这期间把窗口关进托盘 / 最小化了，也不把它再弹回来。show() 里「已连接就恢复前台轮询」那一步在下面补上。
+    } else if (isWindowVisible) {
       window?.show();
     } else {
       if (!_ref.read(appSettingProvider).silentLaunch) {
@@ -1362,6 +1446,11 @@ class AppController {
       }
     }
     await syncDesktopRuntimeState(preferCurrentState: true);
+    if (windowShownEarly && isWindowVisible && !globalState.backgroundMode.value) {
+      // MeowX：提前显示那次 isStart 还是 false，resumeForegroundUpdates 当时什么都没起；自动连接起来之后在这里补一次
+      // （放在 syncDesktopRuntimeState 之后：它只挂流量一项，原流程里随后由 show() 换成「运行时长 + 流量」）。
+      unawaited(globalState.resumeForegroundUpdates());
+    }
     await updateTray(true, false, true);
 
     await _handlePreference();

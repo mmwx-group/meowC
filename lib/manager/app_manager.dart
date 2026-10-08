@@ -68,7 +68,9 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       _updateDashboardRefreshState();
       detectionState.tryStartCheck();
       mediaUnlockState.tryStartCheck();
-      globalState.appController.updateGroupsDebounce();
+      // MeowX：这里原来还排了一趟 updateGroupsDebounce()。AppController.init() 自己必定会拉代理组，
+      // 首帧后 600ms 这趟要么是白拉第二遍，要么在核心还没装载配置时拿到空表、
+      // 占着 _coreLifecycleLock 做四连重试，反过来挡住 init 里的 applyProfile。
     });
     if (window == null) {
       return;
@@ -157,6 +159,13 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
     });
   }
 
+  // MeowX：回前台要补做多少，看离开时走到了哪一步——
+  // _wasBackground：进过下面的后台分支（Android 含 inactive；桌面 = 窗口隐藏 / 最小化）。
+  // _leftApp：界面真的不可见过（paused / hidden），而不只是 Android 上被通知栏 / 权限框 / VPN 授权框盖了一下。
+  bool _wasBackground = false;
+  bool _leftApp = false;
+  static const _groupsFreshFor = Duration(seconds: 30);
+
   @override
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     final isBackgroundState =
@@ -165,18 +174,36 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
         (state == AppLifecycleState.inactive && !system.isDesktop);
 
     if (isBackgroundState) {
+      _wasBackground = true;
+      if (state != AppLifecycleState.inactive) {
+        _leftApp = true;
+      }
       _missedUpdateCheckTimer?.cancel();
       globalState.appController.savePreferences();
       await globalState.handleBackground();
     } else if (state == AppLifecycleState.resumed) {
+      final wasBackground = _wasBackground;
+      final leftApp = _leftApp;
+      _wasBackground = false;
+      _leftApp = false;
       globalState.handleForeground();
       render?.resume();
-      await globalState.resumeForegroundUpdates();
+      // MeowX：桌面窗口只是失焦再聚焦（Alt-Tab 回来）时什么都没停过，不必重起每秒轮询、多打两次 getTraffic
+      if (wasBackground || !system.isDesktop) {
+        await globalState.resumeForegroundUpdates();
+      }
       await globalState.appController.syncWakelockIfNeeded();
       _scheduleMissedUpdateCheck();
       final isInit = await clashCore.isInit;
       if (isInit) {
-        globalState.appController.updateGroupsDebounce();
+        // MeowX：Android 上没离开过 App 的短暂失焦（下拉通知栏之类）回来，刚刷新过就不再全量拉一趟代理组。
+        // 真离开过（外部面板可能改了选择）照常拉；桌面聚焦也照常拉——窗口失焦期间 60 秒定时刷新是停的
+        // （Application._syncAutoUpdateTasks 只在 resumed 时跑），全靠这一趟追上。
+        if (system.isDesktop || leftApp) {
+          globalState.appController.updateGroupsDebounce();
+        } else {
+          globalState.appController.updateGroupsIfStale(_groupsFreshFor);
+        }
       }
 
       final hasDetection = ref

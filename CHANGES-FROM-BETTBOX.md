@@ -63,11 +63,7 @@
 - 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型在 `lib/meowx/panel/po0.dart`。
 - `lib/models/meow.dart MeowSettings`：新增 `po0Enabled`（默认 false）与 `po0DirectIps`（最近一次 po0 服务器 IP 缓存；开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve`，列表变化时与其它覆写同样 `applyProfileDebounce` 热生效）；设置页「订阅」组加「po0 加白」开关，所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化）以它为准。
 
-## 2026-10-08 · 界面性能
-这一轮只改 MeowX 自己的界面层（`lib/meowx/**`）；Bettbox 的底层代码只动了两处一行级的 bug 修复和两处已有的 MeowX 接入点：
-- `lib/clash/lib.dart`：`_waitForIpc` 超时后不再把还没完成的 `_canSendCompleter` 换掉——换掉的话 `preload()` / `sendMessage()` 早先拿到的 future 永远不完成，慢机器上服务引擎 2 秒没连上会永远停在启动页。
-- `lib/clash/interface.dart`：`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，每秒一份的连接快照被多留 30 秒）。
-- `lib/application.dart`：亮 / 暗两份主题走缓存（`MeowThemes`），无关的重建不再触发 200ms 主题插值。
-- `lib/views/about.dart`：关于页的图标用 256 的小图。
-- 界面层：隐藏的 Tab 页不再跑动画 / 不再随每秒数据重建（`MeowTabStack`、`watchOnTab`）；连接快照共用一份、没有界面显示连接数时不拉（`ConnStatsController`）；点节点 / 换组不再让核心重解析整份订阅（`profileRawConfigProvider` 只盯 lastUpdateDate / ageSecretKey）；线性图标直接画路径（不再 SvgPicture.string + colorFilter）等。
-- 没合进来、留在 `perf/*` 分支上的底层改动（要动 Bettbox 的核心通信 / 控制器 / 启动 / 托盘，Windows 部分本机无法验证）：大回包后台解码、刷新代理组后台解码与摘要比较、Windows 主窗口提前显示、托盘菜单按需重建、首帧前初始化延后、偏好落盘去重、液态玻璃自适应降档。
+## 2026-10-08 · 界面性能：核心回包与连接快照
+- `lib/clash/interface.dart`：新增 `handleMessage`（Android 的 ReceivePort 与 Windows 的 socket 两处监听的统一入口，`lib/clash/lib.dart` / `lib/clash/service.dart` 改为调它）——超过 32KB 的回包（连接快照、代理组、整份配置）放到后台 isolate 解信封，小消息照旧同步解；`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，回包被多留 30 秒）。
+- `lib/clash/message.dart`：核心每关一条连接推一条的 `request` 消息，没有界面在看时只留原文（最近 256 条，与请求列表容量一致）、不逐条解码入库；`lib/views/connection/requests.dart`（旧「请求」页）打开时补解并恢复逐条处理，`lib/controller.dart` 换配置清空请求列表时一并清掉。
+- 连接快照的取用在 `lib/meowx/state/connection.dart`（`ConnStatsController`）：没有界面显示连接数时不拉，可见页面取到的完整快照顺手更新计数。

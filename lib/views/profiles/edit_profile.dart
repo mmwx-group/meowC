@@ -217,6 +217,8 @@ class EditProfileViewState extends State<EditProfileView> {
         rawText = await file.readAsString();
       }
     }
+    // MeowX：编辑器的 Rust 库按需加载（pages/editor.dart），进页面前等它就绪
+    await ensureEditorRuntime();
     if (!mounted) return;
     final title = widget.profile.label ?? widget.profile.id;
     final editorPage = EditorPage(

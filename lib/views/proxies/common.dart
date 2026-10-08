@@ -73,6 +73,9 @@ class DelayTestRequestPool {
 
 final _delayTestRequestPool = DelayTestRequestPool();
 
+/// MeowX：有没有界面发起的测速还在等结果（ClashManager.onDelay 据此决定要不要为这条 delay 消息再排一趟拉代理组）。
+bool get hasPendingDelayTest => _delayTestRequestPool.pendingCount > 0;
+
 double get listHeaderHeight {
   final measure = globalState.measure;
   return 20 + measure.titleMediumHeight + 4 + measure.bodyMediumHeight;
@@ -133,15 +136,17 @@ bool _isNonTestableProxy(Proxy proxy) {
       _isNonTestableProxyType(proxy.type);
 }
 
-String? _getProxyType(String proxyName) {
-  final groups = globalState.appController.getCurrentGroups();
-  for (final group in groups) {
-    if (group.name == proxyName) return group.type.name;
+// MeowX：名字 → 类型（组名给组类型，节点名给节点类型；同名取遍历中先遇到的，与原来逐个线性查找的结果一致）。
+// 批量测速前建一次，不再为每个节点把全部组的全部成员扫一遍。
+Map<String, String> _proxyTypeMap() {
+  final types = <String, String>{};
+  for (final group in globalState.appController.getCurrentGroups()) {
+    types.putIfAbsent(group.name, () => group.type.name);
     for (final proxy in group.all) {
-      if (proxy.name == proxyName) return proxy.type;
+      types.putIfAbsent(proxy.name, () => proxy.type);
     }
   }
-  return null;
+  return types;
 }
 
 Future<void> delayTest(
@@ -153,6 +158,7 @@ Future<void> delayTest(
   Future<void> runTest() async {
     final appController = globalState.appController;
     final targets = <DelayTestTarget>{};
+    late final proxyTypes = _proxyTypeMap();
     for (final proxy in proxies) {
       if (_isNonTestableProxy(proxy)) {
         continue;
@@ -164,7 +170,7 @@ Future<void> delayTest(
       final name = state.proxyName;
       if (name.isEmpty ||
           _isNonTestableProxyName(name) ||
-          _isNonTestableProxyType(_getProxyType(name) ?? '')) {
+          _isNonTestableProxyType(proxyTypes[name] ?? '')) {
         continue;
       }
       targets.add(DelayTestTarget(name: name, url: url));
