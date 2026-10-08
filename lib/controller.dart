@@ -1354,9 +1354,9 @@ class AppController {
     var windowShownEarly = false;
     if (system.isWindows && !_ref.read(appSettingProvider).silentLaunch) {
       try {
-        // 等首帧光栅化完再显示，窗口一出来就有内容而不是先闪一下空白；等不到（最多 1 秒）也照样显示
+        // 等首帧光栅化完再显示，窗口一出来就有内容而不是先闪一下空白；等不到（最多半秒）也照样显示
         await WidgetsBinding.instance.waitUntilFirstFrameRasterized.timeout(
-          const Duration(seconds: 1),
+          const Duration(milliseconds: 500),
           onTimeout: () {},
         );
         await window?.show();
