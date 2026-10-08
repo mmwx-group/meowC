@@ -12,6 +12,7 @@ import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -107,19 +108,27 @@ Profile _profile({String? current = '自动选择', Map<String, String> selected
   selectedMap: selected,
 );
 
+/// 测试中途要改的当前订阅（点节点 / 换组在真实界面里就是换一个 Profile 对象）。
+final _liveProfile = StateProvider<Profile?>((ref) => null);
+
 List<Override> _overrides({
   bool wide = false,
   bool twoPane = false,
   ProxyLayout layout = ProxyLayout.tabs,
   NodeCardSize size = NodeCardSize.standard,
   Profile? profile,
+  bool live = false,
   List<Group>? groups,
 }) {
   final gs = groups ?? _groups;
   return [
     isWideLayoutProvider.overrideWithValue(wide),
     isTwoPaneProvider.overrideWithValue(twoPane),
-    currentProfileProvider.overrideWithValue(profile),
+    if (live) ...[
+      _liveProfile.overrideWith((ref) => profile),
+      currentProfileProvider.overrideWith((ref) => ref.watch(_liveProfile)),
+    ] else
+      currentProfileProvider.overrideWithValue(profile),
     currentGroupsStateProvider.overrideWithValue(GroupsState(value: gs)),
     groupsProvider.overrideWith(() => _Groups(gs)),
     currentPageLabelProvider.overrideWith(_PageLabel.new),
@@ -167,8 +176,11 @@ Future<void> _pump(
   await tester.pump(const Duration(milliseconds: 300));   // 组标签滚到当前组的动画
 }
 
-SliverGridDelegateWithFixedCrossAxisCount _gridDelegate(WidgetTester tester) =>
-    tester.widget<SliverGrid>(find.byType(SliverGrid).first).gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+/// 网格的列数是布局阶段按网格自己的宽度算的，从渲染对象上取。
+int _gridColumns(WidgetTester tester) {
+  final grid = tester.renderObject<RenderSliverGrid>(find.byType(SliverGrid).first);
+  return (grid.gridDelegate.getLayout(grid.constraints) as SliverGridRegularTileLayout).crossAxisCount;
+}
 
 void main() {
   testWidgets('手机 · 标签布局：窄屏 1.4 倍字号不溢出；标题 / 组标签 / 摘要 / 节点格', (tester) async {
@@ -206,7 +218,7 @@ void main() {
     expect(find.byType(UnlockBadge), findsNWidgets(3));
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
     // 标准卡片手机上两列；悬浮底栏的高度让进了网格底部留白
-    expect(_gridDelegate(tester).crossAxisCount, 2);
+    expect(_gridColumns(tester), 2);
     final gridPad = tester.widget<SliverPadding>(
       find.ancestor(of: find.byType(NodeSliverGrid), matching: find.byType(SliverPadding)).first,
     );
@@ -228,7 +240,7 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
     expect(find.text('已手动固定，打开恢复'), findsOneWidget);
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
-    expect(_gridDelegate(tester).crossAxisCount, 1);
+    expect(_gridColumns(tester), 1);
   });
 
   testWidgets('手机 · 标签布局：select 组没有「自动选择」开关，嵌套组 / 内置策略成员的副标题', (tester) async {
@@ -275,6 +287,104 @@ void main() {
     expect(find.byType(NodeSliverGrid), findsNothing);
   });
 
+  testWidgets('手机 · 列表布局：展开上面的组，下面已展开的网格原样留着（不拆掉重建）', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 2400),
+      overrides: _overrides(profile: _profile(), layout: ProxyLayout.list),
+      textScale: 1,
+    );
+    final lower = find.byWidgetPredicate((w) => w is NodeSliverGrid && w.group.type == GroupType.Fallback);
+
+    await tester.tap(find.text('fallback'));
+    await tester.pump();
+    final before = tester.element(lower);
+    final cell = tester.element(find.text('洛杉矶 01 · 9929').last);
+
+    // 在它上面插进一行「自动选择」和一张网格
+    await tester.tap(find.text('url-test'));
+    await tester.pump();
+    expect(find.byType(NodeSliverGrid), findsNWidgets(2));
+    expect(identical(tester.element(lower), before), isTrue);
+    expect(identical(tester.element(find.text('洛杉矶 01 · 9929').last), cell), isTrue);
+
+    await tester.tap(find.text('url-test'));
+    await tester.pump();
+    expect(find.byType(NodeSliverGrid), findsOneWidget);
+    expect(identical(tester.element(lower), before), isTrue);
+  });
+
+  testWidgets('手机 · 标签布局：点节点（selectedMap 变）只更新网格，整页与组标签不重建', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 1600),
+      overrides: _overrides(profile: _profile(), live: true),
+      textScale: 1,
+    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
+    final chips = tester.widgetList<GroupChip>(find.byType(GroupChip)).toList();
+    expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
+
+    container.read(_liveProfile.notifier).state = _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'});
+    await tester.pump();
+
+    // 网格跟着变了（固定的节点画上图钉），组标签还是原来那批 widget
+    expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
+    expect(find.text('12 个成员 · 已固定'), findsOneWidget);
+    final after = tester.widgetList<GroupChip>(find.byType(GroupChip)).toList();
+    expect(after, hasLength(chips.length));
+    for (final (i, chip) in chips.indexed) {
+      expect(identical(after[i], chip), isTrue, reason: '第 $i 个组标签被重建了');
+    }
+  });
+
+  testWidgets('手机 · 标签布局：换组（currentGroupName 变）只重建组标签，当前页的网格不动', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 1600),
+      overrides: _overrides(profile: _profile(current: null), live: true),
+      textScale: 1,
+    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
+    final grid = tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid));
+    final chip = tester.widget<GroupChip>(find.byType(GroupChip).first);
+    expect(grid.group.name, '节点选择');
+
+    // 没记过停在哪个组时显示的就是第一个组；现在把它记下来——页码不变，只有 currentGroupName 变了
+    container.read(_liveProfile.notifier).state = _profile(current: '节点选择');
+    await tester.pump();
+    await tester.pump();
+
+    expect(identical(tester.widget<GroupChip>(find.byType(GroupChip).first), chip), isFalse);
+    expect(identical(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)), grid), isTrue);
+  });
+
+  testWidgets('节点网格的列数在布局阶段跟着宽度走：窗口变宽 / 只变高都不重建网格', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 800),
+      overrides: _overrides(profile: _profile()),
+      textScale: 1,
+    );
+    final grid = tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid));
+    expect(_gridColumns(tester), 2);
+
+    tester.view.physicalSize = const Size(700, 800);
+    await tester.pump();
+    expect(_gridColumns(tester), 3);
+    expect(identical(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)), grid), isTrue);
+
+    tester.view.physicalSize = const Size(700, 500);   // 键盘弹出、拖窗口下边
+    await tester.pump();
+    expect(_gridColumns(tester), 3);
+    expect(identical(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)), grid), isTrue);
+
+    tester.view.physicalSize = const Size(360, 800);
+    await tester.pump();
+    expect(_gridColumns(tester), 2);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('宽屏两栏：左栏代理组 + 右栏当前组；默认第一个组，点左栏换组', (tester) async {
     for (final size in const [Size(1100, 720), Size(760, 600)]) {
       await _pump(
@@ -296,7 +406,7 @@ void main() {
       expect(find.text('当前 $_longName'), findsOneWidget);
       expect(find.text(' · 38 ms'), findsOneWidget);
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-      expect(_gridDelegate(tester).crossAxisCount, size.width > 1000 ? 4 : 2);
+      expect(_gridColumns(tester), size.width > 1000 ? 4 : 2);
     }
   });
 
@@ -309,7 +419,7 @@ void main() {
 
     expect(find.byType(GroupChip), findsNWidgets(4));
     expect(find.text('全部测速'), findsNothing);
-    expect(_gridDelegate(tester).crossAxisCount, 3);
+    expect(_gridColumns(tester), 3);
   });
 
   testWidgets('空态：没有配置 → 点按去「我的」；有配置但没有代理组只给说明', (tester) async {

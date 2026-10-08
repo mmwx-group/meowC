@@ -80,10 +80,13 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
 
   /// 列表布局里的一个组 = 组卡（点按展开 / 收起）+ 展开时的「自动选择」行与节点网格，各是独立的 sliver、直接铺在页面底上。
   /// 不用 SliverMainAxisGroup：它滚动后的命中测试有偏移，节点点不中。
-  List<Widget> _groupSlivers(Group g, {required bool expanded, required int columns, required EdgeInsets pad}) {
+  /// 每个 sliver 按组名带 key：展开 / 收起一个组会在中间插入 / 抽走 sliver，没有 key 的话后面的 sliver 逐个错位重配——
+  /// 组卡被换成另一个组的内容，下方已展开的网格被拆掉重建。
+  List<Widget> _groupSlivers(Group g, {required bool expanded, required NodeCardSize size, required EdgeInsets pad}) {
     final side = EdgeInsets.only(left: pad.left, right: pad.right);
     return [
       SliverPadding(
+        key: ValueKey('card:${g.name}'),
         padding: side.copyWith(bottom: 8),
         sliver: SliverToBoxAdapter(
           child: GroupCard(
@@ -100,12 +103,14 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
       if (expanded) ...[
         if (g.type.isComputedSelected)
           SliverPadding(
+            key: ValueKey('auto:${g.name}'),
             padding: side.copyWith(bottom: 8),
             sliver: SliverToBoxAdapter(child: AutoSelectToggle(group: g)),
           ),
         SliverPadding(
+          key: ValueKey('grid:${g.name}'),
           padding: side.copyWith(bottom: 16),
-          sliver: NodeSliverGrid(group: g, columns: columns),
+          sliver: NodeSliverGrid(group: g, size: size),
         ),
       ],
     ];
@@ -126,7 +131,8 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     final mm = context.mm;
     final twoPane = ref.watch(isTwoPaneProvider);
     final groups = ref.watch(currentGroupsStateProvider.select((s) => s.value));
-    final hasProfile = ref.watch(currentProfileProvider) != null;
+    // 只关心有没有订阅：订阅整个 Profile 的话，点一次节点（selectedMap）、换一次组（currentGroupName）整页都要重建
+    final hasProfile = ref.watch(currentProfileProvider.select((p) => p != null));
     final size = ref.watch(meowSettingProvider.select((s) => s.nodeCardSize));
     final layout = ref.watch(meowSettingProvider.select((s) => s.proxyLayout));
     // 有侧栏（宽屏、平板竖屏）用壳约定的留白；手机左右 16，底部让出悬浮底栏（它盖在内容上）
@@ -270,21 +276,16 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     }
 
     final expanded = ref.watch(expandedGroupsProvider);
-    return LayoutBuilder(
-      builder: (context, c) {
-        final columns = nodeColumns(c.maxWidth - pad.horizontal, size);
-        return CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: side.copyWith(top: pad.top, bottom: 12),
-              sliver: SliverToBoxAdapter(child: title),
-            ),
-            for (final g in groups)
-              ..._groupSlivers(g, expanded: expanded.contains(g.name), columns: columns, pad: pad),
-            SliverPadding(padding: EdgeInsets.only(bottom: pad.bottom)),
-          ],
-        );
-      },
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: side.copyWith(top: pad.top, bottom: 12),
+          sliver: SliverToBoxAdapter(child: title),
+        ),
+        for (final g in groups)
+          ..._groupSlivers(g, expanded: expanded.contains(g.name), size: size, pad: pad),
+        SliverPadding(padding: EdgeInsets.only(bottom: pad.bottom)),
+      ],
     );
   }
 }
@@ -310,24 +311,18 @@ class _GroupPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) => CustomScrollView(
-        key: PageStorageKey('group-${group.name}'),
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.only(left: pad.left, right: pad.right),
-            sliver: SliverToBoxAdapter(child: GroupSummary(group: group, wide: wide)),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad.left, wide ? 10 : 12, pad.right, pad.bottom),
-            sliver: NodeSliverGrid(
-              group: group,
-              columns: nodeColumns(c.maxWidth - pad.horizontal, size),
-              dense: wide,
-            ),
-          ),
-        ],
-      ),
+    return CustomScrollView(
+      key: PageStorageKey('group-${group.name}'),
+      slivers: [
+        SliverPadding(
+          padding: EdgeInsets.only(left: pad.left, right: pad.right),
+          sliver: SliverToBoxAdapter(child: GroupSummary(group: group, wide: wide)),
+        ),
+        SliverPadding(
+          padding: EdgeInsets.fromLTRB(pad.left, wide ? 10 : 12, pad.right, pad.bottom),
+          sliver: NodeSliverGrid(group: group, size: size, dense: wide),
+        ),
+      ],
     );
   }
 }
@@ -351,6 +346,10 @@ class _GroupTabsState extends ConsumerState<_GroupTabs> {
   /// 点标签触发的翻页动画期间，途经页的 onPageChanged 不算数。
   bool _programmatic = false;
 
+  /// 建过的页（页码 → widget）。换组会让本部件重建（标签高亮要跟着变），itemBuilder 交回同一个实例，
+  /// Flutter 就不会把当前页和滑入页的整棵子树（可见节点格）再重建一遍；组列表 / 卡片档位 / 留白变了才作废。
+  final _pageCache = <int, Widget>{};
+
   int get _index {
     final name = ref.read(
       currentProfileProvider.select((p) => p?.currentGroupName),
@@ -363,6 +362,14 @@ class _GroupTabsState extends ConsumerState<_GroupTabs> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _revealChip(_index));
+  }
+
+  @override
+  void didUpdateWidget(_GroupTabs oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.groups != widget.groups || oldWidget.size != widget.size || oldWidget.pad != widget.pad) {
+      _pageCache.clear();
+    }
   }
 
   @override
@@ -453,7 +460,7 @@ class _GroupTabsState extends ConsumerState<_GroupTabs> {
             onPageChanged: (i) {
               if (!_programmatic) _setCurrent(i);
             },
-            itemBuilder: (_, i) => _GroupPage(group: groups[i], size: widget.size, pad: pad),
+            itemBuilder: (_, i) => _pageCache[i] ??= _GroupPage(group: groups[i], size: widget.size, pad: pad),
           ),
         ),
       ],
