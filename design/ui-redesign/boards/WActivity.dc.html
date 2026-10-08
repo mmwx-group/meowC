@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Windows 动态</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+input{font:inherit;color:inherit;border:0;background:none;outline:none;padding:0}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0}
+</style>
+</helmet>
+<div class="t-light" style="width: 1100px; height: 720px; box-sizing: border-box; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; display: flex">
+  <div style="width: 220px; flex-shrink: 0">
+    <dc-import name="WinSidebar" active="activity" dark="{{no}}" compact="{{no}}" height="{{h}}" hint-size="220px,720px"></dc-import>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; padding: 12px 16px 16px 20px; display: flex; flex-direction: column; gap: 12px">
+    <!-- 标题行 = 自绘标题栏 -->
+    <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+      <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 24px; font-weight: 700; margin-right: 6px">动态</div>
+      <div style="background: var(--card); border-radius: 13px; padding: 3px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; height: 40px; width: 190px; box-sizing: border-box">
+        <button aria-pressed="true" style="border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600">连接 · 64</button>
+        <button aria-pressed="false" style="border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--ink2)">日志</button>
+      </div>
+      <label style="flex-grow: 1; min-width: 0; background: var(--card); border-radius: 20px; height: 40px; padding: 0 14px; display: flex; align-items: center; gap: 8px">
+        <svg class="i" viewBox="0 0 24 24" width="16" height="16" style="color: var(--ink2)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.500"/></svg>
+        <input type="search" placeholder="搜索域名 / 目标 / 规则" aria-label="搜索" style="flex-grow: 1; min-width: 0; font-size: 13px">
+      </label>
+      <button style="height: 40px; padding: 0 14px; border-radius: 20px; background: var(--card); color: var(--bad); font-size: 13px; font-weight: 600">全部关闭</button>
+      <span style="width: 1px; height: 20px; background: var(--line); margin: 0 4px"></span>
+      <button aria-label="窗口置顶" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6"/></svg>
+      </button>
+      <button aria-label="最小化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M6 12h12"/></svg>
+      </button>
+      <button aria-label="最大化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+      <button aria-label="关闭到托盘" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: flex; gap: 14px">
+      <!-- 连接表：Windows 多一列「入站」（TUN / HTTP / SOCKS），看得出流量是怎么被接管进来的 -->
+      <div style="flex-grow: 1; min-width: 0; background: var(--card); border-radius: 22px; padding: 4px 6px; display: flex; flex-direction: column; overflow: hidden">
+        <div style="display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; font-size: 11px; font-weight: 600; color: var(--ink2); flex-shrink: 0">
+          <span style="width: 46px; flex-shrink: 0">入站</span>
+          <span style="flex-grow: 1; min-width: 0">主机</span>
+          <span style="width: 128px; flex-shrink: 0">出站</span>
+          <span style="width: 70px; flex-shrink: 0; text-align: right">下载</span>
+          <span style="width: 52px; flex-shrink: 0; text-align: right">时长</span>
+        </div>
+        <sc-for list="{{conns}}" as="c" hint-placeholder-count="13">
+          <button aria-pressed="{{c.selected}}" style="display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 10px; border-radius: 14px; background: {{c.bg}}; text-align: left; flex-shrink: 0">
+            <span style="width: 46px; flex-shrink: 0; text-align: center; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 10px; font-weight: 700; color: {{c.inColor}}; background: var(--card2); border-radius: 5px; padding: 2px 0">{{c.inbound}}</span>
+            <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column">
+              <span style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.host}}</span>
+              <span style="font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.net}} · {{c.rule}}</span>
+            </span>
+            <span style="width: 128px; flex-shrink: 0; font-size: 12px; font-weight: 600; color: {{c.viaColor}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.via}}</span>
+            <span style="width: 70px; flex-shrink: 0; text-align: right; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--ink2)">{{c.down}}</span>
+            <span style="width: 52px; flex-shrink: 0; text-align: right; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--ink2)">{{c.age}}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <!-- 详情 -->
+      <div style="width: 268px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px">
+        <div style="background: var(--hero); border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 11px; color: var(--ink2)">出站链路</span>
+          <span style="font-size: 14px; font-weight: 700">节点选择 › 自动选择 › 香港 01 · IEPL</span>
+        </div>
+        <div style="background: var(--card); border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-size: 11px; color: var(--ink2)">命中规则</span>
+          <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 13px; font-weight: 600">GEOSITE,youtube</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 11px; color: var(--ink2)">上传</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 18px; font-weight: 700">1.8 MB</span>
+          </div>
+          <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 11px; color: var(--ink2)">下载</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 18px; font-weight: 700">46.2 MB</span>
+          </div>
+        </div>
+        <div style="background: var(--card); border-radius: 20px; padding: 4px 14px; display: flex; flex-direction: column">
+          <sc-for list="{{facts}}" as="f" hint-placeholder-count="6">
+            <div style="display: flex; align-items: center; gap: 8px; height: 36px; border-top: {{f.border}}">
+              <span style="font-size: 12px; color: var(--ink2); flex-shrink: 0">{{f.k}}</span>
+              <span style="flex-grow: 1; min-width: 0; text-align: right; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{f.v}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="flex-grow: 1"></div>
+        <button style="height: 44px; border-radius: 16px; background: var(--card); color: var(--bad); font-size: 14px; font-weight: 600">关闭这条连接</button>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const conns = [
+      { inbound: 'TUN', net: 'TCP', host: 'www.youtube.com:443', via: '香港 01 · IEPL', rule: 'GEOSITE,youtube', down: '1.2 MB/s', age: '00:42', proxy: true, on: true },
+      { inbound: 'TUN', net: 'UDP', host: 'api.telegram.org:443', via: '新加坡 01', rule: 'RULE-SET,telegram', down: '18 KB/s', age: '12:07', proxy: true },
+      { inbound: 'HTTP', net: 'TCP', host: 'chatgpt.com:443', via: '洛杉矶 01 · 9929', rule: 'GEOSITE,openai', down: '96 KB/s', age: '03:15', proxy: true },
+      { inbound: 'SOCKS', net: 'TCP', host: 'github.com:22', via: '香港 01 · IEPL', rule: 'GEOSITE,github', down: '3.1 MB/s', age: '00:26', proxy: true },
+      { inbound: 'TUN', net: 'TCP', host: 'api.bilibili.com:443', via: 'DIRECT', rule: 'GEOSITE,cn', down: '240 KB/s', age: '00:09', proxy: false },
+      { inbound: 'TUN', net: 'TCP', host: 'steamcdn-a.akamaihd.net:443', via: 'DIRECT', rule: 'GEOSITE,steam@cn', down: '8.6 MB/s', age: '04:51', proxy: false },
+      { inbound: 'TUN', net: 'UDP', host: '223.5.5.5:53', via: 'DIRECT', rule: 'IP-CIDR,223.5.5.5/32', down: '0 KB/s', age: '00:01', proxy: false },
+      { inbound: 'HTTP', net: 'TCP', host: 'registry.npmjs.org:443', via: '东京 01 · IIJ', rule: 'MATCH', down: '640 KB/s', age: '00:03', proxy: true },
+      { inbound: 'TUN', net: 'TCP', host: 'weixin.qq.com:443', via: 'DIRECT', rule: 'GEOSITE,cn', down: '2 KB/s', age: '41:20', proxy: false },
+      { inbound: 'TUN', net: 'TCP', host: 'discord.com:443', via: '东京 01 · IIJ', rule: 'GEOSITE,discord', down: '12 KB/s', age: '26:02', proxy: true },
+      { inbound: 'TUN', net: 'UDP', host: 'time.windows.com:123', via: 'DIRECT', rule: 'GEOSITE,microsoft@cn', down: '0 KB/s', age: '00:00', proxy: false },
+      { inbound: 'SOCKS', net: 'TCP', host: 'api.anthropic.com:443', via: '洛杉矶 01 · 9929', rule: 'GEOSITE,anthropic', down: '54 KB/s', age: '01:38', proxy: true },
+      { inbound: 'TUN', net: 'TCP', host: 'update.microsoft.com:443', via: 'DIRECT', rule: 'GEOSITE,microsoft@cn', down: '1.1 MB/s', age: '02:10', proxy: false }
+    ].map((c) => ({
+      inbound: c.inbound, net: c.net, host: c.host, via: c.via, rule: c.rule, down: c.down, age: c.age,
+      selected: !!c.on,
+      bg: c.on ? 'var(--soft)' : 'transparent',
+      inColor: c.inbound === 'TUN' ? 'var(--vio)' : 'var(--ink2)',
+      viaColor: c.proxy ? 'var(--rose)' : 'var(--ink2)'
+    }));
+    const line = '1px solid var(--line)';
+    const facts = [
+      { k: '网络', v: 'TCP' },
+      { k: '入站', v: 'TUN（虚拟网卡）' },
+      { k: '主机', v: 'www.youtube.com:443' },
+      { k: '目标 IP', v: '198.51.100.44' },
+      { k: '已持续', v: '00:42' }
+    ].map((f, i) => ({ k: f.k, v: f.v, border: i === 0 ? 'none' : line }));
+    return { no: false, h: 720, conns: conns, facts: facts };
+  }
+}
+</script>
+</body>
+</html>

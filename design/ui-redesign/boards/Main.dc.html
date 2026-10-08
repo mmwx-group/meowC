@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Android 首页</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0;--bar:rgba(255,255,255,.86)}
+.t-dark{--bg:#0E0C11;--card:#221C29;--card2:#2F2838;--hero:#45283A;--btnon:#F3A6BF;--ink:#F7F0F3;--ink2:#B9ADBB;--line:rgba(255,255,255,.10);--pink:#F3A6BF;--soft:rgba(243,166,191,.16);--rose:#F7B6CB;--good:#57D292;--warn:#F2B257;--bad:#FF8377;--vio:#B3A2FF;--bar:rgba(38,32,45,.88)}
+</style>
+</helmet>
+<div class="{{theme}}" style="width: 412px; height: 892px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, 'Noto Sans SC', 'PingFang SC', sans-serif; padding: 44px 16px 0; display: flex; flex-direction: column; gap: 12px">
+
+  <!-- 顶栏 -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+    <img src="{{head}}" alt="" style="width: 38px; height: 38px; border-radius: 12px; object-fit: cover">
+    <div style="flex-grow: 1; font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.3px">MeowX</div>
+    <button aria-label="重新查询出口 IP" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+    </button>
+    <button aria-label="首页卡片" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+    </button>
+  </div>
+
+  <!-- 连接主卡：启动 = 建立 VPN，没有「接管方式」这一层 -->
+  <div style="background: {{heroBg}}; border-radius: 28px; padding: 18px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0">
+    <div style="display: flex; align-items: center; gap: 12px; height: 84px">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 4px">
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: {{statusColor}}">
+          <span style="width: 8px; height: 8px; border-radius: 4px; background: {{statusColor}}"></span>
+          <span>{{statusHint}}</span>
+        </div>
+        <div style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 32px; font-weight: 700; line-height: 38px">{{statusText}}</div>
+        <div style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 13px; color: var(--ink2)">{{uptime}}</div>
+      </div>
+      <button aria-label="{{powerLabel}}" onClick="{{toggle}}" style="width: 80px; height: 80px; border-radius: 26px; background: {{btnBg}}; color: {{btnInk}}; box-shadow: {{btnShadow}}; display: flex; align-items: center; justify-content: center">
+        <svg class="i" viewBox="0 0 24 24" width="34" height="34" style="stroke-width: 2.2"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+      </button>
+    </div>
+
+    <a href="ANodes.dc.html" style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; height: 56px; box-sizing: border-box">
+      <span style="width: 34px; height: 24px; border-radius: 7px; background: var(--card2); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: var(--ink2)">HK</span>
+      <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+        <span style="font-size: 15px; font-weight: 600">香港 01 · IEPL</span>
+        <span style="font-size: 12px; color: var(--ink2)">节点选择 › 自动选择</span>
+      </span>
+      <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; font-weight: 700; color: var(--good); background: var(--card2); border-radius: 10px; padding: 3px 8px">38 ms</span>
+      <svg class="i" viewBox="0 0 24 24" width="16" height="16" style="color: var(--ink2)"><path d="M9 6l6 6-6 6"/></svg>
+    </a>
+
+    <div style="background: var(--card); border-radius: 14px; padding: 3px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; height: 44px; box-sizing: border-box">
+      <button style="border-radius: 11px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 600">规则</button>
+      <button style="border-radius: 11px; font-size: 14px; font-weight: 500; color: var(--ink2)">全局</button>
+      <button style="border-radius: 11px; font-size: 14px; font-weight: 500; color: var(--ink2)">直连</button>
+    </div>
+  </div>
+
+  <!-- 网速（Android 带近 60 秒折线） -->
+  <div style="background: var(--card); border-radius: 24px; padding: 14px 16px 0; display: flex; flex-direction: column; gap: 6px; overflow: hidden; flex-shrink: 0">
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <div style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink2)">
+          <svg class="i" viewBox="0 0 24 24" width="13" height="13" style="color: var(--rose)"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+          <span>上传 · 会话 {{upTotal}}</span>
+        </div>
+        <div style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 22px; font-weight: 700">{{upRate}}</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <div style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink2)">
+          <svg class="i" viewBox="0 0 24 24" width="13" height="13" style="color: var(--vio)"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+          <span>下载 · 会话 {{downTotal}}</span>
+        </div>
+        <div style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 22px; font-weight: 700">{{downRate}}</div>
+      </div>
+    </div>
+    <sc-if value="{{on}}" hint-placeholder-val="{{true}}">
+      <svg viewBox="0 0 380 34" width="380" height="34" preserveAspectRatio="none" style="display: block; margin: 0 -16px; width: calc(100% + 32px)">
+        <polyline points="0,30 32,26 64,28 96,14 128,18 160,8 192,16 224,6 256,12 288,20 320,10 352,16 380,9" style="fill: none; stroke: var(--vio); stroke-width: 2; stroke-linejoin: round"></polyline>
+        <polyline points="0,32 32,31 64,29 96,30 128,25 160,27 192,22 224,26 256,24 288,28 320,23 352,26 380,24" style="fill: none; stroke: var(--rose); stroke-width: 2; stroke-linejoin: round"></polyline>
+      </svg>
+    </sc-if>
+    <sc-if value="{{off}}" hint-placeholder-val="{{false}}">
+      <div style="height: 34px; border-top: 1px dashed var(--line); margin-top: 6px"></div>
+    </sc-if>
+  </div>
+
+  <!-- 订阅 -->
+  <div style="background: var(--card); border-radius: 24px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0">
+    <div style="display: flex; align-items: center; gap: 6px">
+      <button style="display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600">
+        <span>妙妙屋 · 主力订阅</span>
+        <svg class="i" viewBox="0 0 24 24" width="13" height="13" style="color: var(--ink2)"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>
+      </button>
+      <span style="flex-grow: 1"></span>
+      <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; color: var(--ink2)">128.4 / 500 GB</span>
+    </div>
+    <div style="height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden">
+      <div style="width: 26%; height: 6px; border-radius: 3px; background: var(--pink)"></div>
+    </div>
+    <div style="display: flex; font-size: 11px; color: var(--ink2)">
+      <span style="flex-grow: 1">到期 2026-12-31</span>
+      <span>3 小时前更新</span>
+    </div>
+  </div>
+
+  <!-- Android 专属：分应用代理的状态与入口 -->
+  <a href="AApps.dc.html" style="background: var(--card); border-radius: 20px; padding: 0 12px 0 14px; height: 56px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; flex-shrink: 0">
+    <span style="width: 32px; height: 32px; border-radius: 10px; background: var(--soft); color: var(--rose); display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+      <svg class="i" viewBox="0 0 24 24" width="17" height="17"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><path d="M14 17l2 2 4-4"/></svg>
+    </span>
+    <span style="flex-grow: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0">
+      <span style="font-size: 15px; font-weight: 600">代理应用</span>
+      <span style="font-size: 12px; color: var(--ink2)">白名单 · 只代理选中的 12 个应用</span>
+    </span>
+    <svg class="i" viewBox="0 0 24 24" width="16" height="16" style="color: var(--ink2)"><path d="M9 6l6 6-6 6"/></svg>
+  </a>
+
+  <!-- 指标 -->
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; flex-shrink: 0">
+    <a href="AActivity.dc.html" style="background: var(--card); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 11px; color: var(--ink2)">代理连接</span>
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 18px; font-weight: 700">{{proxied}}</span>
+    </a>
+    <a href="AActivity.dc.html" style="background: var(--card); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 11px; color: var(--ink2)">直连连接</span>
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 18px; font-weight: 700">{{direct}}</span>
+    </a>
+    <button style="background: var(--card); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 2px; text-align: left">
+      <span style="font-size: 11px; color: var(--ink2)">内存</span>
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 18px; font-weight: 700">{{memory}}</span>
+    </button>
+    <button style="background: var(--card); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 2px; text-align: left">
+      <span style="font-size: 11px; color: var(--ink2)">DNS</span>
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', system-ui, sans-serif; font-size: 15px; font-weight: 700; line-height: 23px">Fake-IP</span>
+    </button>
+  </div>
+
+  <!-- 出口 IP -->
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; flex-shrink: 0">
+    <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px">
+      <span style="font-size: 11px; color: var(--ink2)">国内 · 直连出口</span>
+      <span style="display: flex; align-items: center; gap: 6px">
+        <span style="font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">CN</span>
+        <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 13px">203.0.113.24</span>
+      </span>
+    </div>
+    <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px">
+      <span style="font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{intlLabel}}</span>
+      <span style="display: flex; align-items: center; gap: 6px">
+        <sc-if value="{{on}}" hint-placeholder-val="{{true}}">
+          <span style="font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">HK</span>
+        </sc-if>
+        <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 13px; color: {{intlColor}}">{{intlIP}}</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- 悬浮导航：5 个 Tab 并成 4 个（配置 + 设置 → 我的） -->
+  <nav aria-label="主导航" style="position: absolute; left: 16px; right: 16px; bottom: 20px; height: 64px; border-radius: 32px; background: var(--bar); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(42,33,48,.14); padding: 5px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px">
+    <a href="Main.dc.html" aria-current="page" style="border-radius: 27px; background: var(--soft); color: var(--rose); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 700">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>
+      <span>首页</span>
+    </a>
+    <a href="ANodes.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>
+      <span>节点</span>
+    </a>
+    <a href="AActivity.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      <span>动态</span>
+    </a>
+    <a href="AMe.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>我的</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"connected":{"editor":"boolean","default":true},"$preview":{"width":412,"height":892}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false;
+    const base = this.props.connected ?? true;
+    const on = this.state && this.state.on !== undefined ? this.state.on : base;
+    return {
+      theme: dark ? 't-dark' : 't-light',
+      head: dark ? '/_blob/0d9f9a6adebe8f94f9e5a6c2eae537cf' : '/_blob/618ef02428a266b2c495af9b06f888be',
+      on: on, off: !on,
+      toggle: () => this.setState({ on: !on }),
+      heroBg: on ? 'var(--hero)' : 'var(--card2)',
+      statusColor: on ? 'var(--good)' : 'var(--ink2)',
+      statusHint: on ? '规则模式 · VPN 已建立' : '已就绪',
+      statusText: on ? '已连接' : '未连接',
+      uptime: on ? '已运行 02:14:36' : '点按右侧按钮开始',
+      powerLabel: on ? '断开连接' : '连接',
+      btnBg: on ? 'var(--btnon)' : 'var(--ink)',
+      btnInk: on ? '#2A2130' : 'var(--bg)',
+      btnShadow: on ? '0 8px 20px rgba(243,166,191,.5)' : '0 8px 20px rgba(42,33,48,.22)',
+      upRate: on ? '312 KB/s' : '0 KB/s',
+      downRate: on ? '4.8 MB/s' : '0 KB/s',
+      upTotal: on ? '86.2 MB' : '0 KB',
+      downTotal: on ? '1.42 GB' : '0 KB',
+      proxied: on ? '23' : '0',
+      direct: on ? '41' : '0',
+      memory: on ? '46 MB' : '—',
+      intlLabel: on ? '国际 · 经 香港 01' : '国际 · 代理出口',
+      intlIP: on ? '198.51.100.7' : '未连接',
+      intlColor: on ? 'var(--ink)' : 'var(--ink2)'
+    };
+  }
+}
+</script>
+</body>
+</html>

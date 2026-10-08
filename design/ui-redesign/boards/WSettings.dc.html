@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Windows 我的</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0}
+</style>
+</helmet>
+<div class="t-light" style="width: 1100px; height: 720px; box-sizing: border-box; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; display: flex">
+  <div style="width: 220px; flex-shrink: 0">
+    <dc-import name="WinSidebar" active="me" dark="{{no}}" compact="{{no}}" height="{{h}}" hint-size="220px,720px"></dc-import>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; padding: 12px 16px 16px 20px; display: flex; flex-direction: column; gap: 12px">
+    <!-- 标题行 = 自绘标题栏 -->
+    <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+      <div style="flex-grow: 1; font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 24px; font-weight: 700">我的</div>
+      <button style="height: 40px; padding: 0 14px; border-radius: 20px; background: var(--card); font-size: 13px; font-weight: 600">高级设置</button>
+      <span style="width: 1px; height: 20px; background: var(--line); margin: 0 4px"></span>
+      <button aria-label="窗口置顶" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6"/></svg>
+      </button>
+      <button aria-label="最小化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M6 12h12"/></svg>
+      </button>
+      <button aria-label="最大化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+      <button aria-label="关闭到托盘" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 292px minmax(0, 1fr) minmax(0, 1fr); gap: 12px">
+      <!-- 第 1 列：账户 + 订阅（原「配置」页） -->
+      <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0">
+        <div style="background: var(--hero); border-radius: 22px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img src="/_blob/618ef02428a266b2c495af9b06f888be" alt="" style="width: 52px; height: 52px; border-radius: 17px; object-fit: cover">
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 18px; font-weight: 700">[用户昵称]</span>
+              <span style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ink2)">
+                <span style="width: 7px; height: 7px; border-radius: 4px; background: var(--good)"></span>
+                <span>实时同步已启用</span>
+              </span>
+            </div>
+            <button style="height: 36px; padding: 0 14px; border-radius: 18px; background: var(--card); font-size: 12px; font-weight: 600">退出</button>
+          </div>
+          <div style="font-size: 11px; color: var(--ink2); line-height: 16px">未登录时：在主控网页点「登录客户端」会直接唤起 MeowX，也可以用账号密码登录。</div>
+        </div>
+
+        <div style="flex-grow: 1; min-height: 0; background: var(--card); border-radius: 22px; padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; overflow: hidden">
+          <div style="display: flex; align-items: center; height: 32px">
+            <span style="flex-grow: 1; font-size: 12px; font-weight: 600; color: var(--ink2)">订阅</span>
+            <button aria-label="刷新我的订阅" style="width: 32px; height: 32px; border-radius: 16px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+              <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+            </button>
+          </div>
+          <div style="background: var(--soft); box-shadow: inset 0 0 0 2px var(--rose); border-radius: 15px; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px">
+            <div style="display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 14px; font-weight: 600">妙妙屋 · 主力订阅</span>
+              <span style="font-size: 10px; font-weight: 700; color: var(--rose); background: var(--card); border-radius: 6px; padding: 1px 6px">当前</span>
+              <span style="flex-grow: 1"></span>
+              <button aria-label="订阅管理：刷新 / 查看配置 / 删除" style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+                <svg viewBox="0 0 24 24" width="16" height="16" style="fill: currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+              </button>
+            </div>
+            <div style="height: 6px; border-radius: 3px; background: var(--card); overflow: hidden">
+              <div style="width: 26%; height: 6px; border-radius: 3px; background: var(--pink)"></div>
+            </div>
+            <div style="display: flex; font-size: 11px; color: var(--ink2)">
+              <span style="flex-grow: 1; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace">128.4 / 500 GB</span>
+              <span>到期 2026-12-31</span>
+            </div>
+          </div>
+          <button style="background: var(--card2); border-radius: 15px; padding: 0 11px; height: 40px; display: flex; align-items: center; gap: 8px; text-align: left">
+            <span style="flex-grow: 1; font-size: 14px; font-weight: 500">备用订阅</span>
+            <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--ink2)">12.0 / 100 GB</span>
+          </button>
+          <button style="background: var(--card2); border-radius: 15px; padding: 0 11px; height: 40px; display: flex; align-items: center; gap: 8px; text-align: left">
+            <span style="flex-grow: 1; font-size: 14px; font-weight: 500">直连（不走代理）</span>
+            <span style="font-size: 11px; color: var(--ink2)">内置</span>
+          </button>
+          <div style="flex-grow: 1"></div>
+          <button style="height: 40px; border-radius: 15px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px">
+            <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
+            <span>导入订阅</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 第 2、3 列：设置分组。Windows 专属分组用粉色标题 -->
+      <sc-for list="{{cols}}" as="col" hint-placeholder-count="2">
+        <div style="display: flex; flex-direction: column; gap: 10px; min-width: 0">
+          <sc-for list="{{col.groups}}" as="g" hint-placeholder-count="3">
+            <div style="background: var(--card); border-radius: 20px; padding: 4px 12px 4px 14px; display: flex; flex-direction: column">
+              <div style="display: flex; align-items: center; gap: 6px; height: 30px">
+                <span style="flex-grow: 1; font-size: 12px; font-weight: 600; color: {{g.titleColor}}">{{g.title}}</span>
+                <span style="font-size: 11px; color: var(--ink2)">{{g.note}}</span>
+              </div>
+              <sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+                <div style="display: flex; align-items: center; gap: 8px; height: 40px; border-top: 1px solid var(--line)">
+                  <span style="flex-grow: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{r.label}}</span>
+                  <sc-if value="{{r.isValue}}" hint-placeholder-val="{{true}}">
+                    <span style="flex-shrink: 0; font-size: 12px; color: var(--ink2); font-family: {{r.font}}">{{r.value}}</span>
+                  </sc-if>
+                  <sc-if value="{{r.isKey}}" hint-placeholder-val="{{false}}">
+                    <span style="flex-shrink: 0; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 600; background: var(--card2); border-radius: 7px; padding: 3px 8px">{{r.value}}</span>
+                  </sc-if>
+                  <sc-if value="{{r.isSwitch}}" hint-placeholder-val="{{false}}">
+                    <button role="switch" aria-checked="{{r.on}}" aria-label="{{r.label}}" style="width: 42px; height: 26px; border-radius: 13px; background: {{r.swBg}}; padding: 3px; box-sizing: border-box; display: flex; justify-content: {{r.swAlign}}; flex-shrink: 0">
+                      <span style="width: 20px; height: 20px; border-radius: 10px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(42,33,48,.3)"></span>
+                    </button>
+                  </sc-if>
+                  <sc-if value="{{r.chev}}" hint-placeholder-val="{{false}}">
+                    <svg class="i" viewBox="0 0 24 24" width="13" height="13" style="color: var(--ink2); flex-shrink: 0"><path d="M9 6l6 6-6 6"/></svg>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1100,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mono = "ui-monospace, 'Cascadia Mono', Consolas, monospace";
+    const row = (r) => ({
+      label: r.label, value: r.value || '',
+      isSwitch: r.sw !== undefined, on: !!r.sw,
+      isKey: !!r.key, isValue: r.sw === undefined && !r.key,
+      chev: !!r.chev,
+      font: r.mono ? mono : 'inherit',
+      swBg: r.sw ? 'var(--btnon)' : 'var(--card2)',
+      swAlign: r.sw ? 'flex-end' : 'flex-start'
+    });
+    const group = (g) => ({
+      title: g.title, note: g.note || '',
+      titleColor: g.win ? 'var(--rose)' : 'var(--ink2)',
+      rows: g.rows.map(row)
+    });
+    const colA = [
+      { title: '启动与窗口', win: true, note: '关闭按钮 = 收到托盘', rows: [
+        { label: '开机启动', sw: true },
+        { label: '静默启动（不弹主窗口）', sw: false },
+        { label: '启动后自动连接', sw: true },
+        { label: '托盘显示代理组与节点', sw: true }
+      ] },
+      { title: '接管方式', win: true, rows: [
+        { label: '虚拟网卡（TUN）', sw: true },
+        { label: '系统代理', sw: false },
+        { label: '系统代理排除域名', value: '3 条', chev: true }
+      ] },
+      { title: '全局快捷键', win: true, rows: [
+        { label: '启动 / 停止', value: 'Ctrl + Alt + S', key: true },
+        { label: '显示 / 隐藏窗口', value: 'Ctrl + Alt + M', key: true },
+        { label: '切换模式', value: '未设置', chev: true },
+        { label: '系统代理 · 虚拟网卡', value: '未设置', chev: true }
+      ] }
+    ];
+    const colB = [
+      { title: '代理与测速', rows: [
+        { label: 'DNS 模式', value: '跟随订阅', chev: true },
+        { label: '测速方式', value: 'HTTPS 延迟', chev: true },
+        { label: '测速地址', value: 'Cloudflare', chev: true }
+      ] },
+      { title: '流量控制', rows: [
+        { label: '阻止 QUIC', sw: true },
+        { label: 'DNS 劫持', value: '2 条', chev: true },
+        { label: '绕过代理', value: '5 条', chev: true }
+      ] },
+      { title: '本地代理 · 订阅', rows: [
+        { label: '端口', value: '7890', mono: true, chev: true },
+        { label: '允许局域网', sw: false },
+        { label: '订阅同步间隔', value: '每天', chev: true },
+        { label: 'po0 加白', sw: true }
+      ] },
+      { title: '外观 · 关于', rows: [
+        { label: '主题', value: '跟随系统', chev: true },
+        { label: '记录日志', sw: false },
+        { label: '检查更新', value: '0.2.0 · App 内更新', chev: true }
+      ] }
+    ];
+    return { no: false, h: 720, cols: [{ groups: colA.map(group) }, { groups: colB.map(group) }] };
+  }
+}
+</script>
+</body>
+</html>

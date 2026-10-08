@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Android 我的</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0;--bar:rgba(255,255,255,.86)}
+</style>
+</helmet>
+<div class="t-light" style="width: 412px; height: 892px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, 'Noto Sans SC', 'PingFang SC', sans-serif; padding: 44px 16px 0; display: flex; flex-direction: column; gap: 12px">
+
+  <!-- 标题行 -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+    <div style="flex-grow: 1; font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 26px; font-weight: 700">我的</div>
+    <button aria-label="扫码登录 / 扫码导入订阅" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/></svg>
+    </button>
+  </div>
+
+  <!-- 账户（原「配置」页的账户卡） -->
+  <div style="background: var(--hero); border-radius: 28px; padding: 14px; display: flex; align-items: center; gap: 12px; flex-shrink: 0">
+    <img src="/_blob/618ef02428a266b2c495af9b06f888be" alt="" style="width: 60px; height: 60px; border-radius: 20px; object-fit: cover">
+    <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 20px; font-weight: 700">[用户昵称]</span>
+      <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--ink2)">
+        <span style="width: 7px; height: 7px; border-radius: 4px; background: var(--good)"></span>
+        <span>实时同步已启用 · [主控地址]</span>
+      </span>
+    </div>
+    <button style="height: 44px; padding: 0 16px; border-radius: 22px; background: var(--card); font-size: 13px; font-weight: 600">退出</button>
+  </div>
+
+  <!-- 订阅（原「配置」页：我的订阅 + 用量 + 导入） -->
+  <div style="background: var(--card); border-radius: 24px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0">
+    <div style="display: flex; align-items: center; height: 24px">
+      <span style="flex-grow: 1; font-size: 13px; font-weight: 600; color: var(--ink2)">订阅</span>
+      <button style="display: flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; color: var(--rose); height: 44px">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M12 5v14M5 12h14"/></svg>
+        <span>导入订阅</span>
+      </button>
+    </div>
+    <div style="background: var(--soft); box-shadow: inset 0 0 0 2px var(--rose); border-radius: 16px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px">
+      <div style="display: flex; align-items: center; gap: 6px">
+        <span style="font-size: 15px; font-weight: 600">妙妙屋 · 主力订阅</span>
+        <span style="font-size: 10px; font-weight: 700; color: var(--rose); background: var(--card); border-radius: 6px; padding: 2px 6px">当前</span>
+        <span style="flex-grow: 1"></span>
+        <button aria-label="订阅管理：刷新 / 查看配置 / 删除" style="width: 32px; height: 32px; margin: -4px -6px -4px 0; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+          <svg viewBox="0 0 24 24" width="18" height="18" style="fill: currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+        </button>
+      </div>
+      <div style="height: 6px; border-radius: 3px; background: var(--card); overflow: hidden">
+        <div style="width: 26%; height: 6px; border-radius: 3px; background: var(--pink)"></div>
+      </div>
+      <div style="display: flex; font-size: 11px; color: var(--ink2)">
+        <span style="flex-grow: 1; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace">128.4 / 500 GB</span>
+        <span>到期 2026-12-31 · 3 小时前更新</span>
+      </div>
+    </div>
+    <button style="background: var(--card2); border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; text-align: left; min-height: 44px">
+      <span style="flex-grow: 1; font-size: 15px; font-weight: 500">备用订阅</span>
+      <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; color: var(--ink2)">12.0 / 100 GB</span>
+    </button>
+    <button style="background: var(--card2); border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; text-align: left; min-height: 44px">
+      <span style="flex-grow: 1; font-size: 15px; font-weight: 500">直连（不走代理）</span>
+      <span style="font-size: 11px; color: var(--ink2)">内置</span>
+    </button>
+  </div>
+
+  <!-- 设置入口：每行进二级页。Android 专属项与常用的「高级」项提到这一层 -->
+  <div style="background: var(--card); border-radius: 24px; padding: 4px 0; display: flex; flex-direction: column; flex-shrink: 0">
+    <sc-for list="{{rows}}" as="r" hint-placeholder-count="10">
+      <a href="{{r.href}}" style="display: flex; align-items: center; gap: 12px; padding: 0 12px 0 14px; height: 52px; border-top: {{r.border}}">
+        <span style="width: 32px; height: 32px; border-radius: 10px; background: {{r.tile}}; color: {{r.tileInk}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <svg class="i" viewBox="0 0 24 24" width="17" height="17"><path d="{{r.d}}"/></svg>
+        </span>
+        <span style="flex-grow: 1; font-size: 15px; font-weight: 500; white-space: nowrap">{{r.label}}</span>
+        <span style="font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0">{{r.value}}</span>
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15" style="color: var(--ink2); flex-shrink: 0"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+    </sc-for>
+  </div>
+
+  <!-- 悬浮导航 -->
+  <nav aria-label="主导航" style="position: absolute; left: 16px; right: 16px; bottom: 20px; height: 64px; border-radius: 32px; background: var(--bar); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(42,33,48,.14); padding: 5px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px">
+    <a href="Main.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>
+      <span>首页</span>
+    </a>
+    <a href="ANodes.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>
+      <span>节点</span>
+    </a>
+    <a href="AActivity.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      <span>动态</span>
+    </a>
+    <a href="AMe.dc.html" aria-current="page" style="border-radius: 27px; background: var(--soft); color: var(--rose); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 700">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>我的</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const line = '1px solid var(--line)';
+    const rows = [
+      { label: '代理与测速', value: '跟随订阅 · HTTPS 延迟', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18' },
+      { label: '流量控制', value: '阻止 QUIC · 劫持 2 · 绕过 5', d: 'M6 3v6a6 6 0 0 0 6 6v6M18 3v6a6 6 0 0 1-6 6' },
+      { label: '代理应用', value: '白名单 · 12 个应用', d: 'M5 4h5v5H5zM14 4h5v5h-5zM5 13h5v5H5zM14 17l2 2 4-4', android: true, href: 'AApps.dc.html' },
+      { label: 'VPN 与系统', value: '自动连接 · 网速通知', d: 'M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z', android: true },
+      { label: '本地代理', value: '7890 · 仅本机', d: 'M4 6h16v5H4zM4 13h16v5H4zM7 8.500h.01M7 15.500h.01' },
+      { label: '订阅同步', value: '每天 · po0 加白', d: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5' },
+      { label: '日志', value: '未开启', d: 'M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5' },
+      { label: '外观', value: '跟随系统', d: 'M12 3a9 9 0 1 0 0 18zM12 3a9 9 0 0 1 0 18' },
+      { label: '高级', value: '内核配置 · 备份 · 脚本', d: 'M4 7h10M18 7h2M4 17h2M10 17h10M16 5v4M8 15v4' },
+      { label: '关于', value: '0.2.0 · 检查更新', d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 11v6M12 7.500h.01' }
+    ].map((r, i) => ({
+      label: r.label, value: r.value, d: r.d,
+      href: r.href || '#',
+      tile: r.android ? 'var(--soft)' : 'var(--card2)',
+      tileInk: r.android ? 'var(--rose)' : 'var(--ink)',
+      border: i === 0 ? 'none' : line
+    }));
+    return { rows: rows };
+  }
+}
+</script>
+</body>
+</html>

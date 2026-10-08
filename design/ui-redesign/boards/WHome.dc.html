@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Windows 首页</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0}
+.t-dark{--bg:#0E0C11;--card:#221C29;--card2:#2F2838;--hero:#45283A;--btnon:#F3A6BF;--ink:#F7F0F3;--ink2:#B9ADBB;--line:rgba(255,255,255,.10);--pink:#F3A6BF;--soft:rgba(243,166,191,.16);--rose:#F7B6CB;--good:#57D292;--warn:#F2B257;--bad:#FF8377;--vio:#B3A2FF}
+</style>
+</helmet>
+<div class="{{theme}}" style="width: {{w}}px; height: {{h}}px; box-sizing: border-box; overflow: hidden; background: var(--bg); color: var(--ink); font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; display: flex">
+  <div style="width: {{sw}}px; flex-shrink: 0">
+    <dc-import name="WinSidebar" active="home" dark="{{dark}}" compact="{{compact}}" height="{{h}}" hint-size="220px,720px"></dc-import>
+  </div>
+
+  <div style="flex-grow: 1; min-width: 0; padding: 12px 16px 16px 20px; display: flex; flex-direction: column; gap: 12px">
+    <!-- 标题行 = 自绘标题栏：整行可拖动，右端是窗口按钮（置顶 / 最小化 / 最大化 / 关闭到托盘） -->
+    <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+      <div style="flex-grow: 1; font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 24px; font-weight: 700">首页</div>
+      <button aria-label="重新查询出口 IP" style="width: 40px; height: 40px; border-radius: 20px; background: var(--card); display: flex; align-items: center; justify-content: center">
+        <svg class="i" viewBox="0 0 24 24" width="18" height="18"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+      </button>
+      <button aria-label="首页卡片" style="width: 40px; height: 40px; border-radius: 20px; background: var(--card); display: flex; align-items: center; justify-content: center">
+        <svg class="i" viewBox="0 0 24 24" width="18" height="18"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      </button>
+      <span style="width: 1px; height: 20px; background: var(--line); margin: 0 4px"></span>
+      <button aria-label="窗口置顶" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M9 4h6l-1 6 3 3v2H7v-2l3-3zM12 15v6"/></svg>
+      </button>
+      <button aria-label="最小化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M6 12h12"/></svg>
+      </button>
+      <button aria-label="最大化" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="14" height="14"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+      <button aria-label="关闭到托盘" style="width: 36px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M7 7l10 10M17 7L7 17"/></svg>
+      </button>
+    </div>
+
+    <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 5fr 7fr; gap: 14px">
+      <!-- 左列：连接卡 → 接管方式 → 订阅 -->
+      <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0">
+        <div style="background: var(--hero); border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+              <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--good)">
+                <span style="width: 8px; height: 8px; border-radius: 4px; background: var(--good)"></span>
+                <span>规则模式 · 核心运行中</span>
+              </div>
+              <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 28px; font-weight: 700; line-height: 34px">已连接</div>
+              <div style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: var(--ink2)">已运行 02:14:36</div>
+            </div>
+            <button aria-label="断开连接" style="width: 68px; height: 68px; border-radius: 22px; background: var(--btnon); color: #2A2130; box-shadow: 0 8px 20px rgba(243,166,191,.5); display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <svg class="i" viewBox="0 0 24 24" width="30" height="30" style="stroke-width: 2.2"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+            </button>
+          </div>
+          <a href="WNodes.dc.html" style="background: var(--card); border-radius: 16px; padding: 0 12px; display: flex; align-items: center; gap: 10px; height: 48px">
+            <span style="width: 32px; height: 22px; border-radius: 7px; background: var(--card2); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; color: var(--ink2)">HK</span>
+            <span style="flex-grow: 1; display: flex; flex-direction: column; min-width: 0">
+              <span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">香港 01 · IEPL</span>
+              <span style="font-size: 11px; color: var(--ink2)">节点选择 › 自动选择</span>
+            </span>
+            <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; font-weight: 700; color: var(--good); background: var(--card2); border-radius: 10px; padding: 3px 8px">38 ms</span>
+            <svg class="i" viewBox="0 0 24 24" width="15" height="15" style="color: var(--ink2)"><path d="M9 6l6 6-6 6"/></svg>
+          </a>
+          <div style="background: var(--card); border-radius: 13px; padding: 3px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 3px; height: 40px; box-sizing: border-box">
+            <button style="border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; font-weight: 600">规则</button>
+            <button style="border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink2)">全局</button>
+            <button style="border-radius: 10px; font-size: 13px; font-weight: 500; color: var(--ink2)">直连</button>
+          </div>
+        </div>
+
+        <!-- Windows 专属：接管方式。电源键只拉起核心，流量怎么进来由这两个开关决定 -->
+        <div style="background: var(--card); border-radius: 22px; padding: 6px 14px 6px 16px; display: flex; flex-direction: column; flex-shrink: 0">
+          <div style="display: flex; align-items: center; height: 30px">
+            <span style="flex-grow: 1; font-size: 12px; font-weight: 600; color: var(--ink2)">接管方式</span>
+            <span style="font-size: 11px; color: var(--ink2)">两个都关 = 只有手动设代理的程序走 MeowX</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; height: 52px; border-top: 1px solid var(--line)">
+            <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 14px; font-weight: 600">虚拟网卡（TUN）</span>
+              <span style="font-size: 11px; color: var(--good); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">接管全部应用的流量 · 服务已就绪</span>
+            </span>
+            <button role="switch" aria-checked="true" aria-label="虚拟网卡" style="width: 46px; height: 28px; border-radius: 14px; background: var(--btnon); padding: 3px; box-sizing: border-box; display: flex; justify-content: flex-end; flex-shrink: 0">
+              <span style="width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(42,33,48,.3)"></span>
+            </button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; height: 52px; border-top: 1px solid var(--line)">
+            <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+              <span style="font-size: 14px; font-weight: 600">系统代理</span>
+              <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--ink2)">127.0.0.1:7890</span>
+            </span>
+            <button role="switch" aria-checked="false" aria-label="系统代理" style="width: 46px; height: 28px; border-radius: 14px; background: var(--card2); padding: 3px; box-sizing: border-box; display: flex; justify-content: flex-start; flex-shrink: 0">
+              <span style="width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(42,33,48,.3)"></span>
+            </button>
+          </div>
+        </div>
+
+        <div style="background: var(--card); border-radius: 22px; padding: 12px 16px; display: flex; flex-direction: column; gap: 7px; flex-shrink: 0">
+          <div style="display: flex; align-items: center; gap: 6px">
+            <button style="display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 600">
+              <span>妙妙屋 · 主力订阅</span>
+              <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--ink2)"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"/></svg>
+            </button>
+            <span style="flex-grow: 1"></span>
+            <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: var(--ink2)">128.4 / 500 GB</span>
+          </div>
+          <div style="height: 6px; border-radius: 3px; background: var(--card2); overflow: hidden">
+            <div style="width: 26%; height: 6px; border-radius: 3px; background: var(--pink)"></div>
+          </div>
+          <div style="display: flex; font-size: 11px; color: var(--ink2)">
+            <span style="flex-grow: 1">到期 2026-12-31</span>
+            <span>3 小时前更新</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列：网速 → 指标 → 出口 IP → 活跃连接（撑满） -->
+      <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0">
+        <div style="background: var(--card); border-radius: 22px; padding: 12px 16px 0; display: flex; align-items: flex-end; gap: 16px; overflow: hidden; flex-shrink: 0; height: 84px; box-sizing: border-box">
+          <div style="display: flex; flex-direction: column; gap: 1px; padding-bottom: 12px; flex-shrink: 0">
+            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
+              <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--rose)"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+              <span>上传 · 会话 86.2 MB</span>
+            </div>
+            <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">312 KB/s</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 1px; padding-bottom: 12px; flex-shrink: 0">
+            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
+              <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--vio)"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+              <span>下载 · 会话 1.42 GB</span>
+            </div>
+            <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">4.8 MB/s</div>
+          </div>
+          <svg viewBox="0 0 240 60" preserveAspectRatio="none" aria-label="近 60 秒网速" style="display: block; flex-grow: 1; min-width: 0; height: 60px; margin-right: -16px">
+            <polygon points="0,60 0,48 20,42 40,45 60,26 80,32 100,15 120,28 140,11 160,20 180,35 200,17 220,27 240,14 240,60" style="fill: var(--vio); opacity: .10"></polygon>
+            <polyline points="0,48 20,42 40,45 60,26 80,32 100,15 120,28 140,11 160,20 180,35 200,17 220,27 240,14" style="fill: none; stroke: var(--vio); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
+            <polyline points="0,56 20,55 40,52 60,54 80,47 100,50 120,44 140,49 160,46 180,51 200,43 220,48 240,45" style="fill: none; stroke: var(--rose); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
+          </svg>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex-shrink: 0">
+          <a href="WActivity.dc.html" style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 11px; color: var(--ink2)">代理连接</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 20px; font-weight: 700">23</span>
+          </a>
+          <a href="WActivity.dc.html" style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px">
+            <span style="font-size: 11px; color: var(--ink2)">直连连接</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 20px; font-weight: 700">41</span>
+          </a>
+          <button style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px; text-align: left">
+            <span style="font-size: 11px; color: var(--ink2)">核心内存</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 20px; font-weight: 700">58 MB</span>
+          </button>
+          <button style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 1px; text-align: left">
+            <span style="font-size: 11px; color: var(--ink2)">DNS · 跟随订阅</span>
+            <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 20px; font-weight: 700">Fake-IP</span>
+          </button>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; flex-shrink: 0">
+          <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 11px; color: var(--ink2)">国内 · 直连出口</span>
+            <span style="display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">CN</span>
+              <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 14px">203.0.113.24</span>
+            </span>
+          </div>
+          <div style="background: var(--card); border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px">
+            <span style="font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">国际 · 经 香港 01 · IEPL</span>
+            <span style="display: flex; align-items: center; gap: 6px">
+              <span style="font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">HK</span>
+              <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 14px">198.51.100.7</span>
+            </span>
+          </div>
+        </div>
+
+        <div style="flex-grow: 1; min-height: 0; background: var(--card); border-radius: 22px; padding: 8px 16px; display: flex; flex-direction: column; overflow: hidden">
+          <div style="display: flex; align-items: center; height: 30px; flex-shrink: 0">
+            <span style="flex-grow: 1; font-size: 12px; font-weight: 600; color: var(--ink2)">活跃连接</span>
+            <a href="WActivity.dc.html" style="font-size: 12px; font-weight: 600; color: var(--rose)">查看全部 64 条</a>
+          </div>
+          <sc-for list="{{conns}}" as="c" hint-placeholder-count="7">
+            <div style="display: flex; align-items: center; gap: 8px; height: 38px; border-top: 1px solid var(--line); flex-shrink: 0">
+              <span style="flex-shrink: 0; width: 46px; text-align: center; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 10px; font-weight: 700; color: {{c.inColor}}; background: var(--card2); border-radius: 5px; padding: 2px 0">{{c.inbound}}</span>
+              <span style="flex-grow: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.host}}</span>
+              <span style="flex-shrink: 0; font-size: 12px; font-weight: 600; color: {{c.color}}">{{c.via}}</span>
+              <span style="flex-shrink: 0; width: 78px; text-align: right; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; color: var(--ink2)">{{c.down}}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"compact":{"editor":"boolean","default":false},"$preview":{"width":1100,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const dark = this.props.dark ?? false;
+    const compact = this.props.compact ?? false;
+    const conns = [
+      { inbound: 'TUN', host: 'www.youtube.com:443', via: '香港 01 · IEPL', down: '1.2 MB/s', proxy: true },
+      { inbound: 'TUN', host: 'api.telegram.org:443', via: '新加坡 01', down: '18 KB/s', proxy: true },
+      { inbound: 'HTTP', host: 'chatgpt.com:443', via: '洛杉矶 01 · 9929', down: '96 KB/s', proxy: true },
+      { inbound: 'TUN', host: 'api.bilibili.com:443', via: 'DIRECT', down: '240 KB/s', proxy: false },
+      { inbound: 'SOCKS', host: 'github.com:22', via: '香港 01 · IEPL', down: '3.1 MB/s', proxy: true },
+      { inbound: 'TUN', host: 'steamcdn-a.akamaihd.net:443', via: 'DIRECT', down: '8.6 MB/s', proxy: false },
+      { inbound: 'TUN', host: 'weixin.qq.com:443', via: 'DIRECT', down: '2 KB/s', proxy: false }
+    ].map((c) => ({
+      inbound: c.inbound, host: c.host, via: c.via, down: c.down,
+      inColor: c.inbound === 'TUN' ? 'var(--vio)' : 'var(--ink2)',
+      color: c.proxy ? 'var(--rose)' : 'var(--ink2)'
+    }));
+    return {
+      theme: dark ? 't-dark' : 't-light',
+      dark: dark, compact: compact,
+      w: compact ? 910 : 1100, h: compact ? 620 : 720, sw: compact ? 84 : 220,
+      conns: conns
+    };
+  }
+}
+</script>
+</body>
+</html>

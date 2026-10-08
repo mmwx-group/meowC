@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Android 代理应用</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+input{font:inherit;color:inherit;border:0;background:none;outline:none;padding:0}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0}
+</style>
+</helmet>
+<div class="t-light" style="width: 412px; height: 892px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, 'Noto Sans SC', 'PingFang SC', sans-serif; padding: 44px 16px 0; display: flex; flex-direction: column; gap: 12px">
+
+  <!-- 二级页标题行：返回 + 标题 + 刷新 -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 44px; flex-shrink: 0">
+    <a href="AMe.dc.html" aria-label="返回" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M15 6l-6 6 6 6"/></svg>
+    </a>
+    <div style="flex-grow: 1; font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 22px; font-weight: 700">代理应用</div>
+    <button aria-label="重新读取应用列表" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>
+    </button>
+  </div>
+
+  <!-- 总开关 + 模式 -->
+  <div style="background: var(--hero); border-radius: 24px; padding: 14px; display: flex; flex-direction: column; gap: 12px; flex-shrink: 0">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 16px; font-weight: 600">启用应用分流</span>
+        <span style="font-size: 12px; color: var(--ink2)">{{modeHint}}</span>
+      </div>
+      <span role="switch" aria-checked="true" style="width: 52px; height: 32px; border-radius: 16px; background: var(--btnon); padding: 3px; box-sizing: border-box; display: flex; justify-content: flex-end">
+        <span style="width: 26px; height: 26px; border-radius: 13px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(42,33,48,.3)"></span>
+      </span>
+    </div>
+    <div style="background: var(--card); border-radius: 14px; padding: 3px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; height: 44px; box-sizing: border-box">
+      <button onClick="{{setAllow}}" aria-pressed="{{isAllow}}" style="border-radius: 11px; background: {{allowBg}}; color: {{allowInk}}; font-size: 14px; font-weight: 600">白名单</button>
+      <button onClick="{{setDeny}}" aria-pressed="{{isDeny}}" style="border-radius: 11px; background: {{denyBg}}; color: {{denyInk}}; font-size: 14px; font-weight: 600">黑名单</button>
+    </div>
+  </div>
+
+  <!-- 搜索 + 筛选 -->
+  <div style="display: flex; gap: 8px; flex-shrink: 0">
+    <label style="flex-grow: 1; min-width: 0; background: var(--card); border-radius: 22px; height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px">
+      <svg class="i" viewBox="0 0 24 24" width="17" height="17" style="color: var(--ink2)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.500"/></svg>
+      <input type="search" placeholder="搜索应用名 / 包名" aria-label="搜索应用" style="flex-grow: 1; min-width: 0; font-size: 14px">
+    </label>
+    <button aria-pressed="false" style="flex-shrink: 0; height: 44px; padding: 0 14px; border-radius: 22px; background: var(--card); font-size: 13px; font-weight: 500">系统应用</button>
+  </div>
+
+  <div style="display: flex; align-items: center; height: 20px; flex-shrink: 0">
+    <span style="flex-grow: 1; font-size: 12px; color: var(--ink2)">已选 {{count}} 个 · 已选的排在前面</span>
+    <span style="font-size: 12px; color: var(--ink2)">共 86 个可联网应用</span>
+  </div>
+
+  <!-- 应用列表 -->
+  <div style="background: var(--card); border-radius: 24px; padding: 6px; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0">
+    <sc-for list="{{apps}}" as="a" hint-placeholder-count="10">
+      <button onClick="{{a.toggle}}" role="checkbox" aria-checked="{{a.on}}" style="display: flex; align-items: center; gap: 12px; padding: 0 10px; height: 58px; border-radius: 18px; background: {{a.bg}}; text-align: left">
+        <span style="width: 38px; height: 38px; border-radius: 12px; background: {{a.tile}}; color: #2A2130; font-family: ui-rounded, 'Google Sans', system-ui, sans-serif; font-size: 16px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0">{{a.letter}}</span>
+        <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.name}}</span>
+          <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.pkg}}</span>
+        </span>
+        <span style="width: 24px; height: 24px; border-radius: 8px; background: {{a.boxBg}}; box-shadow: {{a.boxRing}}; color: #FFFFFF; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+          <sc-if value="{{a.on}}" hint-placeholder-val="{{false}}">
+            <svg class="i" viewBox="0 0 24 24" width="16" height="16" style="stroke-width: 2.6"><path d="M5 12l5 5 9-10"/></svg>
+          </sc-if>
+        </span>
+      </button>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mode = (this.state && this.state.mode) || 'allow';
+    const picked = (this.state && this.state.picked) || { tg: true, yt: true, chrome: true, x: true, gh: true };
+    const list = [
+      { id: 'tg', name: 'Telegram', pkg: 'org.telegram.messenger', tile: '#BFDDF5' },
+      { id: 'yt', name: 'YouTube', pkg: 'com.google.android.youtube', tile: '#F7C4BF' },
+      { id: 'chrome', name: 'Chrome', pkg: 'com.android.chrome', tile: '#F5E3A8' },
+      { id: 'x', name: 'X', pkg: 'com.twitter.android', tile: '#D9D4DE' },
+      { id: 'gh', name: 'GitHub', pkg: 'com.github.android', tile: '#CFC7E8' },
+      { id: 'wx', name: '微信', pkg: 'com.tencent.mm', tile: '#BFE6CC' },
+      { id: 'ali', name: '支付宝', pkg: 'com.eg.android.AlipayGphone', tile: '#BFDDF5' },
+      { id: 'bili', name: '哔哩哔哩', pkg: 'tv.danmaku.bili', tile: '#F7CDDB' },
+      { id: 'map', name: '高德地图', pkg: 'com.autonavi.minimap', tile: '#CDE8F0' },
+      { id: 'music', name: '网易云音乐', pkg: 'com.netease.cloudmusic', tile: '#F7C4BF' }
+    ];
+    const sorted = list.filter((a) => picked[a.id]).concat(list.filter((a) => !picked[a.id]));
+    const apps = sorted.map((a) => {
+      const on = !!picked[a.id];
+      return {
+        name: a.name, pkg: a.pkg, tile: a.tile, letter: a.name.slice(0, 1), on: on,
+        bg: on ? 'var(--soft)' : 'transparent',
+        boxBg: on ? 'var(--rose)' : 'transparent',
+        boxRing: on ? 'none' : 'inset 0 0 0 2px var(--ink2)',
+        toggle: () => { const next = Object.assign({}, picked); next[a.id] = !on; this.setState({ picked: next }); }
+      };
+    });
+    const count = list.filter((a) => picked[a.id]).length;
+    const allow = mode === 'allow';
+    return {
+      apps: apps, count: count,
+      isAllow: allow, isDeny: !allow,
+      allowBg: allow ? 'var(--ink)' : 'transparent', allowInk: allow ? 'var(--bg)' : 'var(--ink2)',
+      denyBg: allow ? 'transparent' : 'var(--ink)', denyInk: allow ? 'var(--ink2)' : 'var(--bg)',
+      modeHint: allow ? '白名单：只有选中的应用走代理' : '黑名单：选中的应用不走代理',
+      setAllow: () => this.setState({ mode: 'allow' }),
+      setDeny: () => this.setState({ mode: 'deny' })
+    };
+  }
+}
+</script>
+</body>
+</html>

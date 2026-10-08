@@ -1,0 +1,33 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-08T05:15:00Z" },
+  "title": "MeowX 界面重设计（Android + Windows）",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 412, "h": 892, "title": "Android · 首页 · 已连接", "radius": 36, "is_interactive": true },
+    "AHomeOff.dc.html": { "x": 492, "y": 0, "w": 412, "h": 892, "title": "Android · 首页 · 未连接", "radius": 36 },
+    "AHomeDark.dc.html": { "x": 984, "y": 0, "w": 412, "h": 892, "title": "Android · 首页 · 深色", "radius": 36 },
+    "ANodes.dc.html": { "x": 1476, "y": 0, "w": 412, "h": 892, "title": "Android · 节点", "radius": 36, "is_interactive": true },
+    "AActivity.dc.html": { "x": 1968, "y": 0, "w": 412, "h": 892, "title": "Android · 动态 · 连接 / 日志", "radius": 36, "is_interactive": true },
+    "AMe.dc.html": { "x": 2460, "y": 0, "w": 412, "h": 892, "title": "Android · 我的 · 账户 / 订阅 / 设置", "radius": 36 },
+    "AApps.dc.html": { "x": 2952, "y": 0, "w": 412, "h": 892, "title": "Android · 代理应用（分应用代理）", "radius": 36, "is_interactive": true },
+    "WHome.dc.html": { "x": 0, "y": 1300, "w": 1100, "h": 720, "title": "Windows · 首页", "radius": 12 },
+    "WNodes.dc.html": { "x": 1180, "y": 1300, "w": 1100, "h": 720, "title": "Windows · 节点", "radius": 12, "is_interactive": true },
+    "WActivity.dc.html": { "x": 2360, "y": 1300, "w": 1100, "h": 720, "title": "Windows · 动态 · 连接 / 日志", "radius": 12 },
+    "WSettings.dc.html": { "x": 3540, "y": 1300, "w": 1100, "h": 720, "title": "Windows · 我的 · 账户 / 订阅 / 设置", "radius": 12 },
+    "WHomeDark.dc.html": { "x": 4720, "y": 1300, "w": 1100, "h": 720, "title": "Windows · 首页 · 深色", "radius": 12 },
+    "WCompact.dc.html": { "x": 5900, "y": 1300, "w": 910, "h": 620, "title": "Windows · 最小窗口 910×620（图标栏）", "radius": 12 },
+    "WTray.dc.html": { "x": 6890, "y": 1300, "w": 300, "h": 560, "title": "Windows · 托盘菜单", "radius": 12 },
+    "WinSidebar.dc.html": { "x": 7270, "y": 1300, "w": 220, "h": 720, "title": "组件 · Windows 侧栏", "radius": 12 }
+  },
+  "order": [
+    "Main.dc.html", "AHomeOff.dc.html", "AHomeDark.dc.html", "ANodes.dc.html", "AActivity.dc.html", "AMe.dc.html", "AApps.dc.html",
+    "WHome.dc.html", "WNodes.dc.html", "WActivity.dc.html", "WSettings.dc.html", "WHomeDark.dc.html", "WCompact.dc.html", "WTray.dc.html", "WinSidebar.dc.html"
+  ],
+  "notes": {
+    "android": { "x": 0, "y": -300, "text": "Android 手机", "kind": "title1", "maxW": 3364 },
+    "windows": { "x": 0, "y": 1012, "text": "Windows 桌面", "kind": "title1", "maxW": 7490 }
+  },
+  "designSystems": []
+}

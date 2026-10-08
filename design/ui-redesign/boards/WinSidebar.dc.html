@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Windows 侧栏</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0}
+.t-dark{--bg:#0E0C11;--card:#221C29;--card2:#2F2838;--hero:#45283A;--btnon:#F3A6BF;--ink:#F7F0F3;--ink2:#B9ADBB;--line:rgba(255,255,255,.10);--pink:#F3A6BF;--soft:rgba(243,166,191,.16);--rose:#F7B6CB;--good:#57D292;--warn:#F2B257;--bad:#FF8377;--vio:#B3A2FF}
+</style>
+</helmet>
+<div class="{{theme}}" style="width: {{w}}px; height: {{h}}px; box-sizing: border-box; padding: 12px 0 12px 12px; background: var(--bg); color: var(--ink); font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif">
+  <div style="height: 100%; box-sizing: border-box; background: var(--card); border-radius: 22px; padding: {{pad}}px; display: flex; flex-direction: column; gap: 4px">
+
+    <!-- 品牌：这一块同时是窗口拖动区 -->
+    <div style="display: flex; align-items: center; gap: 8px; height: 48px; justify-content: {{brandAlign}}">
+      <img src="{{head}}" alt="" style="width: 36px; height: 36px; border-radius: 11px; object-fit: cover">
+      <sc-if value="{{wide}}" hint-placeholder-val="{{true}}">
+        <span style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.3px">MeowX</span>
+      </sc-if>
+    </div>
+
+    <!-- 导航：5 个目的地并成 4 个 -->
+    <nav aria-label="主导航" style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px">
+      <sc-for list="{{items}}" as="it" hint-placeholder-count="4">
+        <a href="{{it.href}}" aria-label="{{it.label}}" style="height: 44px; border-radius: 14px; background: {{it.bg}}; color: {{it.ink}}; display: flex; align-items: center; justify-content: {{it.align}}; gap: 12px; padding: 0 {{it.padX}}px; font-size: 14px; font-weight: {{it.weight}}">
+          <svg class="i" viewBox="0 0 24 24" width="20" height="20" style="flex-shrink: 0"><path d="{{it.d}}"/></svg>
+          <sc-if value="{{it.wide}}" hint-placeholder-val="{{true}}">
+            <span style="flex-grow: 1">{{it.label}}</span>
+          </sc-if>
+          <sc-if value="{{it.badge}}" hint-placeholder-val="{{false}}">
+            <span style="font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 11px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 8px; padding: 1px 7px">{{it.badgeText}}</span>
+          </sc-if>
+        </a>
+      </sc-for>
+    </nav>
+
+    <div style="flex-grow: 1"></div>
+
+    <!-- 常驻连接控制：任何页面都能开关，并看得到接管方式 -->
+    <sc-if value="{{wide}}" hint-placeholder-val="{{true}}">
+      <div style="background: var(--hero); border-radius: 18px; padding: 10px; display: flex; flex-direction: column; gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px">
+          <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+            <span style="display: flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 700">
+              <span style="width: 8px; height: 8px; border-radius: 4px; background: var(--good)"></span>
+              <span>已连接</span>
+            </span>
+            <span style="font-size: 11px; color: var(--ink2)">规则模式 · 02:14:36</span>
+          </div>
+          <button aria-label="断开连接" style="width: 44px; height: 44px; border-radius: 15px; background: var(--btnon); color: #2A2130; box-shadow: 0 6px 16px rgba(243,166,191,.5); display: flex; align-items: center; justify-content: center">
+            <svg class="i" viewBox="0 0 24 24" width="21" height="21" style="stroke-width: 2.2"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+          </button>
+        </div>
+        <a href="WNodes.dc.html" style="background: var(--card); border-radius: 12px; padding: 0 8px; height: 36px; display: flex; align-items: center; gap: 6px">
+          <span style="font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">HK</span>
+          <span style="flex-grow: 1; min-width: 0; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">香港 01 · IEPL</span>
+          <svg class="i" viewBox="0 0 24 24" width="13" height="13" style="color: var(--ink2); flex-shrink: 0"><path d="M9 6l6 6-6 6"/></svg>
+        </a>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+          <button aria-pressed="true" style="height: 32px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600">TUN</button>
+          <button aria-pressed="false" style="height: 32px; border-radius: 10px; background: var(--card); color: var(--ink2); font-size: 12px; font-weight: 600">系统代理</button>
+        </div>
+      </div>
+    </sc-if>
+    <sc-if value="{{narrow}}" hint-placeholder-val="{{false}}">
+      <button aria-label="断开连接" style="width: 48px; height: 48px; border-radius: 16px; background: var(--btnon); color: #2A2130; box-shadow: 0 6px 16px rgba(243,166,191,.5); display: flex; align-items: center; justify-content: center; align-self: center; margin-bottom: 4px">
+        <svg class="i" viewBox="0 0 24 24" width="22" height="22" style="stroke-width: 2.2"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>
+      </button>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"active":{"editor":"enum","options":["home","nodes","activity","me"],"default":"home"},"dark":{"editor":"boolean","default":false},"compact":{"editor":"boolean","default":false},"height":{"editor":"int","default":720},"$preview":{"width":220,"height":720}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? 'home';
+    const dark = this.props.dark ?? false;
+    const narrow = this.props.compact ?? false;
+    const wide = !narrow;
+    const defs = [
+      { id: 'home', label: '首页', href: 'WHome.dc.html', d: 'M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z' },
+      { id: 'nodes', label: '节点', href: 'WNodes.dc.html', d: 'M6 9.500a2.500 2.500 0 1 0 0 5 2.500 2.500 0 0 0 0-5M18 3.500a2.500 2.500 0 1 0 0 5 2.500 2.500 0 0 0 0-5M18 15.500a2.500 2.500 0 1 0 0 5 2.500 2.500 0 0 0 0-5M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6', badge: '48' },
+      { id: 'activity', label: '动态', href: 'WActivity.dc.html', d: 'M3 12h4l3-8 4 16 3-8h4', badge: '64' },
+      { id: 'me', label: '我的', href: 'WSettings.dc.html', d: 'M12 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 21a8 8 0 0 1 16 0' }
+    ];
+    const items = defs.map((it) => {
+      const on = it.id === active;
+      return {
+        label: it.label, href: it.href, d: it.d, wide: wide,
+        badge: wide && !!it.badge, badgeText: it.badge || '',
+        bg: on ? 'var(--soft)' : 'transparent',
+        ink: on ? 'var(--rose)' : 'var(--ink2)',
+        weight: on ? 700 : 500,
+        align: wide ? 'flex-start' : 'center',
+        padX: wide ? 12 : 0
+      };
+    });
+    return {
+      theme: dark ? 't-dark' : 't-light',
+      head: dark ? '/_blob/0d9f9a6adebe8f94f9e5a6c2eae537cf' : '/_blob/618ef02428a266b2c495af9b06f888be',
+      w: narrow ? 84 : 220, h: this.props.height ?? 720,
+      pad: narrow ? 10 : 12,
+      wide: wide, narrow: narrow,
+      brandAlign: wide ? 'flex-start' : 'center',
+      items: items
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Android 动态</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+input{font:inherit;color:inherit;border:0;background:none;outline:none;padding:0}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0;--bar:rgba(255,255,255,.86)}
+</style>
+</helmet>
+<div class="t-light" style="width: 412px; height: 892px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, 'Noto Sans SC', 'PingFang SC', sans-serif; padding: 44px 16px 0; display: flex; flex-direction: column; gap: 12px">
+
+  <!-- 标题行 -->
+  <div style="display: flex; align-items: center; gap: 10px; height: 44px; flex-shrink: 0">
+    <div style="flex-grow: 1; font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 26px; font-weight: 700">动态</div>
+    <span style="display: flex; align-items: center; gap: 3px; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; color: var(--ink2)">
+      <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--rose)"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      <span>312 KB</span>
+    </span>
+    <span style="display: flex; align-items: center; gap: 3px; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; color: var(--ink2)">
+      <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--vio)"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+      <span>4.8 MB</span>
+    </span>
+  </div>
+
+  <!-- 分段 -->
+  <div style="background: var(--card); border-radius: 14px; padding: 3px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; height: 44px; box-sizing: border-box; flex-shrink: 0">
+    <button onClick="{{showConns}}" aria-pressed="{{isConns}}" style="border-radius: 11px; background: {{connsBg}}; color: {{connsInk}}; font-size: 14px; font-weight: 600">连接 · 64</button>
+    <button onClick="{{showLogs}}" aria-pressed="{{isLogs}}" style="border-radius: 11px; background: {{logsBg}}; color: {{logsInk}}; font-size: 14px; font-weight: 600">日志</button>
+  </div>
+
+  <!-- 搜索 -->
+  <label style="background: var(--card); border-radius: 22px; height: 44px; padding: 0 14px; display: flex; align-items: center; gap: 8px; flex-shrink: 0">
+    <svg class="i" viewBox="0 0 24 24" width="17" height="17" style="color: var(--ink2)"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.500"/></svg>
+    <input type="search" placeholder="搜索域名 / 目标 / 规则" aria-label="搜索" style="flex-grow: 1; min-width: 0; font-size: 14px">
+  </label>
+
+  <sc-if value="{{isConns}}" hint-placeholder-val="{{true}}">
+    <!-- 汇总行 -->
+    <div style="display: flex; align-items: center; height: 24px; flex-shrink: 0">
+      <span style="flex-grow: 1; font-size: 12px; color: var(--ink2)">64 条 · 代理 23 · 直连 41</span>
+      <button style="height: 44px; font-size: 13px; font-weight: 600; color: var(--bad)">全部关闭</button>
+    </div>
+
+    <!-- 连接列表 -->
+    <div style="background: var(--card); border-radius: 24px; padding: 2px 14px; display: flex; flex-direction: column; flex-shrink: 0">
+      <sc-for list="{{conns}}" as="c" hint-placeholder-count="8">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: {{c.border}}">
+          <span style="flex-shrink: 0; width: 34px; text-align: center; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 10px; font-weight: 700; color: {{c.netColor}}; background: var(--card2); border-radius: 5px; padding: 2px 0">{{c.net}}</span>
+          <span style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.host}}</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink2); min-width: 0">
+              <span style="font-weight: 600; color: {{c.viaColor}}; white-space: nowrap">{{c.via}}</span>
+              <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.rule}}</span>
+            </span>
+          </span>
+          <span style="flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; color: var(--ink2)">
+            <span>{{c.down}}</span>
+            <span>{{c.age}}</span>
+          </span>
+          <button aria-label="关闭这条连接" style="flex-shrink: 0; width: 32px; height: 44px; margin-right: -8px; display: flex; align-items: center; justify-content: center; color: var(--ink2)">
+            <svg class="i" viewBox="0 0 24 24" width="15" height="15"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{isLogs}}" hint-placeholder-val="{{false}}">
+    <div style="display: flex; align-items: center; gap: 8px; height: 24px; flex-shrink: 0">
+      <span style="flex-grow: 1; font-size: 12px; color: var(--ink2)">记录日志已开启 · 自动滚动到底</span>
+      <button style="height: 44px; font-size: 13px; font-weight: 600; color: var(--rose)">清空</button>
+    </div>
+    <div style="background: var(--card); border-radius: 24px; padding: 4px 14px; display: flex; flex-direction: column; flex-shrink: 0">
+      <sc-for list="{{logs}}" as="l" hint-placeholder-count="10">
+        <div style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; border-top: {{l.border}}">
+          <span style="flex-shrink: 0; width: 7px; height: 7px; border-radius: 4px; background: {{l.color}}; margin-top: 5px"></span>
+          <span style="flex-shrink: 0; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; color: var(--ink2); line-height: 17px">{{l.time}}</span>
+          <span style="flex-grow: 1; min-width: 0; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; line-height: 17px; word-break: break-all">{{l.text}}</span>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <!-- 悬浮导航 -->
+  <nav aria-label="主导航" style="position: absolute; left: 16px; right: 16px; bottom: 20px; height: 64px; border-radius: 32px; background: var(--bar); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(42,33,48,.14); padding: 5px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px">
+    <a href="Main.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>
+      <span>首页</span>
+    </a>
+    <a href="ANodes.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>
+      <span>节点</span>
+    </a>
+    <a href="AActivity.dc.html" aria-current="page" style="border-radius: 27px; background: var(--soft); color: var(--rose); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 700">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      <span>动态</span>
+    </a>
+    <a href="AMe.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>我的</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tab = (this.state && this.state.tab) || 'conns';
+    const line = '1px solid var(--line)';
+    const conns = [
+      { net: 'TCP', host: 'www.youtube.com:443', via: '香港 01 · IEPL', rule: 'GEOSITE,youtube', down: '↓ 1.2 MB/s', age: '00:42', proxy: true },
+      { net: 'UDP', host: 'api.telegram.org:443', via: '新加坡 01', rule: 'RULE-SET,telegram', down: '↓ 18 KB/s', age: '12:07', proxy: true },
+      { net: 'TCP', host: 'chatgpt.com:443', via: '洛杉矶 01 · 9929', rule: 'GEOSITE,openai', down: '↓ 96 KB/s', age: '03:15', proxy: true },
+      { net: 'TCP', host: 'mtalk.google.com:5228', via: 'DIRECT', rule: '代理推送服务 · 关', down: '↓ 0 KB/s', age: '2:14:36', proxy: false },
+      { net: 'TCP', host: 'api.bilibili.com:443', via: 'DIRECT', rule: 'GEOSITE,cn', down: '↓ 240 KB/s', age: '00:09', proxy: false },
+      { net: 'UDP', host: '223.5.5.5:53', via: 'DIRECT', rule: 'IP-CIDR,223.5.5.5/32', down: '↓ 0 KB/s', age: '00:01', proxy: false },
+      { net: 'TCP', host: 'github.com:443', via: '香港 01 · IEPL', rule: 'GEOSITE,github', down: '↓ 3.1 MB/s', age: '00:26', proxy: true },
+      { net: 'TCP', host: 'weixin.qq.com:443', via: 'DIRECT', rule: 'GEOSITE,cn', down: '↓ 2 KB/s', age: '41:20', proxy: false }
+    ].map((c, i) => ({
+      net: c.net, host: c.host, via: c.via, rule: c.rule, down: c.down, age: c.age,
+      netColor: c.net === 'UDP' ? 'var(--vio)' : 'var(--ink2)',
+      viaColor: c.proxy ? 'var(--rose)' : 'var(--ink2)',
+      border: i === 0 ? 'none' : line
+    }));
+    const logs = [
+      { time: '14:02:36', lv: 'info', text: '[TCP] www.youtube.com:443 → 香港 01 · IEPL 命中 GEOSITE,youtube' },
+      { time: '14:02:35', lv: 'info', text: '[UDP] api.telegram.org:443 → 新加坡 01 命中 RULE-SET,telegram' },
+      { time: '14:02:31', lv: 'warn', text: '节点 伦敦 01 测速超时，已从 自动选择 中暂时移除' },
+      { time: '14:02:20', lv: 'info', text: '[TCP] api.bilibili.com:443 → DIRECT 命中 GEOSITE,cn' },
+      { time: '14:02:02', lv: 'info', text: 'po0 加白（定时 · 203.0.113.8）成功：名单 2/5' },
+      { time: '14:01:58', lv: 'error', text: 'dns: 解析 example.invalid 失败：NXDOMAIN' },
+      { time: '14:01:40', lv: 'info', text: '订阅 妙妙屋 · 主力订阅 已更新：48 个节点' },
+      { time: '14:01:12', lv: 'info', text: 'VPN 已建立，栈模式 mixed，MTU 9000' }
+    ].map((l, i) => ({
+      time: l.time, text: l.text,
+      color: l.lv === 'error' ? 'var(--bad)' : l.lv === 'warn' ? 'var(--warn)' : 'var(--good)',
+      border: i === 0 ? 'none' : line
+    }));
+    const on = (active) => active ? 'var(--ink)' : 'transparent';
+    const ink = (active) => active ? 'var(--bg)' : 'var(--ink2)';
+    return {
+      isConns: tab === 'conns', isLogs: tab === 'logs',
+      connsBg: on(tab === 'conns'), connsInk: ink(tab === 'conns'),
+      logsBg: on(tab === 'logs'), logsInk: ink(tab === 'logs'),
+      showConns: () => this.setState({ tab: 'conns' }),
+      showLogs: () => this.setState({ tab: 'logs' }),
+      conns: conns, logs: logs
+    };
+  }
+}
+</script>
+</body>
+</html>

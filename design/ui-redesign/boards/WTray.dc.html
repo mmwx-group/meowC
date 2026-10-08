@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Windows 托盘菜单</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--soft:#FCE4EC;--rose:#B02E63;--good:#17693F}
+</style>
+</helmet>
+<div class="t-light" style="width: 300px; height: 560px; box-sizing: border-box; background: var(--bg); color: var(--ink); font-family: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif; padding: 12px; display: flex; flex-direction: column">
+  <!-- 托盘右键菜单是系统原生菜单：这张画板只定条目的顺序与分组，样式跟随 Windows 自己的菜单 -->
+  <div role="menu" aria-label="MeowX 托盘菜单" style="flex-grow: 1; background: var(--card); border-radius: 10px; border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(42,33,48,.16); padding: 5px; display: flex; flex-direction: column">
+    <sc-for list="{{items}}" as="m" hint-placeholder-count="16">
+      <sc-if value="{{m.isSep}}" hint-placeholder-val="{{false}}">
+        <div role="separator" style="height: 1px; background: var(--line); margin: 4px 8px"></div>
+      </sc-if>
+      <sc-if value="{{m.isItem}}" hint-placeholder-val="{{true}}">
+        <button role="menuitem" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 6px; text-align: left; background: {{m.bg}}">
+          <span style="width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--rose)">
+            <sc-if value="{{m.check}}" hint-placeholder-val="{{false}}">
+              <svg class="i" viewBox="0 0 24 24" width="14" height="14" style="stroke-width: 2.4"><path d="M5 12l5 5 9-10"/></svg>
+            </sc-if>
+            <sc-if value="{{m.radio}}" hint-placeholder-val="{{false}}">
+              <span style="width: 7px; height: 7px; border-radius: 4px; background: var(--rose)"></span>
+            </sc-if>
+          </span>
+          <span style="flex-grow: 1; min-width: 0; font-size: 13px; font-weight: {{m.weight}}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{m.label}}</span>
+          <span style="flex-shrink: 0; font-size: 11px; color: var(--ink2); white-space: nowrap">{{m.hint}}</span>
+          <sc-if value="{{m.sub}}" hint-placeholder-val="{{false}}">
+            <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--ink2); flex-shrink: 0"><path d="M9 6l6 6-6 6"/></svg>
+          </sc-if>
+        </button>
+      </sc-if>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":300,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const S = { sep: true };
+    const raw = [
+      { label: '显示主窗口', bold: true },
+      { label: '停止', hint: '已连接 02:14:36' },
+      S,
+      { label: '规则', radio: true },
+      { label: '全局' },
+      { label: '直连' },
+      S,
+      { label: '虚拟网卡（TUN）', check: true },
+      { label: '系统代理' },
+      S,
+      { label: '节点选择', hint: '自动选择', sub: true },
+      { label: '自动选择', hint: '香港 01 · 38 ms', sub: true },
+      { label: '流媒体', hint: '东京 01', sub: true },
+      S,
+      { label: '开机启动', check: true },
+      { label: '复制终端代理命令', sub: true },
+      { label: '重启内核' },
+      S,
+      { label: '退出 MeowX' }
+    ];
+    const items = raw.map((m) => ({
+      isSep: !!m.sep, isItem: !m.sep,
+      label: m.label || '', hint: m.hint || '',
+      check: !!m.check, radio: !!m.radio, sub: !!m.sub,
+      weight: m.bold ? 700 : 500,
+      bg: m.bold ? 'var(--card2)' : 'transparent'
+    }));
+    return { items: items };
+  }
+}
+</script>
+</body>
+</html>

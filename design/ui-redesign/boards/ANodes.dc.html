@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<title>MeowX Android 节点</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}a:hover{color:inherit}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+.i{fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.t-light{--bg:#EFE8DF;--card:#FFFFFF;--card2:#F3EDE6;--hero:#F7CDDB;--btnon:#E77FA6;--ink:#2A2130;--ink2:#665A69;--line:rgba(42,33,48,.10);--pink:#F3A6BF;--soft:#FCE4EC;--rose:#B02E63;--good:#17693F;--warn:#9A5200;--bad:#B93228;--vio:#5B45B0;--gold:#A8700A;--silver:#6E7480;--bar:rgba(255,255,255,.86)}
+</style>
+</helmet>
+<div class="t-light" style="width: 412px; height: 892px; box-sizing: border-box; position: relative; overflow: hidden; background: var(--bg); color: var(--ink); font-family: system-ui, 'Noto Sans SC', 'PingFang SC', sans-serif; padding: 44px 0 0; display: flex; flex-direction: column; gap: 12px">
+
+  <!-- 标题行 -->
+  <div style="display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; flex-shrink: 0">
+    <div style="flex-grow: 1; display: flex; flex-direction: column">
+      <span style="font-family: ui-rounded, 'Google Sans', 'SF Pro Rounded', 'Noto Sans SC', system-ui, sans-serif; font-size: 26px; font-weight: 700; line-height: 30px">节点</span>
+      <span style="font-size: 12px; color: var(--ink2)">6 个代理组 · 48 个节点</span>
+    </div>
+    <button aria-label="节点视图：列表 / 标签，卡片尺寸" style="width: 44px; height: 44px; border-radius: 22px; background: var(--card); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+    </button>
+    <button aria-label="全部测速" style="width: 44px; height: 44px; border-radius: 22px; background: var(--ink); color: var(--bg); display: flex; align-items: center; justify-content: center">
+      <svg class="i" viewBox="0 0 24 24" width="20" height="20"><path d="M13 2L5 14h6l-1 8 8-12h-6z"/></svg>
+    </button>
+  </div>
+
+  <!-- 代理组标签（横向滑动；左右滑动内容区也能换组） -->
+  <div style="display: flex; gap: 8px; padding: 0 16px; overflow: hidden; height: 44px; flex-shrink: 0">
+    <button style="flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--card); font-size: 14px; font-weight: 500">节点选择</button>
+    <button style="flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 600">自动选择</button>
+    <button style="flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--card); font-size: 14px; font-weight: 500">流媒体</button>
+    <button style="flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--card); font-size: 14px; font-weight: 500">AI 服务</button>
+    <button style="flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--card); font-size: 14px; font-weight: 500">Telegram</button>
+  </div>
+
+  <!-- 当前组摘要：url-test / fallback 组带「自动选择」开关，手选 = 固定 -->
+  <div style="margin: 0 16px; background: var(--hero); border-radius: 22px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0">
+    <div style="display: flex; align-items: center; gap: 10px">
+      <div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+        <div style="display: flex; align-items: center; gap: 6px">
+          <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; font-weight: 600; color: var(--rose); background: var(--card); border-radius: 8px; padding: 2px 7px">url-test</span>
+          <span style="font-size: 12px; color: var(--ink2)">12 个成员 · {{pinHint}}</span>
+        </div>
+        <div style="font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{currentName}}</div>
+      </div>
+      <span style="font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 12px; font-weight: 700; color: var(--good); background: var(--card); border-radius: 10px; padding: 3px 8px">{{currentMs}}</span>
+      <button style="height: 44px; padding: 0 14px; border-radius: 22px; background: var(--card); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 4px">
+        <svg class="i" viewBox="0 0 24 24" width="15" height="15" style="color: var(--rose)"><path d="M13 2L5 14h6l-1 8 8-12h-6z"/></svg>
+        <span>测速</span>
+      </button>
+    </div>
+    <button onClick="{{unpin}}" aria-pressed="{{auto}}" style="background: var(--card); border-radius: 14px; height: 44px; padding: 0 8px 0 12px; display: flex; align-items: center; gap: 8px; text-align: left">
+      <span style="flex-grow: 1; font-size: 14px; font-weight: 500">自动选择</span>
+      <span style="font-size: 12px; color: var(--ink2)">{{autoHint}}</span>
+      <span style="width: 46px; height: 28px; border-radius: 14px; background: {{swBg}}; padding: 3px; box-sizing: border-box; display: flex; justify-content: {{swAlign}}">
+        <span style="width: 22px; height: 22px; border-radius: 11px; background: #FFFFFF; box-shadow: 0 1px 3px rgba(42,33,48,.3)"></span>
+      </span>
+    </button>
+  </div>
+
+  <!-- 节点网格 -->
+  <div style="padding: 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+    <sc-for list="{{nodes}}" as="n" hint-placeholder-count="12">
+      <button onClick="{{n.pick}}" aria-pressed="{{n.selected}}" style="text-align: left; background: {{n.bg}}; box-shadow: {{n.ring}}; border-radius: 18px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; min-height: 64px; box-sizing: border-box">
+        <span style="display: flex; align-items: center; gap: 6px; min-width: 0; width: 100%">
+          <span style="flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--ink2); background: var(--card2); border-radius: 5px; padding: 2px 5px">{{n.cc}}</span>
+          <span style="flex-grow: 1; min-width: 0; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{n.name}}</span>
+          <sc-if value="{{n.pinned}}" hint-placeholder-val="{{false}}">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-label="已固定，再点一次恢复自动选择" style="flex-shrink: 0; fill: var(--rose)"><path d="M9 3h6l-1 6 3 3v2h-5v6l-1 1-1-1v-6H5v-2l3-3z"/></svg>
+          </sc-if>
+        </span>
+        <span style="display: flex; align-items: center; gap: 6px; width: 100%">
+          <span style="flex-grow: 1; min-width: 0; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{n.sub}}</span>
+          <sc-if value="{{n.medal}}" hint-placeholder-val="{{false}}">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-label="回程奖牌" style="flex-shrink: 0; fill: {{n.medalColor}}"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8-6.1-3.5-6.1 3.5 1.4-6.8L2.200 9.1l6.900-.8z"/></svg>
+          </sc-if>
+          <sc-if value="{{n.unlock}}" hint-placeholder-val="{{false}}">
+            <svg class="i" viewBox="0 0 24 24" width="14" height="14" aria-label="流媒体解锁" style="flex-shrink: 0; color: {{n.unlockColor}}"><rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>
+          </sc-if>
+          <span style="flex-shrink: 0; font-family: ui-monospace, 'JetBrains Mono', Menlo, monospace; font-size: 11px; font-weight: 700; color: {{n.msColor}}; background: var(--card2); border-radius: 9px; padding: 2px 7px">{{n.msText}}</span>
+        </span>
+      </button>
+    </sc-for>
+  </div>
+
+  <!-- 悬浮导航 -->
+  <nav aria-label="主导航" style="position: absolute; left: 16px; right: 16px; bottom: 20px; height: 64px; border-radius: 32px; background: var(--bar); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(42,33,48,.14); padding: 5px; box-sizing: border-box; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px">
+    <a href="Main.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M4 11l8-7 8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"/></svg>
+      <span>首页</span>
+    </a>
+    <a href="ANodes.dc.html" aria-current="page" style="border-radius: 27px; background: var(--soft); color: var(--rose); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 700">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/></svg>
+      <span>节点</span>
+    </a>
+    <a href="AActivity.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      <span>动态</span>
+    </a>
+    <a href="AMe.dc.html" style="border-radius: 27px; color: var(--ink2); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11px; font-weight: 500">
+      <svg class="i" viewBox="0 0 24 24" width="22" height="22"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+      <span>我的</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":412,"height":892}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const raw = [
+      { id: 'hk1', cc: 'HK', name: '香港 01 · IEPL', sub: 'vless · reality', ms: 38, medal: 'gold', unlock: 'full' },
+      { id: 'hk2', cc: 'HK', name: '香港 02 · BGP', sub: 'trojan · ws', ms: 52, medal: 'silver', unlock: 'part' },
+      { id: 'jp1', cc: 'JP', name: '东京 01 · IIJ', sub: 'hy2', ms: 61, medal: 'gold', unlock: 'full' },
+      { id: 'jp2', cc: 'JP', name: '大阪 02', sub: 'ss', ms: 74, unlock: 'part' },
+      { id: 'sg1', cc: 'SG', name: '新加坡 01', sub: 'vmess · tls · ws', ms: 88, unlock: 'full' },
+      { id: 'tw1', cc: 'TW', name: '台北 01 · HiNet', sub: 'anytls', ms: 96, medal: 'silver' },
+      { id: 'us1', cc: 'US', name: '洛杉矶 01 · 9929', sub: 'miu · vision', ms: 148, medal: 'gold', unlock: 'full' },
+      { id: 'us2', cc: 'US', name: '圣何塞 02', sub: 'trojan', ms: 171, unlock: 'part' },
+      { id: 'kr1', cc: 'KR', name: '首尔 01', sub: 'ss', ms: 83 },
+      { id: 'de1', cc: 'DE', name: '法兰克福 01', sub: 'mieru', ms: 236 },
+      { id: 'gb1', cc: 'GB', name: '伦敦 01', sub: 'trojan', ms: 0 },
+      { id: 'au1', cc: 'AU', name: '悉尼 01', sub: 'vless · reality', ms: 312 }
+    ];
+    const pinned = this.state && this.state.pinned !== undefined ? this.state.pinned : null;
+    const current = pinned || 'hk1';
+    const color = (ms) => ms === 0 ? 'var(--bad)' : ms < 100 ? 'var(--good)' : ms < 200 ? 'var(--warn)' : 'var(--bad)';
+    const nodes = raw.map((n) => {
+      const sel = n.id === current;
+      return {
+        cc: n.cc, name: n.name, sub: n.sub,
+        selected: sel,
+        pinned: n.id === pinned,
+        bg: sel ? 'var(--soft)' : 'var(--card)',
+        ring: sel ? 'inset 0 0 0 2px var(--rose)' : 'none',
+        medal: !!n.medal,
+        medalColor: n.medal === 'gold' ? 'var(--gold)' : 'var(--silver)',
+        unlock: !!n.unlock,
+        unlockColor: n.unlock === 'full' ? 'var(--good)' : 'var(--warn)',
+        msText: n.ms === 0 ? '超时' : n.ms + ' ms',
+        msColor: color(n.ms),
+        pick: () => this.setState({ pinned: n.id === pinned ? null : n.id })
+      };
+    });
+    const cur = raw.find((n) => n.id === current);
+    return {
+      nodes: nodes,
+      auto: !pinned,
+      currentName: cur.name,
+      currentMs: cur.ms + ' ms',
+      pinHint: pinned ? '已固定' : '自动',
+      autoHint: pinned ? '已手动固定，打开恢复' : '按延迟自动切换',
+      swBg: pinned ? 'var(--card2)' : 'var(--btnon)',
+      swAlign: pinned ? 'flex-start' : 'flex-end',
+      unpin: () => this.setState({ pinned: null })
+    };
+  }
+}
+</script>
+</body>
+</html>
