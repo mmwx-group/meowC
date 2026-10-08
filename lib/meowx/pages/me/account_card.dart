@@ -44,6 +44,10 @@ class AccountCard extends ConsumerWidget {
                     width: avatarSize,
                     height: avatarSize,
                     fit: BoxFit.cover,
+                    // 主控给多大的图就解多大，碰上几千像素的头像要占十几 MB：解码宽度封顶在显示宽度的 4 倍（比这小的图原样解）。
+                    // 只限宽度——两个方向都限会把非正方形的头像压变形；留 4 倍是因为引擎缩图用的是不带 mipmap 的双线性，
+                    // 一步缩太多会出锯齿，剩下的几倍交给绘制时的 mipmap
+                    cacheWidth: (avatarSize * MediaQuery.devicePixelRatioOf(context) * 4).ceil(),
                     errorBuilder: (_, _, _) => fallback,
                   ),
                 ),

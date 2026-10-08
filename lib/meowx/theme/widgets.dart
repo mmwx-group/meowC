@@ -367,8 +367,10 @@ class BrandHead extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.31),
+      // 256 的小图（scripts/make-brand-assets.py 从 1024 的那张缩好的）：整张 1024 解码后 4MB 多，这里最大只画 60dp。
+      // 不用 cacheWidth 让引擎现缩——那是不带 mipmap 的双线性，缩这么多倍会出锯齿。
       child: Image.asset(
-        dark ? 'assets/images/icon.png' : 'assets/images/icon_light.png',
+        dark ? 'assets/images/icon_256.png' : 'assets/images/icon_light_256.png',
         width: size,
         height: size,
         fit: BoxFit.cover,

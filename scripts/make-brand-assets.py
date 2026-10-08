@@ -119,6 +119,10 @@ banner.convert("RGB").resize((320, 180), Image.LANCZOS).save(out(os.path.join(RE
 # ---- App 内 / 关于页 / 窗口标题图标：icon.png = 深色版、icon_light.png = 浅色版（沿用 Bettbox 的取名与 isDark 分支）----
 rounded(dark_art, 0.22).save(out(os.path.join(IMAGES, "icon.png")), optimize=True)
 rounded(light_art, 0.22).save(out(os.path.join(IMAGES, "icon_light.png")), optimize=True)
+# App 内的头像（首页 / 侧栏 / 账户卡 / 关于页，最大 60dp）用 256 的小图：1024 的整图解码后 4MB 多，只为画 36–60dp。
+# 这里先缩好而不是让 Flutter 按 cacheWidth 缩——引擎那一步是不带 mipmap 的双线性，缩 9 倍以上头发丝全是锯齿。
+rounded(dark_art, 0.22).resize((256, 256), Image.LANCZOS).save(out(os.path.join(IMAGES, "icon_256.png")), optimize=True)
+rounded(light_art, 0.22).resize((256, 256), Image.LANCZOS).save(out(os.path.join(IMAGES, "icon_light_256.png")), optimize=True)
 
 # ---- Windows 可执行文件 / 安装包图标 ----
 ICO_SIZES = [(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
