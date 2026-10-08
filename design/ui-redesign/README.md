@@ -9,4 +9,11 @@
 - `assets/`：画板里引用的两张品牌图。画板源码里写的是画布上的资产地址：
   `/_blob/618ef02428a266b2c495af9b06f888be` = `art-light.png`，`/_blob/0d9f9a6adebe8f94f9e5a6c2eae537cf` = `art-dark.png`
 
+本地预览（不依赖 claude.ai，任何浏览器直接打开）：
+
+```sh
+python3 design/ui-redesign/build-preview.py   # 生成 design/ui-redesign/preview.html
+open design/ui-redesign/preview.html
+```
+
 状态：设计稿，尚未实现。

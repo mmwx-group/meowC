@@ -48,7 +48,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
     </div>
 
     <div style="flex-grow: 1; min-height: 0; display: grid; grid-template-columns: 5fr 7fr; gap: 14px">
-      <!-- 左列：连接卡 → 接管方式 → 订阅 -->
+      <!-- 左列：连接卡 → 接管方式 → 网速（撑满） -->
       <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0">
         <div style="background: var(--hero); border-radius: 24px; padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0">
           <div style="display: flex; align-items: center; gap: 12px">
@@ -106,6 +106,38 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
           </div>
         </div>
 
+        <!-- 网速：撑满左列剩余高度 -->
+        <div style="flex-grow: 1; min-height: 0; background: var(--card); border-radius: 22px; padding: 12px 16px 0; display: flex; flex-direction: column; gap: 6px; overflow: hidden">
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; flex-shrink: 0">
+            <div style="display: flex; flex-direction: column; gap: 1px">
+              <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
+                <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--rose)"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+                <span>上传 · 会话 86.2 MB</span>
+              </div>
+              <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">312 KB/s</div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 1px">
+              <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
+                <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--vio)"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
+                <span>下载 · 会话 1.42 GB</span>
+              </div>
+              <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">4.8 MB/s</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; font-size: 11px; color: var(--ink2); flex-shrink: 0">
+            <span style="flex-grow: 1">近 60 秒</span>
+            <span>峰值 6.1 MB/s</span>
+          </div>
+          <svg viewBox="0 0 360 120" preserveAspectRatio="none" aria-label="近 60 秒网速" style="display: block; flex-grow: 1; min-height: 40px; margin: 0 -16px; width: calc(100% + 32px)">
+            <polygon points="0,120 0,96 30,84 60,90 90,52 120,64 150,30 180,56 210,22 240,40 270,70 300,34 330,54 360,28 360,120" style="fill: var(--vio); opacity: .10"></polygon>
+            <polyline points="0,96 30,84 60,90 90,52 120,64 150,30 180,56 210,22 240,40 270,70 300,34 330,54 360,28" style="fill: none; stroke: var(--vio); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
+            <polyline points="0,112 30,110 60,104 90,108 120,94 150,100 180,88 210,98 240,92 270,102 300,86 330,96 360,90" style="fill: none; stroke: var(--rose); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 右列：订阅 → 指标 → 出口 IP → 活跃连接（撑满） -->
+      <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0">
         <div style="background: var(--card); border-radius: 22px; padding: 12px 16px; display: flex; flex-direction: column; gap: 7px; flex-shrink: 0">
           <div style="display: flex; align-items: center; gap: 6px">
             <button style="display: flex; align-items: center; gap: 4px; font-size: 14px; font-weight: 600">
@@ -122,31 +154,6 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
             <span style="flex-grow: 1">到期 2026-12-31</span>
             <span>3 小时前更新</span>
           </div>
-        </div>
-      </div>
-
-      <!-- 右列：网速 → 指标 → 出口 IP → 活跃连接（撑满） -->
-      <div style="display: flex; flex-direction: column; gap: 12px; min-width: 0; min-height: 0">
-        <div style="background: var(--card); border-radius: 22px; padding: 12px 16px 0; display: flex; align-items: flex-end; gap: 16px; overflow: hidden; flex-shrink: 0; height: 84px; box-sizing: border-box">
-          <div style="display: flex; flex-direction: column; gap: 1px; padding-bottom: 12px; flex-shrink: 0">
-            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
-              <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--rose)"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
-              <span>上传 · 会话 86.2 MB</span>
-            </div>
-            <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">312 KB/s</div>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 1px; padding-bottom: 12px; flex-shrink: 0">
-            <div style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ink2)">
-              <svg class="i" viewBox="0 0 24 24" width="12" height="12" style="color: var(--vio)"><path d="M12 5v14M6 13l6 6 6-6"/></svg>
-              <span>下载 · 会话 1.42 GB</span>
-            </div>
-            <div style="font-family: ui-rounded, 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif; font-size: 22px; font-weight: 700">4.8 MB/s</div>
-          </div>
-          <svg viewBox="0 0 240 60" preserveAspectRatio="none" aria-label="近 60 秒网速" style="display: block; flex-grow: 1; min-width: 0; height: 60px; margin-right: -16px">
-            <polygon points="0,60 0,48 20,42 40,45 60,26 80,32 100,15 120,28 140,11 160,20 180,35 200,17 220,27 240,14 240,60" style="fill: var(--vio); opacity: .10"></polygon>
-            <polyline points="0,48 20,42 40,45 60,26 80,32 100,15 120,28 140,11 160,20 180,35 200,17 220,27 240,14" style="fill: none; stroke: var(--vio); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
-            <polyline points="0,56 20,55 40,52 60,54 80,47 100,50 120,44 140,49 160,46 180,51 200,43 220,48 240,45" style="fill: none; stroke: var(--rose); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke"></polyline>
-          </svg>
         </div>
 
         <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; flex-shrink: 0">
@@ -216,7 +223,9 @@ class Component extends DCLogic {
       { inbound: 'TUN', host: 'api.bilibili.com:443', via: 'DIRECT', down: '240 KB/s', proxy: false },
       { inbound: 'SOCKS', host: 'github.com:22', via: '香港 01 · IEPL', down: '3.1 MB/s', proxy: true },
       { inbound: 'TUN', host: 'steamcdn-a.akamaihd.net:443', via: 'DIRECT', down: '8.6 MB/s', proxy: false },
-      { inbound: 'TUN', host: 'weixin.qq.com:443', via: 'DIRECT', down: '2 KB/s', proxy: false }
+      { inbound: 'TUN', host: 'weixin.qq.com:443', via: 'DIRECT', down: '2 KB/s', proxy: false },
+      { inbound: 'HTTP', host: 'registry.npmjs.org:443', via: '东京 01 · IIJ', down: '640 KB/s', proxy: true },
+      { inbound: 'TUN', host: 'discord.com:443', via: '东京 01 · IIJ', down: '12 KB/s', proxy: true }
     ].map((c) => ({
       inbound: c.inbound, host: c.host, via: c.via, down: c.down,
       inColor: c.inbound === 'TUN' ? 'var(--vio)' : 'var(--ink2)',

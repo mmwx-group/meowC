@@ -85,3 +85,6 @@ app.*.map.json
 # MeowX 模型的生成物由 build_runner 产出（CI 每次重生成）
 lib/models/generated/meow.freezed.dart
 lib/models/generated/meow.g.dart
+
+# 设计稿的本地预览是生成物（python3 design/ui-redesign/build-preview.py）
+design/ui-redesign/preview.html
