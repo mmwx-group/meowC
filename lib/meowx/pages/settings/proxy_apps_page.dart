@@ -33,6 +33,10 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
   /// 进页面时已勾选的应用：排在最前。勾选过程中不重排，免得刚点的那一行跳走。
   late Set<String> _pinned = ref.read(vpnSettingProvider).accessControl.currentList.toSet();
 
+  /// 已经取回的应用图标（包名 → PNG 字节）。行滚出去就销毁，滚回来时从这里同步拿，不再走一趟平台通道；
+  /// 同一份字节对象还能让解码结果在 ImageCache 里命中。跟着页面走，重新读取应用列表时清空。
+  final _icons = <String, Uint8List>{};
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +59,7 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
 
   Future<void> _load({bool force = false}) async {
     if (_loading) return;
+    if (force) _icons.clear();
     setState(() => _loading = true);
     try {
       final list = await globalState.appController.getPackages(forceRefresh: force);
@@ -300,6 +305,9 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
         ),
       );
     }
+    // 行按包名认：搜索 / 切「系统应用」后同一位置换了别的应用时，不沿用上一个应用的行状态（图标），
+    // 还在列表里的行连同状态挪到新位置
+    late final indexOf = {for (final (i, p) in visible.indexed) p.packageName: i};
     // 一整张白卡装全部应用行：底画在 sliver 上，行仍然按需构建
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
@@ -309,11 +317,13 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
           padding: const EdgeInsets.all(6),
           sliver: SliverList.separated(
             itemCount: visible.length,
+            findItemIndexCallback: (key) => key is ValueKey<String> ? indexOf[key.value] : null,
             separatorBuilder: (_, _) => const SizedBox(height: 2),
             itemBuilder: (_, i) {
               final p = visible[i];
               final on = selected.contains(p.packageName);
               return Material(
+                key: ValueKey(p.packageName),
                 color: on ? mm.soft : Colors.transparent,
                 borderRadius: BorderRadius.circular(18),
                 clipBehavior: Clip.antiAlias,
@@ -325,7 +335,7 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
                       padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
                       child: Row(
                         children: [
-                          _AppIcon(packageName: p.packageName),
+                          _AppIcon(packageName: p.packageName, cache: _icons),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -362,45 +372,62 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
 }
 
 class _AppIcon extends StatefulWidget {
-  const _AppIcon({required this.packageName});
+  const _AppIcon({required this.packageName, required this.cache});
   final String packageName;
+
+  /// 页面持有的「包名 → 图标字节」，见 [_ProxyAppsPageState._icons]
+  final Map<String, Uint8List> cache;
 
   @override
   State<_AppIcon> createState() => _AppIconState();
 }
 
 class _AppIconState extends State<_AppIcon> {
-  late Future<Uint8List?> _icon = _fetch();
+  Uint8List? _bytes;
 
-  Future<Uint8List?> _fetch() => app.getPackageIcon(widget.packageName);
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
 
   @override
   void didUpdateWidget(_AppIcon old) {
     super.didUpdateWidget(old);
-    if (old.packageName != widget.packageName) _icon = _fetch();
+    if (old.packageName != widget.packageName) _resolve();
+  }
+
+  /// 取过的直接用（首帧就有图，不闪占位）；没取过才走平台通道，取回后记下来。
+  void _resolve() {
+    final name = widget.packageName;
+    final cache = widget.cache;
+    _bytes = cache[name];
+    if (_bytes != null) return;
+    app.getPackageIcon(name).then((bytes) {
+      if (bytes == null) return;
+      // 同一个包同时取了两次（行滚出去又马上滚回来）时都用先回来的那一份
+      final kept = cache.putIfAbsent(name, () => bytes);
+      if (mounted && widget.packageName == name) setState(() => _bytes = kept);
+    }, onError: (_) {});   // 取不到就留着占位图标
   }
 
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
     final size = 38 * MediaQuery.devicePixelRatioOf(context);
+    final data = _bytes;
     return SizedBox(
       width: 38,
       height: 38,
-      child: FutureBuilder<Uint8List?>(
-        future: _icon,
-        builder: (_, snap) {
-          final data = snap.data;
-          if (data == null) return Icon(Icons.android_rounded, size: 26, color: mm.t2);
-          return Image.memory(
-            data,
-            gaplessPlayback: true,
-            cacheWidth: size.ceil(),
-            cacheHeight: size.ceil(),
-            errorBuilder: (_, _, _) => Icon(Icons.android_rounded, size: 26, color: mm.t2),
-          );
-        },
-      ),
+      child: data == null
+          ? Icon(Icons.android_rounded, size: 26, color: mm.t2)
+          : Image.memory(
+              data,
+              gaplessPlayback: true,
+              cacheWidth: size.ceil(),
+              cacheHeight: size.ceil(),
+              errorBuilder: (_, _, _) => Icon(Icons.android_rounded, size: 26, color: mm.t2),
+            ),
     );
   }
 }
