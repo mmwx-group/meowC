@@ -4,6 +4,7 @@ import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
+import 'package:bett_box/state.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +21,7 @@ import '../../theme/widgets.dart';
 
 enum _Seg { connections, logs }
 
-/// 动态页：「连接 | 日志」分段 + 搜索；仅在页可见且已连接时每 1.5s 轮询。
+/// 动态页：「连接 | 日志」分段 + 搜索；仅在页可见、App 在前台且已连接时每 1.5s 轮询。
 /// 窄屏（手机、平板竖屏）= 标题 / 分段 / 搜索 / 汇总行 / 一张卡片里的连接列表，点一行弹出详情；
 /// 两栏（≥900）= 标题行内联分段与搜索，下面连接表 + 右侧详情（设计稿 AActivity / WActivity）。
 class ConnectionsPage extends ConsumerStatefulWidget {
@@ -52,10 +53,22 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   /// 窄屏底部弹层正在看的那条连接：轮询到新快照时跟着刷新
   final _sheetConn = ValueNotifier<TrackerInfo?>(null);
 
+  /// 轮询改了 [_conns] / [_loaded] 之后敲一下：只重建吃这两样的那几块（列表、汇总、标题里的累计、分段上的条数），
+  /// 标题、搜索框和整页骨架不跟着每 1.5s 重建。
+  final _polled = _Signal();
+
+  // 当前显示的那份列表（按搜索词筛过）与它的汇总：快照或搜索词变了才重算（见 _view）
+  List<TrackerInfo>? _viewOf;
+  String? _viewQuery;
+  List<TrackerInfo> _viewItems = const [];
+  _Sum _viewSum = const _Sum(0, 0, 0, 0);
+
   @override
   void initState() {
     super.initState();
     _timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => unawaited(_poll()));
+    // 退到后台期间不拉（见 _poll）：回到前台立即补一次，不等定时器
+    globalState.backgroundMode.addListener(_onBackgroundChanged);
     // 切到本页立即拉一次，不等定时器
     ref.listenManual(meowTabProvider, (prev, next) {
       if (next == MeowTab.connections) {
@@ -74,26 +87,45 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   @override
   void dispose() {
     _timer?.cancel();
+    globalState.backgroundMode.removeListener(_onBackgroundChanged);
     _search.dispose();
     _sheetConn.dispose();
+    _polled.dispose();
     super.dispose();
   }
 
   bool get _visible => ref.read(meowTabProvider) == MeowTab.connections;
 
+  void _onBackgroundChanged() {
+    if (!globalState.backgroundMode.value) unawaited(_poll());
+  }
+
+  void _clearConns() {
+    if (_conns.isEmpty) return;
+    _conns = const [];
+    _polled.fire();
+  }
+
   Future<void> _poll() async {
     if (!mounted || _polling) return;
     if (!ref.read(isRunningProvider)) {
-      if (_conns.isNotEmpty) setState(() => _conns = const []);
+      _clearConns();
       return;
     }
     if (!_visible) {
-      if (_conns.isNotEmpty) setState(() => _conns = const []);   // 离屏清空
+      _clearConns();   // 离屏清空
+      return;
+    }
+    // App 退到后台 / 窗口收进托盘（口径同每秒节拍：桌面只有隐藏或最小化才算，失焦不算）：没有画面在用，不拉。
+    // 旧快照留着，回来第一眼不是空的；隔了很久的字节差不是「每秒」，回来的第一拍速率记 0
+    if (globalState.backgroundMode.value) {
+      _polledAt = null;
       return;
     }
     _polling = true;
     try {
-      final list = await (widget.fetch ?? clashCore.getConnections)();
+      // 经壳的 ConnStatsController 取：这份快照顺手更新连接计数，壳这段时间不再另拉一次
+      final list = await (widget.fetch ?? ref.read(connStatsProvider.notifier).fetchConnections)();
       if (!mounted) return;
       final now = DateTime.now();
       final ms = _polledAt == null ? 0 : now.difference(_polledAt!).inMilliseconds;
@@ -108,10 +140,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           ),
       ];
       _polledAt = now;
-      setState(() {
-        _conns = next;
-        _loaded = true;
-      });
+      _conns = next;
+      _loaded = true;
+      _polled.fire();
       final watching = _sheetConn.value;
       if (watching != null) {
         final fresh = next.firstWhereOrNull((c) => c.id == watching.id);
@@ -123,10 +154,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     }
   }
 
-  List<TrackerInfo> get _filtered {
-    if (_query.isEmpty) return _conns;
-    final q = _query.toLowerCase();
-    return _conns.where((c) {
+  static List<TrackerInfo> _filter(List<TrackerInfo> conns, String query) {
+    final q = query.toLowerCase();
+    return conns.where((c) {
       return c.metadata.host.toLowerCase().contains(q) ||
           c.metadata.destinationIP.contains(q) ||
           c.chains.any((s) => s.toLowerCase().contains(q)) ||
@@ -134,6 +164,19 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           c.rulePayload.toLowerCase().contains(q) ||
           _inboundOf(c).toLowerCase().contains(q);
     }).toList();
+  }
+
+  /// 要显示的列表与汇总。[filtered] = 按搜索词筛（「日志」分段的搜索词不作用于连接）。
+  /// 每条连接要做五六次 toLowerCase，快照或搜索词变了才重算；选中一行、布局变化之类的重建直接用上一份。
+  ({List<TrackerInfo> items, _Sum sum}) _view(bool filtered) {
+    final query = filtered ? _query : '';
+    if (!identical(_viewOf, _conns) || _viewQuery != query) {
+      _viewOf = _conns;
+      _viewQuery = query;
+      _viewItems = query.isEmpty ? _conns : _filter(_conns, query);
+      _viewSum = _Sum.of(_viewItems);
+    }
+    return (items: _viewItems, sum: _viewSum);
   }
 
   void _switchSeg(_Seg v) {
@@ -202,20 +245,20 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final twoPane = ref.watch(isTwoPaneProvider);
     final wide = ref.watch(isWideLayoutProvider);
     final running = ref.watch(isRunningProvider);
+    final visible = ref.watch(meowTabProvider.select((t) => t == MeowTab.connections));
     final onConns = _seg == _Seg.connections;
-    final items = onConns ? _filtered : _conns;
-    final sum = _Sum.of(items);
-    final summary = '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}';
 
-    final segment = MeowSegment<_Seg>(
-      items: [
-        (_Seg.connections, running && _loaded ? '连接 · ${_conns.length}' : '连接'),
-        (_Seg.logs, '日志'),
-      ],
-      value: _seg,
-      onChanged: _switchSeg,
-      height: twoPane ? 40 : 44,
-      fontSize: twoPane ? 13 : 14,
+    // 分段上带条数：轮询到的条数变了才重建分段
+    final segment = _Selected<String>(
+      listenable: _polled,
+      select: () => running && _loaded ? '连接 · ${_conns.length}' : '连接',
+      builder: (context, label) => MeowSegment<_Seg>(
+        items: [(_Seg.connections, label), (_Seg.logs, '日志')],
+        value: _seg,
+        onChanged: _switchSeg,
+        height: twoPane ? 40 : 44,
+        fontSize: twoPane ? 13 : 14,
+      ),
     );
     final search = _SearchField(
       controller: _search,
@@ -225,6 +268,8 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       fontSize: twoPane ? 13 : 14,
     );
     final emptyText = _query.isEmpty ? '暂无活动连接' : '无匹配连接';
+    // 等第一份快照。本页被别的 Tab 盖着时（IndexedStack 里还挂着）不画转圈：隐藏页里的动画照样逼着整个 App 每个 vsync 出一帧
+    final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
     if (!twoPane) {
       // 手机：悬浮底栏盖在内容上，列表底部让出它的高度；平板竖屏 / 窄窗口有侧栏，底边留白在外层
@@ -234,31 +279,42 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
         body = _LogList(query: _query, bottomPadding: bottom);
       } else if (!running) {
         body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
-      } else if (!_loaded) {
-        body = const _Loading();
       } else {
-        body = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _SummaryRow(text: summary, action: '全部关闭', color: mm.slow, onAction: _conns.isEmpty ? null : _closeAll),
-            Expanded(
-              child: items.isEmpty
-                  ? _Empty(icon: Icons.inbox_rounded, text: emptyText)
-                  : ListView.builder(
-                      padding: EdgeInsets.only(bottom: bottom),
-                      itemCount: items.length,
-                      itemBuilder: (_, i) => _CardSlice(
-                        first: i == 0,
-                        last: i == items.length - 1,
-                        child: _ConnRow(
-                          c: items[i],
-                          onTap: () => unawaited(_openSheet(items[i])),
-                          onClose: () => _close(items[i].id),
+        // 跟着轮询重建的只有这一块（外加标题里的累计、分段上的条数）
+        body = ListenableBuilder(
+          listenable: _polled,
+          builder: (context, _) {
+            if (!_loaded) return loading;
+            final (:items, :sum) = _view(true);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _SummaryRow(
+                  text: '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}',
+                  action: '全部关闭',
+                  color: mm.slow,
+                  onAction: _conns.isEmpty ? null : _closeAll,
+                ),
+                Expanded(
+                  child: items.isEmpty
+                      ? _Empty(icon: Icons.inbox_rounded, text: emptyText)
+                      : ListView.builder(
+                          padding: EdgeInsets.only(bottom: bottom),
+                          itemCount: items.length,
+                          itemBuilder: (_, i) => _CardSlice(
+                            first: i == 0,
+                            last: i == items.length - 1,
+                            child: _ConnRow(
+                              c: items[i],
+                              onTap: () => unawaited(_openSheet(items[i])),
+                              onClose: () => _close(items[i].id),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-            ),
-          ],
+                ),
+              ],
+            );
+          },
         );
       }
       return Padding(
@@ -268,7 +324,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           children: [
             PageTitle(
               MeowTab.connections.label,
-              trailing: running ? _Totals(up: sum.up, down: sum.down) : null,
+              trailing: running
+                  ? ListenableBuilder(
+                      listenable: _polled,
+                      builder: (context, _) {
+                        final sum = _view(onConns).sum;
+                        return _Totals(up: sum.up, down: sum.down);
+                      },
+                    )
+                  : null,
             ),
             const SizedBox(height: 12),
             segment,
@@ -281,45 +345,50 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       );
     }
 
-    final selected = _conns.firstWhereOrNull((c) => c.id == _selectedId);
     final Widget body;
     if (!onConns) {
       body = _LogList(query: _query, bottomPadding: 0);
     } else if (!running) {
       body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
-    } else if (!_loaded) {
-      body = const _Loading();
     } else {
-      body = Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: _ConnTable(
-                items: items,
-                selectedId: _selectedId,
-                emptyText: emptyText,
-                // 再点一次选中的行 = 取消选中，右栏回到汇总
-                onSelect: (id) => setState(() => _selectedId = _selectedId == id ? null : id),
-              ),
+      body = ListenableBuilder(
+        listenable: _polled,
+        builder: (context, _) {
+          if (!_loaded) return loading;
+          final (:items, :sum) = _view(true);
+          final selected = _conns.firstWhereOrNull((c) => c.id == _selectedId);
+          return Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _ConnTable(
+                    items: items,
+                    selectedId: _selectedId,
+                    emptyText: emptyText,
+                    // 再点一次选中的行 = 取消选中，右栏回到汇总
+                    onSelect: (id) => setState(() => _selectedId = _selectedId == id ? null : id),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                SizedBox(
+                  width: 268,
+                  child: selected == null
+                      ? _SummaryPane(summary: '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}', sum: sum)
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: SingleChildScrollView(child: _ConnDetail(c: selected))),
+                            const SizedBox(height: 10),
+                            _CloseConnButton(onTap: () => _close(selected.id)),
+                          ],
+                        ),
+                ),
+              ],
             ),
-            const SizedBox(width: 14),
-            SizedBox(
-              width: 268,
-              child: selected == null
-                  ? _SummaryPane(summary: summary, sum: sum)
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(child: SingleChildScrollView(child: _ConnDetail(c: selected))),
-                        const SizedBox(height: 10),
-                        _CloseConnButton(onTap: () => _close(selected.id)),
-                      ],
-                    ),
-            ),
-          ],
-        ),
+          );
+        },
       );
     }
     return Padding(
@@ -341,7 +410,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
               Expanded(child: search),
               if (onConns) ...[
                 const SizedBox(width: 8),
-                _PillButton(label: '全部关闭', color: mm.slow, onTap: _conns.isEmpty ? null : _closeAll),
+                // 可不可点只看有没有连接：从没有到有（或反过来）才重建
+                _Selected<bool>(
+                  listenable: _polled,
+                  select: () => _conns.isEmpty,
+                  builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
+                ),
               ],
             ],
           ),
@@ -351,6 +425,56 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       ),
     );
   }
+}
+
+/// 只当信号用的 Listenable：数据放在页面的字段里，改完敲一下。
+class _Signal extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
+
+/// 跟着 [listenable] 重新取值，取到的值和上次 build 用的不一样才重建。
+/// （轮询每 1.5s 敲一次，分段上的条数、「全部关闭」可不可点多半没变。）
+class _Selected<T> extends StatefulWidget {
+  const _Selected({required this.listenable, required this.select, required this.builder});
+  final Listenable listenable;
+  final T Function() select;
+  final Widget Function(BuildContext context, T value) builder;
+
+  @override
+  State<_Selected<T>> createState() => _SelectedState<T>();
+}
+
+class _SelectedState<T> extends State<_Selected<T>> {
+  /// 上一次 build 用的值
+  late T _built;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.listenable.addListener(_check);
+  }
+
+  @override
+  void didUpdateWidget(_Selected<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.listenable, widget.listenable)) {
+      oldWidget.listenable.removeListener(_check);
+      widget.listenable.addListener(_check);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.listenable.removeListener(_check);
+    super.dispose();
+  }
+
+  void _check() {
+    if (widget.select() != _built) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _built = widget.select());
 }
 
 /// 行首标签与数字列（速率 / 时长）最多跟到 1.2 倍字号：定长的辅助信息，大字号时把宽度让给主机名。
@@ -1055,7 +1179,7 @@ class _SummaryPane extends StatelessWidget {
   }
 }
 
-/// 日志：汇总行（状态 + 清空）+ 一张卡片里的日志行（级别点 + 时间 HH:mm:ss + 消息，等宽）；默认关；自动滚底。
+/// 日志：汇总行（状态 + 清空）+ 一张卡片里的日志行（级别点 + 时间 HH:mm:ss + 消息，等宽）；默认关；贴着底时自动跟到底。
 class _LogList extends ConsumerStatefulWidget {
   const _LogList({required this.query, required this.bottomPadding});
   final String query;
@@ -1066,12 +1190,69 @@ class _LogList extends ConsumerStatefulWidget {
 }
 
 class _LogListState extends ConsumerState<_LogList> {
+  /// 最多这么久刷新一次列表。日志密的时候（内核日志等级调到 info / debug，每条连接一行）逐条刷新等于每帧把整屏文字重排一遍。
+  static const _refreshEvery = Duration(milliseconds: 250);
+
+  /// 离底不到这么多（约一行）算贴着底
+  static const _stickSlack = 40.0;
+
   final _scroll = ScrollController();
+
+  /// 列表上显示的那一份；日志来了不直接重建，经 [_onLogs] 合并着刷
+  List<Log> _all = const [];
+
+  /// 刚刷过：这段时间里再来的日志等它到点一起刷
+  Timer? _cooldown;
+
+  /// 有还没刷到列表上的日志（冷却期间来的，或本页不可见时来的）
+  bool _stale = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _all = ref.read(logsProvider).list;
+    ref.listenManual(logsProvider, (prev, next) => _onLogs());
+    // 本页被别的 Tab 盖着时不刷（见 _onLogs），切回来补上
+    ref.listenManual(meowTabProvider, (prev, next) {
+      if (next == MeowTab.connections && _stale) _onLogs();
+    });
+  }
 
   @override
   void dispose() {
+    _cooldown?.cancel();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onLogs() {
+    _stale = true;
+    // 别的 Tab 盖着（IndexedStack 里本页还挂着）：重建了也没人看
+    if (ref.read(meowTabProvider) != MeowTab.connections) return;
+    if (_cooldown != null) return;
+    _stale = false;
+    setState(() => _all = ref.read(logsProvider).list);
+    _cooldown = Timer(_refreshEvery, () {
+      _cooldown = null;
+      if (mounted && _stale) _onLogs();
+    });
+  }
+
+  bool get _atBottom {
+    if (!_scroll.hasClients) return true;
+    final pos = _scroll.position;
+    return !pos.hasContentDimensions || pos.pixels >= pos.maxScrollExtent - _stickSlack;
+  }
+
+  /// 跳到底。行不等高，没排到末尾之前 maxScrollExtent 是估出来的，跳过去排完版才有准数：下一帧再对一次，最多 [tries] 次。
+  void _stickToBottom([int tries = 3]) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final pos = _scroll.position;
+      if (!pos.hasContentDimensions || pos.pixels >= pos.maxScrollExtent) return;
+      _scroll.jumpTo(pos.maxScrollExtent);
+      if (tries > 1) _stickToBottom(tries - 1);
+    });
   }
 
   static final _time = RegExp(r'\d{2}:\d{2}:\d{2}');
@@ -1080,15 +1261,14 @@ class _LogListState extends ConsumerState<_LogList> {
   Widget build(BuildContext context) {
     final mm = context.mm;
     final open = ref.watch(appSettingProvider.select((s) => s.openLogs));
-    final all = ref.watch(logsProvider).list;
+    final all = _all;
     final q = widget.query.toLowerCase();
     final logs = q.isEmpty ? all : all.where((l) => l.payload.toLowerCase().contains(q)).toList();
     if (!open) {
       return const _Empty(icon: Icons.notes_rounded, text: '日志已关闭 · 在「我的 → 设置」打开「记录日志」');
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients && q.isEmpty) _scroll.jumpTo(_scroll.position.maxScrollExtent);
-    });
+    // 本来就贴着底（或刚进来）才跟到底：往上翻着看旧日志时，不被新来的日志拽回去
+    if (q.isEmpty && _atBottom) _stickToBottom();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
