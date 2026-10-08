@@ -637,10 +637,22 @@ String? getProxyName(Ref ref, String groupName) {
 @riverpod
 String? getSelectedProxyName(Ref ref, String groupName) {
   final proxyName = ref.watch(getProxyNameProvider(groupName));
+  // MeowX：只取 getCurrentSelectedName 用到的两个字段。选出整个 Group 的话，代理组每刷新一次，
+  // 每个存活的实例（每张组卡 / 每个节点网格各一个）都要把该组全部成员深比较一遍才知道没变。
   final group = ref.watch(
-    groupsProvider.select((state) => state.getGroup(groupName)),
+    groupsProvider.select((state) {
+      final group = state.getGroup(groupName);
+      return group == null ? null : (group.type, group.now);
+    }),
   );
-  return group?.getCurrentSelectedName(proxyName ?? '');
+  if (group == null) return null;
+  final (type, now) = group;
+  // 选择规则只有 Group 的扩展方法那一份，借一个只带这两个字段的 Group 来算
+  return Group(
+    name: groupName,
+    type: type,
+    now: now,
+  ).getCurrentSelectedName(proxyName ?? '');
 }
 
 @riverpod

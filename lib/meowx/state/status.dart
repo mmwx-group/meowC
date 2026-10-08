@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 图标栏布局（对齐 iPad 的 regular 宽度类）：视口宽 ≥ 700 —— 平板横竖屏、Windows 窗口都走左侧 IconRail。
@@ -27,16 +30,52 @@ final isTwoPaneProvider = Provider<bool>((ref) {
 /// 但 Riverpod 安排重算靠的是让 ProviderScope 重建，于是连接着的时候不管停在哪一页，每秒都白出一两帧。
 final isRunningProvider = Provider<bool>((ref) => ref.watch(runTimeProvider.select((t) => t != null)));
 
-/// 当前订阅解析后的原始配置（mihomo 自己的解析器），按 profileId 缓存；
+/// 取订阅解析后的原始配置；默认问核心，只有测试会换掉。
+@visibleForTesting
+final rawConfigFetcherProvider = Provider<Future<Map<String, dynamic>> Function(String profileId, String? ageSecretKey)>(
+  (ref) => (profileId, ageSecretKey) => clashCore.getConfig(profileId, ageSecretKey: ageSecretKey),
+);
+
+/// 取不到订阅配置（核心报错，或请求丢了、60 秒超时回来一张空表）时隔多久再试；这几次都试完才认空表。
+@visibleForTesting
+List<Duration> rawConfigRetryDelays = const [Duration(seconds: 2), Duration(seconds: 5), Duration(seconds: 15)];
+
+/// 当前订阅解析后的原始配置（mihomo 自己的解析器），按 profileId 缓存，没人用了（切走的订阅）就释放；
 /// 用于：节点安全性副标题（tls / reality / flow / network）、DNS 模式的「跟随订阅」判定。
-final profileRawConfigProvider = FutureProvider.family<Map<String, dynamic>, String>((ref, profileId) async {
-  final profile = ref.watch(profilesProvider.select((s) => s.getProfile(profileId)));
-  if (profile == null) return const {};
-  try {
-    return await clashCore.getConfig(profileId, ageSecretKey: profile.ageSecretKey);
-  } catch (e) {
-    commonPrint.log('profileRawConfig($profileId) failed: $e');
-    return const {};
+///
+/// 只盯决定文件内容的两个字段：档案文件每次落盘都会更新 lastUpdateDate（`Profile.saveFile` / `saveFileWithString`），
+/// 解密用 ageSecretKey。不能订阅整个 Profile——点一次节点（selectedMap）、换一次组（currentGroupName）它都变，
+/// 每变一次核心就要重读重解析整份订阅、整份配置的 JSON 再回到 UI isolate 上解码。
+///
+/// 正因为不再随 Profile 的每次变化重取，取不到时得自己补：
+/// - 核心硬重启期间（桌面切订阅就会硬重启）不发请求——它会落在正被关掉的旧 socket 上丢掉。先挂着不出结果
+///   （界面沿用上一份），重启标志落下时这里重跑，问新起的核心；重启前已经发出去的那次也由这次重跑顶替。
+/// - 核心报错（档案文件还没下回来等）或超时，按 [rawConfigRetryDelays] 重试，不把空表当成结果存下。
+final profileRawConfigProvider = FutureProvider.autoDispose.family<Map<String, dynamic>, String>((ref, profileId) async {
+  final key = ref.watch(
+    profilesProvider.select((s) {
+      final p = s.getProfile(profileId);
+      return p == null ? null : (p.lastUpdateDate, p.ageSecretKey);
+    }),
+  );
+  if (key == null) return const {};
+  if (ref.watch(isRestartingCoreProvider)) return Completer<Map<String, dynamic>>().future;
+  // 被顶替（依赖变了重跑）或释放之后就不再重试
+  var stale = false;
+  ref.onDispose(() => stale = true);
+  final fetch = ref.read(rawConfigFetcherProvider);
+  for (var attempt = 0; ; attempt++) {
+    try {
+      final raw = await fetch(profileId, key.$2);
+      // 解析成功的配置不会是空表（核心把 RawConfig 的字段全部输出）；空表是请求超时给的默认值
+      if (raw.isNotEmpty) return raw;
+      commonPrint.log('profileRawConfig($profileId) empty (timeout)');
+    } catch (e) {
+      commonPrint.log('profileRawConfig($profileId) failed: $e');
+    }
+    if (stale || attempt >= rawConfigRetryDelays.length) return const {};
+    await Future<void>.delayed(rawConfigRetryDelays[attempt]);
+    if (stale) return const {};
   }
 });
 

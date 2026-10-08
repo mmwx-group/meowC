@@ -9,6 +9,7 @@ import 'package:bett_box/state.dart';
 import 'package:bett_box/views/proxies/common.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
@@ -136,17 +137,39 @@ void toggleAutoSelect(WidgetRef ref, Group group) {
 }
 
 /// 列数跟着网格宽度走：手机标准 2 列、大卡 1 列，更宽（平板、宽屏右栏）按最小格宽加列。
-/// 在滚动视图外面量宽度再传进来——SliverLayoutBuilder 每滚一帧都会重建网格。
 int nodeColumns(double width, NodeCardSize size) {
   final large = size == NodeCardSize.large;
   return math.max(large ? 1 : 2, ((width + _gridSpacing) / ((large ? 260 : 185) + _gridSpacing)).floor());
 }
 
+/// 节点网格的排布：列数在布局阶段按网格自己的宽度算（[nodeColumns]），格高由外面量好传进来。
+/// 不在滚动视图外面套 LayoutBuilder 量宽度：它在任何约束变化（键盘动画、只拖窗口高度）时都重跑 builder，
+/// 整个滚动视图连同已建出的格子跟着重建；也不用 SliverLayoutBuilder（每滚一帧都重建网格）。
+/// 放在这里，宽度变了只是重排。getLayout 每次滚动布局都会调：只做算术，量文字这类事留在外面。
+class _NodeGridDelegate extends SliverGridDelegate {
+  const _NodeGridDelegate({required this.size, required this.cellExtent});
+  final NodeCardSize size;
+  final double cellExtent;
+
+  @override
+  SliverGridLayout getLayout(SliverConstraints constraints) => SliverGridDelegateWithFixedCrossAxisCount(
+    crossAxisCount: nodeColumns(constraints.crossAxisExtent, size),
+    mainAxisSpacing: _gridSpacing,
+    crossAxisSpacing: _gridSpacing,
+    mainAxisExtent: cellExtent,
+  ).getLayout(constraints);
+
+  @override
+  bool shouldRelayout(_NodeGridDelegate oldDelegate) => oldDelegate.size != size || oldDelegate.cellExtent != cellExtent;
+}
+
 /// 懒加载节点网格：只构建可见格子；每格自带 RepaintBoundary。
 class NodeSliverGrid extends ConsumerWidget {
-  const NodeSliverGrid({super.key, required this.group, required this.columns, this.dense = false});
+  const NodeSliverGrid({super.key, required this.group, required this.size, this.dense = false});
   final Group group;
-  final int columns;
+
+  /// 卡片档位（决定最小格宽；列数在布局阶段按网格宽度算）。
+  final NodeCardSize size;
 
   /// 宽屏两栏里的小一号格子。
   final bool dense;
@@ -163,12 +186,7 @@ class NodeSliverGrid extends ConsumerWidget {
     final pendingPick = computed ? ref.watch(pendingPickProvider.select((m) => m[group.name])) : null;
     final shownSelected = (pendingPick != null && pendingPick.isNotEmpty) ? pendingPick : selectedName;
     return SliverGrid(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        mainAxisSpacing: _gridSpacing,
-        crossAxisSpacing: _gridSpacing,
-        mainAxisExtent: _nodeCellExtent(context, dense),
-      ),
+      gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense)),
       delegate: SliverChildBuilderDelegate((context, i) {
         final p = group.all[i];
         return _NodeCell(

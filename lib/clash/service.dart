@@ -7,6 +7,7 @@ import 'package:bett_box/clash/interface.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/helper/helper.dart';
+import 'package:bett_box/models/core.dart';
 import 'package:bett_box/state.dart';
 import 'package:bett_box/utils/frame_codec.dart';
 import 'package:bett_box/utils/platform_check.dart';
@@ -83,8 +84,7 @@ class ClashService extends ClashHandlerInterface {
               .transform(FrameDecoderTransformer())
               .listen(
                 (data) {
-                  // MeowX：大回包不在 UI 线程解、没人看的 request 推送不解，见 ClashHandlerInterface.handleMessage
-                  handleMessage(data);
+                  handleResult(ActionResult.fromJson(json.decode(data)));
                 },
                 onError: (error) {
                   if (_isDestroying || globalState.isExiting) return;
