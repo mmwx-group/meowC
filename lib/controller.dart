@@ -811,6 +811,30 @@ class AppController {
     }
   }
 
+  // MeowX：groupsProvider 里现在那份列表（实例）与它的内容摘要；新拉到的内容相同就不再赋值，见 _updateGroups。
+  List<Group>? _digestedGroups;
+  int _groupsDigest = 0;
+  // MeowX：最近一次成功拉到代理组的时间，与「有刷新请求被压下、还没补上」的标记；见下面两个方法。
+  DateTime? _lastGroupsUpdateTime;
+  bool _groupsUpdateDeferred = false;
+
+  /// MeowX：后台不拉代理组（没有界面在看），记一笔，回前台那次补上。
+  void deferGroupsUpdate() {
+    _groupsUpdateDeferred = true;
+  }
+
+  /// MeowX：App 没离开过、只是被通知栏 / 系统对话框盖了一下再回来时用——
+  /// 距上次成功刷新不到 [maxAge]、期间也没有被压下的刷新请求，就不必再全量拉一趟。
+  void updateGroupsIfStale(Duration maxAge) {
+    final last = _lastGroupsUpdateTime;
+    if (!_groupsUpdateDeferred &&
+        last != null &&
+        DateTime.now().difference(last) < maxAge) {
+      return;
+    }
+    updateGroupsDebounce();
+  }
+
   Future<void> updateGroups({List<ExternalProvider>? preloadedProviders}) {
     return _coreLifecycleLock.synchronized(
       () => _updateGroups(preloadedProviders: preloadedProviders),
@@ -824,19 +848,19 @@ class AppController {
     Duration(milliseconds: 400),
   ];
 
-  Future<List<Group>> _retryGetProxiesGroups(
+  Future<GroupsSnapshot> _retryGetProxiesGroups(
     List<ExternalProvider>? preloadedProviders,
   ) async {
     for (var attempt = 0; attempt < _kGroupRetryDelays.length; attempt++) {
       if (attempt > 0) {
         await Future.delayed(_kGroupRetryDelays[attempt]);
       }
-      final groups = await clashCore.getProxiesGroups(
+      final snapshot = await clashCore.getGroupsSnapshot(
         preloadedProviders: preloadedProviders,
       );
-      if (groups.isNotEmpty) return groups;
+      if (snapshot.groups.isNotEmpty) return snapshot;
     }
-    return [];
+    return emptyGroupsSnapshot;
   }
 
   void _handleUpdateGroupsError(int generation, dynamic e) {
@@ -877,11 +901,15 @@ class AppController {
     }
     _isUpdatingGroups = true;
     final generation = _coreGeneration;
+    var succeeded = false;
 
     try {
       final currentGroups = _ref.read(groupsProvider);
+      // MeowX：从这里开始才是这一趟的数据；之后再被压下的请求留给下一趟
+      _groupsUpdateDeferred = false;
 
-      final newGroups = await _retryGetProxiesGroups(preloadedProviders);
+      final snapshot = await _retryGetProxiesGroups(preloadedProviders);
+      final newGroups = snapshot.groups;
 
       if (newGroups.isEmpty) {
         _handleUpdateGroupsError(
@@ -969,7 +997,17 @@ class AppController {
         }
       }
 
-      _ref.read(groupsProvider.notifier).value = newGroups;
+      // MeowX：内容和 groupsProvider 里那份一样就不赋值。它是 identical 判等，赋一个新列表必定通知，
+      // 下游（currentGroupsState、各个 select）要把全部成员逐个深比较几遍才发现什么都没变。
+      // 列表实例对不上（别处赋过值、provider 重建过）时照常赋值。
+      if (snapshot.digest != _groupsDigest ||
+          !identical(_ref.read(groupsProvider), _digestedGroups)) {
+        _ref.read(groupsProvider.notifier).value = newGroups;
+        _digestedGroups = newGroups;
+        _groupsDigest = snapshot.digest;
+      }
+      _lastGroupsUpdateTime = DateTime.now();
+      succeeded = true;
       _updateGroupsRetryCount = 0;
       _updateGroupsRetryTimer?.cancel();
       _updateGroupsRetryTimer = null;
@@ -978,6 +1016,8 @@ class AppController {
       _handleUpdateGroupsError(generation, e);
     } finally {
       _isUpdatingGroups = false;
+      // MeowX：这一趟没拉成，欠着的刷新还在
+      if (!succeeded) _groupsUpdateDeferred = true;
     }
   }
 

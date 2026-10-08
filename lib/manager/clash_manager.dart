@@ -8,6 +8,7 @@ import 'package:bett_box/providers/app.dart';
 import 'package:bett_box/providers/config.dart';
 import 'package:bett_box/providers/state.dart';
 import 'package:bett_box/state.dart';
+import 'package:bett_box/views/proxies/common.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,6 +80,15 @@ class _ClashContainerState extends ConsumerState<ClashManager>
     super.onDelay(delay);
     final appController = globalState.appController;
     appController.setDelay(delay);
+    // MeowX：界面发起的测速（测全部 / 测本组 / 点延迟胶囊）还在跑时不排这一趟——测速收尾自己会拉代理组
+    // （views/proxies/common.dart），否则测完约 5.6 秒后还要再全量拉一遍。核心先推这条消息再回测速结果，所以此时请求还挂着。
+    if (hasPendingDelayTest) return;
+    // MeowX：Android 退到后台后没有界面在看代理组，健康检查的结果只记延迟；欠的这一趟回前台补
+    // （桌面不省：窗口收在托盘时托盘菜单里的当前节点还要跟着变）。
+    if (system.isAndroid && globalState.backgroundMode.value) {
+      appController.deferGroupsUpdate();
+      return;
+    }
     debouncer.call(FunctionTag.updateDelay, () async {
       appController.updateGroupsDebounce();
     }, duration: const Duration(milliseconds: 5000));

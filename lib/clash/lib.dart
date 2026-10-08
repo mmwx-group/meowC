@@ -40,7 +40,8 @@ class ClashLib extends ClashHandlerInterface with AndroidClashInterface {
         sendPort = message;
         _canSendCompleter.complete(true);
       } else {
-        handleResult(ActionResult.fromJson(json.decode(message)));
+        // MeowX：大回包（getProxies）不在这里解码，见 handleRawResult
+        handleRawResult(message);
       }
     });
     final alreadyRunning = await service?.isServiceEngineRunning() ?? false;

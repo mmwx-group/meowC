@@ -34,7 +34,8 @@ mixin ClashInterface {
 
   FutureOr<String> setupConfig(SetupParams setupParams);
 
-  FutureOr<Map> getProxies();
+  // MeowX：返回核心的原始回包（整个信封的 JSON 字符串），由 getProxiesGroups 交给 worker isolate 去解。
+  FutureOr<String> getProxies();
 
   FutureOr<String> changeProxy(ChangeProxyParams changeProxyParams);
 
@@ -120,6 +121,10 @@ abstract class ClashHandlerInterface with ClashInterface {
         case ActionMethod.generateAgeKeyPair:
           completer?.complete(result.data);
           return;
+        case ActionMethod.getProxies:
+          // MeowX：没走成 handleRawResult 的快路径时的兜底，重新包成同样形状的字符串
+          completer?.complete(json.encode({'data': result.data}));
+          return;
         default:
           completer?.complete(result.data);
           return;
@@ -127,6 +132,30 @@ abstract class ClashHandlerInterface with ClashInterface {
     } catch (e) {
       commonPrint.log('${result.id} error $e');
     }
+  }
+
+  // MeowX：getProxies 的回包有几百 KB 到几 MB（每个节点带延迟历史等十几个字段），不在这里（UI isolate）解码，
+  // 原样把字符串交给调用方。核心的 ActionResult 按 id、method、data 的顺序输出（core/action.go），
+  // 所以这类回包一定以下面的前缀开头；哪天对不上了就走原来的整包解码，见 handleResult 的 getProxies 分支。
+  static const _rawProxiesPrefix = '{"id":"getProxies#';
+  static const _rawIdStart = 7; // '{"id":"' 之后
+
+  /// 核心发来的每条消息（回包与推送）都从这里进。
+  void handleRawResult(String raw) {
+    if (raw.startsWith(_rawProxiesPrefix)) {
+      final idEnd = raw.indexOf('"', _rawIdStart);
+      if (idEnd > 0) {
+        // 没有等它的人（已超时）就丢掉，和 handleResult 里 completer 为空时一样
+        final completer = callbackCompleterMap.remove(
+          raw.substring(_rawIdStart, idEnd),
+        );
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(raw);
+        }
+        return;
+      }
+    }
+    handleResult(ActionResult.fromJson(json.decode(raw)));
   }
 
   void sendMessage(String message);
@@ -274,8 +303,8 @@ abstract class ClashHandlerInterface with ClashInterface {
   }
 
   @override
-  Future<Map> getProxies() {
-    return invoke<Map>(
+  Future<String> getProxies() {
+    return invoke<String>(
       method: ActionMethod.getProxies,
       timeout: Duration(seconds: 5),
     );
