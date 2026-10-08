@@ -51,6 +51,14 @@ class _Vpn extends VpnSetting {
   void onUpdate(VpnProps value) {}
 }
 
+class _Init extends Init {
+  _Init(this.value);
+  final bool value;
+
+  @override
+  bool build() => value;
+}
+
 class _RunTime extends RunTime {
   _RunTime(this.initial);
   final int? initial;
@@ -174,7 +182,9 @@ List<Override> _overrides({
   CurrentNode? node = _node,
   AccessControl access = const AccessControl(),
   _ExitIp? exitIp,
+  bool inited = true,
 }) => [
+  initProvider.overrideWith(() => _Init(inited)),
   isRunningProvider.overrideWithValue(running),
   isWideLayoutProvider.overrideWithValue(wide),
   isTwoPaneProvider.overrideWithValue(twoPane),
@@ -291,6 +301,19 @@ void main() {
     expect(list.padding, const EdgeInsets.fromLTRB(16, 0, 16, 16 + 96));
   });
 
+  testWidgets('刚启动、核心还没装载代理组：当前节点行显示「正在加载…」而不是「没有代理组」', (tester) async {
+    await _pump(
+      tester,
+      _page(),
+      size: const Size(412, 892),
+      overrides: _overrides(running: false, node: null, profile: _profile, inited: false),
+      textScale: 1,
+    );
+
+    expect(find.text('正在加载…'), findsOneWidget);
+    expect(find.text('没有代理组'), findsNothing);
+  });
+
   testWidgets('手机 · 未连接 / 没有订阅 / 深色', (tester) async {
     await _pump(
       tester,
@@ -305,6 +328,7 @@ void main() {
     expect(find.text('未配置'), findsOneWidget);
     expect(find.text('先到「我的」导入订阅'), findsOneWidget);
     expect(find.text('没有代理组'), findsOneWidget);
+    expect(find.text('正在加载…'), findsNothing);
     expect(find.text('还没有订阅'), findsOneWidget);
     expect(find.text('国际 · 代理出口'), findsOneWidget);
     expect(find.text('—'), findsOneWidget);   // 内存

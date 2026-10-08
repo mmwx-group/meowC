@@ -154,6 +154,10 @@ class _NodeRow extends ConsumerWidget {
     if (mode == Mode.direct) {
       name = '直连';
       sub = '全部流量不经过代理';
+    } else if (node == null && !ref.watch(initProvider)) {
+      // 刚启动、核心还没把代理组装载进来：别先报一句「没有代理组」
+      name = '正在加载…';
+      sub = '读取配置中';
     } else if (node == null) {
       name = '没有代理组';
       sub = ref.watch(hasProfileProvider) ? '当前配置里没有可选的节点' : '导入订阅后在这里选节点';

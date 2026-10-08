@@ -195,7 +195,9 @@ class _ConnectionCard extends ConsumerWidget {
         : (ref.watch(hasProfileProvider) ? '${modeLabel(mode)}模式 · 已就绪' : '还没有订阅');
     final nodeName = switch (mode) {
       Mode.direct => '直连',
-      _ => (node == null || node.leaf.isEmpty) ? (node?.group ?? '没有代理组') : stripFlag(node.leaf),
+      _ => (node == null || node.leaf.isEmpty)
+          ? (node?.group ?? (ref.watch(initProvider) ? '没有代理组' : '正在加载…'))
+          : stripFlag(node.leaf),
     };
     final code = mode == Mode.direct || node == null ? null : regionCode(node.leaf);
 
