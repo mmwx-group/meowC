@@ -68,7 +68,9 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       _updateDashboardRefreshState();
       detectionState.tryStartCheck();
       mediaUnlockState.tryStartCheck();
-      globalState.appController.updateGroupsDebounce();
+      // MeowX：这里原来还排了一趟 updateGroupsDebounce()。AppController.init() 自己必定会拉代理组，
+      // 首帧后 600ms 这趟要么是白拉第二遍，要么在核心还没装载配置时拿到空表、
+      // 占着 _coreLifecycleLock 做四连重试，反过来挡住 init 里的 applyProfile。
     });
     if (window == null) {
       return;
