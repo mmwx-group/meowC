@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:bett_box/clash/clash.dart';
+import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/meow_tab.dart';
@@ -20,6 +22,14 @@ import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
 
 enum _Seg { connections, logs }
+
+/// 没有画面在用、动态页的轮询该停。[background] = globalState.backgroundMode（口径同每秒节拍）：
+/// 桌面只有隐藏或最小化才为真，失焦不算，为真就停。移动端它把 inactive 也算后台，而 Android 分屏 / 小窗里
+/// 焦点在另一个 App 时一直是 inactive——本页整屏看得见（一边用别的 App 一边看它建了哪些连接），照常刷新；
+/// 真正不可见（hidden / paused / detached）才停。
+@visibleForTesting
+bool connPollingPaused({required bool background, required bool desktop, required AppLifecycleState? lifecycle}) =>
+    background && (desktop || lifecycle != AppLifecycleState.inactive);
 
 /// 动态页：「连接 | 日志」分段 + 搜索；仅在页可见、App 在前台且已连接时每 1.5s 轮询。
 /// 窄屏（手机、平板竖屏）= 标题 / 分段 / 搜索 / 汇总行 / 一张卡片里的连接列表，点一行弹出详情；
@@ -116,9 +126,13 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       _clearConns();   // 离屏清空
       return;
     }
-    // App 退到后台 / 窗口收进托盘（口径同每秒节拍：桌面只有隐藏或最小化才算，失焦不算）：没有画面在用，不拉。
+    // App 退到后台 / 窗口收进托盘（见 connPollingPaused）：没有画面在用，不拉。
     // 旧快照留着，回来第一眼不是空的；隔了很久的字节差不是「每秒」，回来的第一拍速率记 0
-    if (globalState.backgroundMode.value) {
+    if (connPollingPaused(
+      background: globalState.backgroundMode.value,
+      desktop: system.isDesktop,
+      lifecycle: WidgetsBinding.instance.lifecycleState,
+    )) {
       _polledAt = null;
       return;
     }
@@ -1179,7 +1193,7 @@ class _SummaryPane extends StatelessWidget {
   }
 }
 
-/// 日志：汇总行（状态 + 清空）+ 一张卡片里的日志行（级别点 + 时间 HH:mm:ss + 消息，等宽）；默认关；贴着底时自动跟到底。
+/// 日志：汇总行（状态 + 清空）+ 一张卡片里的日志行（级别点 + 时间 HH:mm:ss + 消息，等宽）；默认关；没被用户翻上去就自动跟到底。
 class _LogList extends ConsumerStatefulWidget {
   const _LogList({required this.query, required this.bottomPadding});
   final String query;
@@ -1193,7 +1207,7 @@ class _LogListState extends ConsumerState<_LogList> {
   /// 最多这么久刷新一次列表。日志密的时候（内核日志等级调到 info / debug，每条连接一行）逐条刷新等于每帧把整屏文字重排一遍。
   static const _refreshEvery = Duration(milliseconds: 250);
 
-  /// 离底不到这么多（约一行）算贴着底
+  /// 翻完停下时离底不到这么多（约一行）算回到了底
   static const _stickSlack = 40.0;
 
   final _scroll = ScrollController();
@@ -1207,6 +1221,13 @@ class _LogListState extends ConsumerState<_LogList> {
   /// 有还没刷到列表上的日志（冷却期间来的，或本页不可见时来的）
   bool _stale = false;
 
+  /// 跟着新日志贴底。只有用户自己翻离底部才置假、翻回底部再置真（见 [_onScroll]）——记成状态，不从滚动位置现推：
+  /// 视口变矮（窗口拉矮、弹键盘、转屏）、内容变高也会让位置「离底」，那不是用户翻走的。
+  bool _follow = true;
+
+  /// [_toBottom] 正在改位置：这期间的滚动通知不是用户翻的
+  bool _sticking = false;
+
   @override
   void initState() {
     super.initState();
@@ -1216,6 +1237,13 @@ class _LogListState extends ConsumerState<_LogList> {
     ref.listenManual(meowTabProvider, (prev, next) {
       if (next == MeowTab.connections && _stale) _onLogs();
     });
+  }
+
+  @override
+  void didUpdateWidget(_LogList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 清掉搜索词：筛出来的那几条翻到哪都不算数，回到日志的尾巴
+    if (oldWidget.query.isNotEmpty && widget.query.isEmpty) _follow = true;
   }
 
   @override
@@ -1238,21 +1266,34 @@ class _LogListState extends ConsumerState<_LogList> {
     });
   }
 
-  bool get _atBottom {
-    if (!_scroll.hasClients) return true;
-    final pos = _scroll.position;
-    return !pos.hasContentDimensions || pos.pixels >= pos.maxScrollExtent - _stickSlack;
+  /// 用户翻动列表：决定还跟不跟。
+  bool _onScroll(ScrollNotification n) {
+    if (_sticking) return false;
+    if (n is UserScrollNotification) {
+      // 手指 / 滚轮往旧日志方向一动就不跟，不等停下：日志密的时候刚拖出一点就会被下一次刷新拽回去
+      if (n.direction == ScrollDirection.forward) _follow = false;
+    } else if (n is ScrollEndNotification) {
+      // 停下来（拖动、惯性、滚轮、拖滚动条、键盘都走到这）：看停在哪
+      _follow = n.metrics.pixels >= n.metrics.maxScrollExtent - _stickSlack;
+    }
+    return false;
   }
 
-  /// 跳到底。行不等高，没排到末尾之前 maxScrollExtent 是估出来的，跳过去排完版才有准数：下一帧再对一次，最多 [tries] 次。
-  void _stickToBottom([int tries = 3]) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scroll.hasClients) return;
-      final pos = _scroll.position;
-      if (!pos.hasContentDimensions || pos.pixels >= pos.maxScrollExtent) return;
-      _scroll.jumpTo(pos.maxScrollExtent);
-      if (tries > 1) _stickToBottom(tries - 1);
-    });
+  /// 视口尺寸或内容高度变了：还在跟就再对一次底。
+  /// 行不等高，没排到末尾之前 maxScrollExtent 是估出来的，跳过去排完版才有准数——估小了、估大了（越界）都从这里对回来。
+  bool _onMetrics(ScrollMetricsNotification n) {
+    if (_follow && widget.query.isEmpty) _toBottom();
+    return false;
+  }
+
+  /// 对到底。已经越过了底也直接对回来（jumpTo 会收掉越界回弹，不然要等回弹动画慢慢回来，这期间整屏是空的）。
+  void _toBottom() {
+    if (!mounted || !_scroll.hasClients) return;
+    final pos = _scroll.position;
+    if (!pos.hasContentDimensions || pos.pixels == pos.maxScrollExtent) return;
+    _sticking = true;
+    _scroll.jumpTo(pos.maxScrollExtent);
+    _sticking = false;
   }
 
   static final _time = RegExp(r'\d{2}:\d{2}:\d{2}');
@@ -1267,8 +1308,10 @@ class _LogListState extends ConsumerState<_LogList> {
     if (!open) {
       return const _Empty(icon: Icons.notes_rounded, text: '日志已关闭 · 在「我的 → 设置」打开「记录日志」');
     }
-    // 本来就贴着底（或刚进来）才跟到底：往上翻着看旧日志时，不被新来的日志拽回去
-    if (q.isEmpty && _atBottom) _stickToBottom();
+    // 列表不在（刚进来、清空了、搜不到）：回到跟随
+    if (!_scroll.hasClients) _follow = true;
+    // 还在跟才跟到底：往上翻着看旧日志时，不被新来的日志拽回去
+    if (q.isEmpty && _follow) WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1281,15 +1324,21 @@ class _LogListState extends ConsumerState<_LogList> {
         Expanded(
           child: logs.isEmpty
               ? _Empty(icon: Icons.notes_rounded, text: q.isEmpty ? '暂无日志' : '无匹配日志')
-              : ListView.builder(
-                  controller: _scroll,
-                  padding: EdgeInsets.only(bottom: widget.bottomPadding),
-                  itemCount: logs.length,
-                  itemBuilder: (_, i) => _CardSlice(
-                    first: i == 0,
-                    last: i == logs.length - 1,
-                    edge: 4,
-                    child: _logRow(mm, logs[i]),
+              : NotificationListener<ScrollMetricsNotification>(
+                  onNotification: _onMetrics,
+                  child: NotificationListener<ScrollNotification>(
+                    onNotification: _onScroll,
+                    child: ListView.builder(
+                      controller: _scroll,
+                      padding: EdgeInsets.only(bottom: widget.bottomPadding),
+                      itemCount: logs.length,
+                      itemBuilder: (_, i) => _CardSlice(
+                        first: i == 0,
+                        last: i == logs.length - 1,
+                        edge: 4,
+                        child: _logRow(mm, logs[i]),
+                      ),
+                    ),
                   ),
                 ),
         ),

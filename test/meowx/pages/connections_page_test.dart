@@ -11,6 +11,7 @@ import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -410,5 +411,180 @@ void main() {
     _container(tester).read(meowTabProvider.notifier).state = MeowTab.connections;
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
     expect(find.text('盖着的时候来的'), findsOneWidget);
+  });
+
+  testWidgets('日志：贴底跟随时视口变矮（窗口拉矮 / 弹键盘 / 转屏）仍跟到底，恢复原高也在底；自己翻上去的不被拽回', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 780),
+      wide: false,
+      twoPane: false,
+      textScale: 1,
+      logs: [
+        for (var i = 0; i < 60; i++)
+          Log(logLevel: LogLevel.info, payload: '[TCP] host-$i.example.com:443 → 香港 01 命中 MATCH', dateTime: '2026-10-07 14:00:${i.toString().padLeft(2, '0')}'),
+      ],
+    );
+    await tester.tap(find.text('日志'));
+    await tester.pumpAndSettle();
+    final logs = _container(tester).read(logsProvider.notifier);
+    Log line(String text) => Log(logLevel: LogLevel.warning, payload: text, dateTime: '2026-10-07 14:05:00');
+    final pos = _logScroll(tester);
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    // 视口变矮：位置没动、底却远了——不是用户翻走的，照样跟
+    tester.view.physicalSize = const Size(360, 500);
+    await tester.pumpAndSettle();
+    expect(pos.pixels, pos.maxScrollExtent);
+    logs.addLog(line('变矮后来的第一条'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    logs.addLog(line('变矮后来的第二条'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('变矮后来的第二条'), findsOneWidget);
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    // 恢复原高，再来一条：还在底
+    tester.view.physicalSize = const Size(360, 780);
+    await tester.pumpAndSettle();
+    expect(pos.pixels, pos.maxScrollExtent);
+    logs.addLog(line('恢复后来的'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('恢复后来的'), findsOneWidget);
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    // 手指刚往上拖出一点（离底还不到一行）、还没松手：这时来的日志不把列表拽回去；翻回底部重新跟
+    final finger = await tester.startGesture(tester.getCenter(find.byType(ListView)));
+    await finger.moveBy(const Offset(0, 15));
+    await finger.moveBy(const Offset(0, 15));
+    await tester.pump();
+    final held = pos.pixels;
+    expect(held, inExclusiveRange(pos.maxScrollExtent - 40, pos.maxScrollExtent));
+    logs.addLog(line('拖着的时候来的'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(pos.pixels, held);
+    await finger.up();
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    logs.addLog(line('翻回底部后来的'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    // 自己翻上去看旧日志：视口再怎么变、再来新的，都不拽回去
+    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    final reading = pos.pixels;
+    expect(reading, lessThan(pos.maxScrollExtent - 100));
+    tester.view.physicalSize = const Size(360, 500);
+    await tester.pumpAndSettle();
+    logs.addLog(line('翻看时来的'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(pos.pixels, reading);
+
+    // 翻回底部：重新跟
+    tester.view.physicalSize = const Size(360, 780);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -3000));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(pos.pixels, pos.maxScrollExtent);
+    tester.view.physicalSize = const Size(360, 500);
+    await tester.pumpAndSettle();
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    // 翻上去之后搜索再清掉搜索词：回到日志的尾巴
+    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(pos.pixels, lessThan(pos.maxScrollExtent - 100));
+    await tester.enterText(find.byType(TextField), 'host-1');
+    await tester.pumpAndSettle();
+    expect(find.text('11 条匹配'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    final back = _logScroll(tester);
+    expect(back.maxScrollExtent, greaterThan(0));
+    expect(back.pixels, back.maxScrollExtent);
+  });
+
+  testWidgets('日志：滚轮往上翻（Windows）也不再跟，滚回底部重新跟', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(1100, 700),
+      wide: true,
+      twoPane: true,
+      textScale: 1,
+      logs: [
+        for (var i = 0; i < 80; i++)
+          Log(logLevel: LogLevel.info, payload: '[TCP] host-$i.example.com:443 → 香港 01 命中 MATCH', dateTime: '2026-10-07 14:00:${(i % 60).toString().padLeft(2, '0')}'),
+      ],
+    );
+    await tester.tap(find.text('日志'));
+    await tester.pumpAndSettle();
+    final logs = _container(tester).read(logsProvider.notifier);
+    Log line(String text) => Log(logLevel: LogLevel.warning, payload: text, dateTime: '2026-10-07 14:05:00');
+    final pos = _logScroll(tester);
+    expect(pos.maxScrollExtent, greaterThan(200));
+    expect(pos.pixels, pos.maxScrollExtent);
+
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(tester.getCenter(find.byType(ListView))));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -120)));
+    await tester.pumpAndSettle();
+    final reading = pos.pixels;
+    expect(reading, lessThan(pos.maxScrollExtent - 100));
+    logs.addLog(line('翻看时来的'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(pos.pixels, reading);
+
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 2000)));
+    await tester.pumpAndSettle();
+    expect(pos.pixels, pos.maxScrollExtent);
+    logs.addLog(line('滚回底部后来的'));
+    await tester.pumpAndSettle(const Duration(milliseconds: 300));
+    expect(find.text('滚回底部后来的'), findsOneWidget);
+    expect(pos.pixels, pos.maxScrollExtent);
+  });
+
+  testWidgets('日志：开头几条长、后面短（底估大了，第一跳越界）也在两三帧内对到真实的底，不等回弹', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 780),
+      wide: false,
+      twoPane: false,
+      textScale: 1,
+      logs: [
+        for (var i = 0; i < 256; i++)
+          Log(
+            logLevel: LogLevel.info,
+            payload: i < 6 ? '第 $i 条\n第二行\n第三行' : 'line-$i',
+            dateTime: '2026-10-07 14:00:${(i % 60).toString().padLeft(2, '0')}',
+          ),
+      ],
+    );
+    await tester.tap(find.text('日志'));
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final pos = _logScroll(tester);
+    expect(pos.maxScrollExtent, greaterThan(0));
+    expect(pos.pixels, pos.maxScrollExtent);
+    expect(find.text('line-255'), findsOneWidget);
+  });
+
+  test('轮询停不停：桌面只看 backgroundMode；移动端可见但失焦（inactive：分屏 / 小窗里焦点在别的 App）照常刷新', () {
+    bool paused(bool background, bool desktop, AppLifecycleState? lifecycle) =>
+        connPollingPaused(background: background, desktop: desktop, lifecycle: lifecycle);
+    // 前台
+    expect(paused(false, false, AppLifecycleState.resumed), isFalse);
+    expect(paused(false, true, AppLifecycleState.inactive), isFalse);
+    // 移动端：inactive 时 backgroundMode 已经为真，但画面还在
+    expect(paused(true, false, AppLifecycleState.inactive), isFalse);
+    expect(paused(true, false, AppLifecycleState.hidden), isTrue);
+    expect(paused(true, false, AppLifecycleState.paused), isTrue);
+    expect(paused(true, false, AppLifecycleState.detached), isTrue);
+    expect(paused(true, false, null), isTrue);
+    // 桌面：backgroundMode 只有隐藏 / 最小化才为真，为真就停
+    expect(paused(true, true, AppLifecycleState.inactive), isTrue);
+    expect(paused(true, true, AppLifecycleState.hidden), isTrue);
   });
 }
