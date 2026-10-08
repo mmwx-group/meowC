@@ -1,17 +1,14 @@
 package miu
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -53,22 +50,22 @@ type Session struct {
 	clientMetadata string
 
 	// miu
-	psk        []byte
-	ekm        []byte // exporter of the outer TLS session, nil when unavailable
-	recvWindow int64  // announced to the server, per stream
+	recvWindow int64 // announced to the server, per stream
+	// when Settings went out and the round trip time measured from it once
+	// ServerSettings came back, for the receive window auto-growth
+	settingsSent atomic.Int64
+	rtt          atomic.Int64
 	// guarded by streamLock: the window announced by the server
 	sendWindowInit int64
 	windowsApplied bool
 }
 
-func newSession(conn net.Conn, _padding *atomic.Pointer[padding.PaddingFactory], clientMetadata string, psk, ekm []byte, recvWindow int64) *Session {
+func newSession(conn net.Conn, _padding *atomic.Pointer[padding.PaddingFactory], clientMetadata string, recvWindow int64) *Session {
 	s := &Session{
 		conn:           conn,
 		sendPadding:    true,
 		padding:        _padding,
 		clientMetadata: clientMetadata,
-		psk:            psk,
-		ekm:            ekm,
 		recvWindow:     recvWindow,
 	}
 	s.die = make(chan struct{})
@@ -302,12 +299,8 @@ func (s *Session) recvLoop() error {
 			if err != nil {
 				return err
 			}
-			err = s.handleServerSettings(util.StringMapFromBytes(buffer))
+			s.handleServerSettings(util.StringMapFromBytes(buffer))
 			_ = pool.Put(buffer)
-			if err != nil {
-				log.Warnln("[Miu] %v", err)
-				return err
-			}
 		default: // cmdWaste, cmdHeartResponse and anything unknown: skip the body
 			if length > 0 {
 				if _, err := io.CopyN(io.Discard, s.conn, int64(length)); err != nil {
@@ -318,21 +311,7 @@ func (s *Session) recvLoop() error {
 	}
 }
 
-// verifyServerTag checks the "srv" value of ServerSettings: HMAC-SHA256(psk, EKM || 0x02).
-// It proves the peer holds the PSK and sees the same TLS session as we do.
-func verifyServerTag(m util.StringMap, psk, ekm []byte) error {
-	srv, ok := m["srv"]
-	if !ok || len(ekm) != ekmLen {
-		return nil
-	}
-	got, err := hex.DecodeString(strings.TrimSpace(srv))
-	if err != nil || !bytes.Equal(got, authTagEKM(psk, ekm, roleServer)) {
-		return errors.New("miu: server auth tag mismatch")
-	}
-	return nil
-}
-
-func (s *Session) handleServerSettings(m util.StringMap) error {
+func (s *Session) handleServerSettings(m util.StringMap) {
 	if v, err := strconv.Atoi(m["v"]); err == nil {
 		s.peerVersion.Store(uint32(v))
 	}
@@ -342,8 +321,11 @@ func (s *Session) handleServerSettings(m util.StringMap) error {
 		if w, err := strconv.ParseInt(m["win"], 10, 64); err == nil {
 			win = clampWindow(w)
 		}
-		if err := verifyServerTag(m, s.psk, s.ekm); err != nil {
-			return err
+	}
+	// Settings going out until ServerSettings coming back is about one round trip.
+	if sent := s.settingsSent.Load(); sent > 0 && s.rtt.Load() == 0 {
+		if rtt := time.Now().UnixNano() - sent; rtt > 0 {
+			s.rtt.Store(rtt)
 		}
 	}
 	// Streams opened before ServerSettings only had a conservative credit.
@@ -356,7 +338,6 @@ func (s *Session) handleServerSettings(m util.StringMap) error {
 		}
 	}
 	s.streamLock.Unlock()
-	return nil
 }
 
 func (s *Session) streamClosed(sid uint32) error {
@@ -419,6 +400,8 @@ func (s *Session) writeConn(b []byte) (n int, err error) {
 	} else if len(s.buffer) > 0 {
 		b = append(s.buffer, b...)
 		s.buffer = nil
+		// the Settings frame was held back in the buffer and goes out now
+		s.settingsSent.CompareAndSwap(0, time.Now().UnixNano())
 	}
 
 	// calulate & send padding

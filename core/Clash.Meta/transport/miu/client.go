@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 type ClientConfig struct {
 	PSK                      string
 	ClientMetadata           string
-	Vision                   bool // TCP uses a dedicated connection handed over to XTLS-Vision
+	Vision                   bool // TCP to port 443 uses a dedicated connection handed over to XTLS-Vision
 	RecvWindow               int  // per stream receive window in bytes, 0 = default
 	IdleSessionCheckInterval time.Duration
 	IdleSessionTimeout       time.Duration
@@ -31,27 +32,32 @@ type ClientConfig struct {
 }
 
 type Client struct {
-	psk            []byte
-	visionSeed     uuid.UUID // sha256(psk)[:16], the Vision seed of Vision, same on both ends
+	token          [authTokenLen]byte // sha256(psk string), the auth header
+	visionSeed     uuid.UUID          // sha256(psk)[:16], the Vision seed of Vision, same on both ends
 	clientMetadata string
 	recvWindow     int64
 	vision         bool
-	visionRefused  atomic.Bool // the server does not grant Vision
-	tlsConfig      *vmess.TLSConfig
-	dialer         N.Dialer
-	server         M.Socksaddr
-	pool           *sessionPool
-	padding        atomic.Pointer[padding.PaddingFactory]
+	// Vision: the server granted it once (only then data may go out before its
+	// reply) / the server does not grant it (everything goes through MUX from then on)
+	visionConfirmed atomic.Bool
+	visionRefused   atomic.Bool
+	spares          visionSpares
+	tlsConfig       *vmess.TLSConfig
+	dialer          N.Dialer
+	server          M.Socksaddr
+	pool            *sessionPool
+	padding         atomic.Pointer[padding.PaddingFactory]
 }
 
 func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
-	psk, err := decodePSK(config.PSK)
+	pskString := strings.TrimSpace(config.PSK)
+	psk, err := decodePSK(pskString)
 	if err != nil {
 		return nil, err
 	}
 	seed := sha256.Sum256(psk)
 	c := &Client{
-		psk:            psk,
+		token:          authToken(pskString),
 		visionSeed:     uuid.FromBytesOrNil(seed[:uuid.Size]),
 		clientMetadata: config.ClientMetadata,
 		recvWindow:     clampWindow(int64(config.RecvWindow)),
@@ -66,19 +72,31 @@ func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
 	return c, nil
 }
 
-// CreateProxy opens a TCP proxy connection to destination, with Vision when it
-// is enabled and granted by the server, as a MUX stream otherwise.
+// CreateProxy opens a TCP proxy connection to destination. With Vision enabled the
+// mode is picked per connection: port 443 (the inner traffic is TLS almost for
+// sure, so Vision has something to hand over) gets a dedicated Vision connection,
+// everything else is a MUX stream. A server that does not grant Vision is
+// remembered and only gets MUX streams afterwards.
 func (c *Client) CreateProxy(ctx context.Context, destination M.Socksaddr) (net.Conn, error) {
-	if c.vision && !c.visionRefused.Load() {
+	if c.useVision(destination) {
 		conn, err := c.dialVision(ctx, destination)
 		if err != errVisionRefused {
 			return conn, err
 		}
-		if c.visionRefused.CompareAndSwap(false, true) {
-			log.Warnln("[Miu] %s does not grant Vision, falling back to MUX", c.server)
-		}
 	}
 	return c.CreateStream(ctx, destination)
+}
+
+func (c *Client) useVision(destination M.Socksaddr) bool {
+	return c.vision && destination.Port == visionPort && !c.visionRefused.Load()
+}
+
+// refuseVision remembers that the server does not grant Vision.
+func (c *Client) refuseVision() {
+	c.visionConfirmed.Store(false)
+	if c.visionRefused.CompareAndSwap(false, true) {
+		log.Warnln("[Miu] %s does not grant Vision, falling back to MUX", c.server)
+	}
 }
 
 // CreateStream opens a MUX stream to destination.
@@ -107,40 +125,44 @@ func destinationBytes(destination M.Socksaddr) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// connect dials the server, finishes the outer TLS handshake and sends the auth
-// header. The returned ekm is nil when the transport has no exporter.
-func (c *Client) connect(ctx context.Context) (net.Conn, []byte, error) {
+// connect dials the server and finishes the outer TLS handshake.
+func (c *Client) connect(ctx context.Context) (net.Conn, error) {
 	conn, err := c.dialer.DialContext(ctx, N.NetworkTCP, c.server)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	tlsConn, err := vmess.StreamTLSConn(ctx, conn, c.tlsConfig)
 	if err != nil {
 		conn.Close()
-		return nil, nil, err
+		return nil, err
 	}
+	return tlsConn, nil
+}
 
+// authHeader is the first thing sent on a connection.
+func (c *Client) authHeader() []byte {
 	var paddingLen int
 	if pad := c.padding.Load().GenerateRecordPayloadSizes(0); len(pad) > 0 {
 		paddingLen = pad[0]
 	}
-	ekm := exportKeyingMaterial(tlsConn)
-	if _, err = tlsConn.Write(buildAuthHeader(c.psk, ekm, paddingLen)); err != nil {
-		tlsConn.Close()
-		return nil, nil, err
-	}
-	return tlsConn, ekm, nil
+	return buildAuthHeader(c.token, paddingLen)
 }
 
 func (c *Client) newSession(ctx context.Context) (*Session, error) {
-	conn, ekm, err := c.connect(ctx)
+	conn, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return newSession(conn, &c.padding, c.clientMetadata, c.psk, ekm, c.recvWindow), nil
+	if _, err = conn.Write(c.authHeader()); err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return newSession(conn, &c.padding, c.clientMetadata, c.recvWindow), nil
 }
 
 func (c *Client) Close() error {
-	return c.pool.Close()
+	err := c.pool.Close()
+	c.spares.close()
+	return err
 }

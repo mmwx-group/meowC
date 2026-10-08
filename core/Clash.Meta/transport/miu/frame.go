@@ -1,8 +1,8 @@
 // Package miu implements the client side of the Miu protocol.
 //
 // Miu keeps the AnyTLS v2 wire format as its baseline (frames 0-10) and adds:
-//   - a per-user PSK auth header bound to the outer TLS session via the TLS exporter,
-//     so nothing fixed per user ever appears on the wire;
+//   - a per-user PSK auth header: a fixed token, the hash of the PSK string, that
+//     the server looks up;
 //   - per-stream flow control (cmdWindow);
 //   - Vision: a dedicated connection that hands over to XTLS-Vision after SYNACK,
 //     letting the server splice inner TLS 1.3 traffic.

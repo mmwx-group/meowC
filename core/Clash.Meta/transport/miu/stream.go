@@ -114,7 +114,7 @@ type Stream struct {
 	sess *Session
 
 	recvQ   *recvQueue
-	recvWin recvWindow
+	recvWin *recvWindow
 	send    *sendWindow
 
 	writeDeadline pipe.PipeDeadline
@@ -131,7 +131,7 @@ func newStream(id uint32, sess *Session) *Stream {
 	s.id = id
 	s.sess = sess
 	s.recvQ = newRecvQueue()
-	s.recvWin.initial = sess.recvWindow
+	s.recvWin = newRecvWindow(sess.recvWindow, autoRecvWindowMax)
 	// only a conservative credit until ServerSettings arrives
 	s.send = newSendWindow(minRecvWindow)
 	s.writeDeadline = pipe.MakePipeDeadline()
@@ -142,7 +142,7 @@ func newStream(id uint32, sess *Session) *Stream {
 func (s *Stream) Read(b []byte) (n int, err error) {
 	n, err = s.recvQ.read(b)
 	if n > 0 && !s.dead.Load() {
-		if inc := s.recvWin.consume(int64(n)); inc > 0 {
+		if inc := s.recvWin.consume(int64(n), time.Now(), time.Duration(s.sess.rtt.Load())); inc > 0 {
 			_ = s.sess.writeWindow(s.id, inc)
 		}
 	}
