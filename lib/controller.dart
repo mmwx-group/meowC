@@ -1225,9 +1225,25 @@ class AppController {
 
   Future<void>? _initCoreFuture;
 
+  static Future<void>? _bundledUiFuture;
+
+  /// MeowX：内置面板（external-ui 目录）的部署。原来在 main() 里挡着首帧：平时只是查一下版本文件，
+  /// 安装 / 升级后首启要真的解压。挪到核心初始化之前等它——核心装载配置时发现面板目录是空的会自己联网下载，
+  /// 不能和本地解压同时写同一个目录，所以顺序仍是「面板就绪 → 核心装载」。只跑一次。
+  Future<void> _ensureBundledUi() {
+    return _bundledUiFuture ??= () async {
+      try {
+        await uiManager.initializeUI();
+      } catch (e) {
+        commonPrint.log('Failed to initialize UI: $e');
+      }
+    }();
+  }
+
   Future<void> _initCore() {
     return _initCoreFuture ??= () async {
       try {
+        await _ensureBundledUi();
         final isInit = await clashCore.isInit;
         if (!isInit) {
           await clashCore.init();

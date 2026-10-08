@@ -10,7 +10,6 @@ import 'package:bett_box/plugins/clipboard_ext.dart';
 import 'package:bett_box/plugins/tile.dart';
 import 'package:bett_box/plugins/vpn.dart';
 import 'package:bett_box/state.dart';
-import 'package:code_forge/code_forge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,6 +22,7 @@ import 'common/common.dart';
 import 'common/external_control.dart';
 import 'common/network_matcher.dart';
 import 'models/models.dart';
+import 'pages/editor.dart';
 
 ReceivePort? _serviceReceiverPort;
 ReceivePort? _messageReceiverPort;
@@ -53,16 +53,21 @@ Future<void> main(List<String> args) async {
   PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
 
   final version = await system.version;
-  await Future.wait([globalState.initApp(version), clashCore.preload()]);
+  // MeowX：等核心通道就绪设了上限。Android 上 preload 等的是服务引擎把端口发回来，
+  // 极慢的机器（或它压根没起来）不能让启动页一直挂着；界面先出来，核心调用自己会等通道（ClashLib.sendMessage）。
+  await Future.wait([
+    globalState.initApp(version),
+    clashCore.preload().timeout(_preloadWaitLimit, onTimeout: () => false),
+  ]);
 
-  try {
-    await uiManager.initializeUI();
-  } catch (e) {
-    commonPrint.log('Failed to initialize UI: $e');
-  }
+  // MeowX：内置面板的解压（uiManager.initializeUI，安装 / 升级后首启才真的解压）不再挡首帧，
+  // 挪到 AppController._initCore 里、核心初始化之前。
 
   await _runApp();
 }
+
+/// 首帧前最多等核心通道这么久：与 ClashLib._waitForIpc 的单次等待一致。
+const _preloadWaitLimit = Duration(seconds: 2);
 
 Future<void> _sendControlCommand(String command) async {
   for (int i = 0; i < 5; i++) {
@@ -81,12 +86,6 @@ Future<void> _sendControlCommand(String command) async {
 }
 
 Future<void> _runApp() async {
-  try {
-    await RustLib.init();
-  } catch (e) {
-    commonPrint.log('Failed to initialize code_forge RustLib: $e');
-  }
-
   if (system.isAndroid) {
     try {
       await FlutterDisplayMode.setHighRefreshRate();
@@ -109,6 +108,9 @@ Future<void> _runApp() async {
       child: ProviderScope(child: const Application()),
     ),
   );
+  // MeowX：code_forge 的 Rust 库只有配置查看 / 编辑页用，不再挡首帧。进编辑页的入口都会先等它
+  // （ensureEditorRuntime，只初始化一次）；这里在启动忙完后预热一次，正常使用时进编辑页不用现等。
+  Timer(const Duration(seconds: 5), () => unawaited(ensureEditorRuntime()));
 }
 
 @pragma('vm:entry-point')
