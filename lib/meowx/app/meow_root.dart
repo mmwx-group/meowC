@@ -237,8 +237,9 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         // liquid_glass_widgets：Impeller（Android 10+）上高亮胶囊是真折射 + 高光，按住放大、拖动带果冻形变；
         // Skia（Android 8–9、Windows 3.44）自动降级为模糊 + 双高光，仍可拖动。底轨也用 premium：边缘亮线 + 暗带只有它画得出来。
         // （改版时换过一版自绘的纯色胶囊，用户要求保留液态玻璃，所以只换了配色和图标。）
-        // 这里写的 premium 是上限：main.dart 给 Android 接了库的自适应档位（GlassAdaptiveScope），
-        // 实测光栅跑不动时会把它压到 standard（进程内只降不升），压下来以后底轨参数跟着换一组，见 barGlass。
+        // 这里写的 premium 是上限：main.dart 给 Android 挂了库的自适应档位（GlassAdaptiveScope），目前只采数据、
+        // 不降档（minQuality 也是 premium），所以下面的 degraded 恒为 false；以后放开到 standard 时，
+        // 被压下来的底轨参数跟着换一组，见 barGlass。
         bottomNavigationBar: wide
             ? null
             : lg.GlassTabBar.bottom(
@@ -272,7 +273,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
 /// 暗带（edgeAbsorption）只在 Impeller 的 premium 着色器上好看；Skia（Android 8–9、Windows 窄窗口）降级成 standard 时
 /// 它会变成一圈很重的灰色斜面，所以只在真的用 premium 着色器画时才加。
 ///
-/// [degraded]：自适应档位把这台机器压到了 standard（Impeller 机型跑不动 premium）。这时库认为参数已经是按
+/// [degraded]：自适应档位把这台机器压到了 standard（Impeller 机型跑不动 premium；main.dart 目前没放开降档，
+/// 这条分支是为放开备着的）。这时库认为参数已经是按
 /// standard 调好的，不再做它在 Skia 上对 premium 参数自动做的归一化（厚度 ×0.4、高光 ×0.6），
 /// 所以这里自己乘上、并去掉暗带——降档后的底轨就是 Android 8–9 上现在的样子，而不是一圈更重的斜面。
 @visibleForTesting

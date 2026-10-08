@@ -18,21 +18,48 @@ List<FrameTiming> _frames(int n, int rasterMs) => [
         ),
     ];
 
-/// 与 main.dart 里 wrap() 传的配置同一组取值。
-GlassQualityAdapter _adapter(List<String> changes) => GlassQualityAdapter(
-      minQuality: GlassQuality.standard,
+/// 与 main.dart 里 wrap() 传的配置同一组取值；[minQuality] 默认是「放开降档」以后要用的 standard，
+/// main.dart 目前传的是 premium（只采数据）。
+GlassQualityAdapter _adapter(
+  List<String> changes, {
+  GlassQuality minQuality = GlassQuality.standard,
+  void Function(GlassQuality settled, double p75Ms, int frames)? onWarmupComplete,
+}) =>
+    GlassQualityAdapter(
+      minQuality: minQuality,
       maxQuality: GlassQuality.premium,
       targetFrameMs: 16,
       allowStepUp: false,
       onQualityChanged: (from, to) => changes.add('${from.name}→${to.name}'),
+      onWarmupComplete: onWarmupComplete,
     );
 
 void main() {
-  // main.dart 接上了库的自适应档位（实验性功能），「底栏观感不会来回变」靠的是库的这几条行为。
-  // 这里按 liquid_glass_widgets 1.7.2 的实现把它们钉住，升级库时行为变了会先在这里报出来。
+  // main.dart 挂上了库的自适应档位（实验性功能）。这里按 liquid_glass_widgets 1.7.2 的实现把依赖的行为钉住，
+  // 升级库时行为变了会先在这里报出来。
   group('自适应档位的前提（库的行为）', () {
     setUp(GlassQualityAdapter.clearSessionCache);
     tearDown(GlassQualityAdapter.clearSessionCache);
+
+    // 目前的接法：只采数据。库量的是整帧光栅耗时，与底栏在不在画无关，没有真机数据前不让它动底栏的观感。
+    test('现在的配置（minQuality: premium）：预热再慢、运行中再卡、回前台重测都不降档，预热 P75 照样报出来', () {
+      final changes = <String>[];
+      final warmups = <String>[];
+      final a = _adapter(
+        changes,
+        minQuality: GlassQuality.premium,
+        onWarmupComplete: (settled, p75Ms, frames) => warmups.add('${settled.name} ${p75Ms.round()}ms $frames'),
+      );
+      a.simulateFrameTimings(_frames(90 + 180, 45));
+      a.simulateFrameTimings(_frames(120 * 6, 80));
+      a.reset(); // 回前台时库会重跑预热
+      a.simulateFrameTimings(_frames(90 + 180, 30));
+      expect(a.currentQuality, GlassQuality.premium);
+      expect(changes, isEmpty);
+      expect(warmups, ['premium 45ms 180', 'premium 30ms 180']);
+    });
+
+    // 以下三条是把 minQuality 放开到 standard 以后「底栏观感不会来回变」所依赖的行为。
 
     test('跑得动：起步 premium，预热（跳过 90 帧 + 实测 180 帧）后仍是 premium', () {
       final changes = <String>[];
