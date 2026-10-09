@@ -74,3 +74,14 @@
 - `lib/main.dart`：液态玻璃底栏挂了库的自适应档位（`GlassAdaptiveScope`），目前只采数据、不降档（minQuality 仍是 premium），默认观感不变。
 - `lib/application.dart`：亮 / 暗两份主题走缓存（`MeowThemes`）；`lib/views/about.dart`：关于页图标用 256 的小图。
 - 连接快照的取用在 `lib/meowx/state/connection.dart`（`ConnStatsController`）：没有界面显示连接数时不拉，可见页面取到的完整快照顺手更新计数。
+
+## 2026-10-09 · 内核：Miu 换成第二版
+- `core/Clash.Meta/transport/miu/`、`core/Clash.Meta/adapter/outbound/miu.go`：自有协议 Miu 整体换成第二版（通道池 + 原样转发：一条通道一条流，流结束后回池复用；内层已是 TLS 1.3 密文的数据不再套外层加密；中止发 RESET、不废通道；UDP 走流里的 UoT）。与第一版线上格式不兼容，服务端同步换成第二版；第一版代码在标签 `miu-v1`。节点配置不变（`type: miu` + `psk`），第一版的 `vision` / `recv-window` 字段忽略。
+- 测试：`transport/miu/miu_test.go`（离线）；`live_test.go` 对参考服务端（`MIU_LIVE_MIUX=<miux 二进制>`：TLS / uTLS / REALITY、UDP、通道池、中止、重放）。
+
+## 2026-10-09 · 内核：AnyTLS 支持 REALITY
+- `core/Clash.Meta/adapter/outbound/anytls.go`：AnyTLS 出站认 `reality-opts`（`public-key` / `short-id`，与 trojan / vless 同一套写法，必须带 `client-fingerprint`），与 ShadowTLS / Restls / JLS 互斥。上游 mihomo 的 AnyTLS 没有 REALITY：主控下发的 anytls + REALITY 节点此前在这里被当成普通 TLS 握手、连不上。握手本身沿用 `vmess.StreamTLSConn` 里已有的 REALITY 分支，没有新代码路径。
+- 测试 `core/Clash.Meta/adapter/outbound/anytls_reality_test.go`：配置解析 / 互斥；对真实服务端的用例要 `ANYTLS_REALITY_LIVE=host:port` 加 `ANYTLS_REALITY_PASSWORD` / `_PBK` / `_SID` / `_SNI`。
+
+## 2026-10-09 · 订阅请求带官方客户端标记
+- `lib/common/package.dart`：默认 UA 由 `mihomo/1.19.0 (miaomiaowu; <系统>)` 改为 `mihomo/1.19.0 MeowX/<版本> (<系统>)`（开头的 mihomo/1.19.0 不动：主控与第三方机场靠它给完整 clash YAML；品牌名用 MeowX，不再出现 miaomiaowu）。主控认出这个标记就下发只有官方内核才支持的节点（AnyTLS + REALITY）。用户在「常规」里自定义了全局 UA 时仍以用户填的为准。
