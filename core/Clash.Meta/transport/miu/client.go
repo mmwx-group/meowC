@@ -3,130 +3,109 @@ package miu
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"net"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/metacubex/mihomo/log"
 	"github.com/metacubex/mihomo/transport/anytls/padding"
 	"github.com/metacubex/mihomo/transport/vmess"
 
-	"github.com/gofrs/uuid/v5"
 	M "github.com/metacubex/sing/common/metadata"
 	N "github.com/metacubex/sing/common/network"
 )
 
 type ClientConfig struct {
-	PSK                      string
-	ClientMetadata           string
-	Vision                   bool // TCP to port 443 uses a dedicated connection handed over to XTLS-Vision
-	RecvWindow               int  // per stream receive window in bytes, 0 = default
-	IdleSessionCheckInterval time.Duration
-	IdleSessionTimeout       time.Duration
-	MinIdleSession           int
-	Server                   M.Socksaddr
-	Dialer                   N.Dialer
-	TLSConfig                *vmess.TLSConfig
+	PSK string
+	// how long an idle lane is kept (the few put back last stay longer), and how
+	// many idle lanes are prewarmed while streams keep coming, 0 = default
+	IdleSessionTimeout time.Duration
+	MinIdleSession     int
+	Server             M.Socksaddr
+	Dialer             N.Dialer
+	TLSConfig          *vmess.TLSConfig
 }
 
 type Client struct {
-	token          [authTokenLen]byte // sha256(psk string), the auth header
-	visionSeed     uuid.UUID          // sha256(psk)[:16], the Vision seed of Vision, same on both ends
-	clientMetadata string
-	recvWindow     int64
-	vision         bool
-	// Vision: the server granted it once (only then data may go out before its
-	// reply) / the server does not grant it (everything goes through MUX from then on)
-	visionConfirmed atomic.Bool
-	visionRefused   atomic.Bool
-	spares          visionSpares
-	tlsConfig       *vmess.TLSConfig
-	dialer          N.Dialer
-	server          M.Socksaddr
-	pool            *sessionPool
-	padding         atomic.Pointer[padding.PaddingFactory]
+	token     [authTokenLen]byte // sha256(psk string), the auth header
+	tlsConfig *vmess.TLSConfig
+	dialer    N.Dialer
+	server    M.Socksaddr
+	padding   atomic.Pointer[padding.PaddingFactory]
+
+	// connect dials the server and finishes the outer handshake
+	connect func(ctx context.Context) (net.Conn, error)
+	// ctx ends with Close, the dials not made for a request run on it
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	laneIdle, warmIdle time.Duration
+	minIdle            int
+	// how long an aborted stream waits for the END of the server
+	drain time.Duration
+
+	mu       sync.Mutex
+	idle     []idleLane // oldest first
+	pending  int        // prewarm dials under way
+	lastOpen time.Time
+	sweeper  *time.Timer
+	closed   bool
+
+	// set by the tests only: lanes dialed and reused, raw segments, replays, resets
+	observer func(event string)
 }
 
 func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
-	pskString := strings.TrimSpace(config.PSK)
-	psk, err := decodePSK(pskString)
-	if err != nil {
+	psk := strings.TrimSpace(config.PSK)
+	if err := checkPSK(psk); err != nil {
 		return nil, err
 	}
-	seed := sha256.Sum256(psk)
 	c := &Client{
-		token:          authToken(pskString),
-		visionSeed:     uuid.FromBytesOrNil(seed[:uuid.Size]),
-		clientMetadata: config.ClientMetadata,
-		recvWindow:     clampWindow(int64(config.RecvWindow)),
-		vision:         config.Vision,
-		tlsConfig:      config.TLSConfig,
-		dialer:         config.Dialer,
-		server:         config.Server,
+		token:     authToken(psk),
+		tlsConfig: config.TLSConfig,
+		dialer:    config.Dialer,
+		server:    config.Server,
+		laneIdle:  defaultLaneIdle,
+		warmIdle:  warmLaneIdle,
+		drain:     abortDrain,
+		minIdle:   defaultMinIdle,
+	}
+	c.connect = c.connectTLS
+	c.ctx, c.cancel = context.WithCancel(ctx)
+	if config.IdleSessionTimeout > 0 {
+		c.laneIdle = config.IdleSessionTimeout
+	}
+	if config.MinIdleSession > 0 {
+		c.minIdle = config.MinIdleSession
 	}
 	// Initialize the padding state of this client
 	padding.UpdatePaddingScheme(padding.DefaultPaddingScheme, &c.padding)
-	c.pool = newSessionPool(ctx, c.newSession, config.IdleSessionCheckInterval, config.IdleSessionTimeout, config.MinIdleSession)
 	return c, nil
 }
 
-// CreateProxy opens a TCP proxy connection to destination. With Vision enabled the
-// mode is picked per connection: port 443 (the inner traffic is TLS almost for
-// sure, so Vision has something to hand over) gets a dedicated Vision connection,
-// everything else is a MUX stream. A server that does not grant Vision is
-// remembered and only gets MUX streams afterwards.
+func (c *Client) observe(event string) {
+	if c.observer != nil {
+		c.observer(event)
+	}
+}
+
+// CreateProxy opens a stream to destination, TCP or the UoT magic address. It
+// returns once a lane is at hand: on a warm one that is right away, the server is
+// not asked and does not answer, a destination it cannot reach shows as EOF.
 func (c *Client) CreateProxy(ctx context.Context, destination M.Socksaddr) (net.Conn, error) {
-	if c.useVision(destination) {
-		conn, err := c.dialVision(ctx, destination)
-		if err != errVisionRefused {
-			return conn, err
-		}
+	var addr bytes.Buffer
+	if err := M.SocksaddrSerializer.WriteAddrPort(&addr, destination); err != nil {
+		return nil, err
 	}
-	return c.CreateStream(ctx, destination)
-}
-
-func (c *Client) useVision(destination M.Socksaddr) bool {
-	return c.vision && destination.Port == visionPort && !c.visionRefused.Load()
-}
-
-// refuseVision remembers that the server does not grant Vision.
-func (c *Client) refuseVision() {
-	c.visionConfirmed.Store(false)
-	if c.visionRefused.CompareAndSwap(false, true) {
-		log.Warnln("[Miu] %s does not grant Vision, falling back to MUX", c.server)
-	}
-}
-
-// CreateStream opens a MUX stream to destination.
-func (c *Client) CreateStream(ctx context.Context, destination M.Socksaddr) (net.Conn, error) {
-	addr, err := destinationBytes(destination)
+	l, err := c.get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := c.pool.CreateStream(ctx)
-	if err != nil {
-		return nil, err
-	}
-	// the first PSH of a stream carries the destination
-	if err = stream.writeDestination(addr); err != nil {
-		stream.Close()
-		return nil, err
-	}
-	return stream, nil
+	return newStream(c, l, addr.Bytes()), nil
 }
 
-func destinationBytes(destination M.Socksaddr) ([]byte, error) {
-	var b bytes.Buffer
-	if err := M.SocksaddrSerializer.WriteAddrPort(&b, destination); err != nil {
-		return nil, err
-	}
-	return b.Bytes(), nil
-}
-
-// connect dials the server and finishes the outer TLS handshake.
-func (c *Client) connect(ctx context.Context) (net.Conn, error) {
+func (c *Client) connectTLS(ctx context.Context) (net.Conn, error) {
 	conn, err := c.dialer.DialContext(ctx, N.NetworkTCP, c.server)
 	if err != nil {
 		return nil, err
@@ -140,29 +119,46 @@ func (c *Client) connect(ctx context.Context) (net.Conn, error) {
 	return tlsConn, nil
 }
 
-// authHeader is the first thing sent on a connection.
-func (c *Client) authHeader() []byte {
-	var paddingLen int
-	if pad := c.padding.Load().GenerateRecordPayloadSizes(0); len(pad) > 0 {
-		paddingLen = pad[0]
-	}
-	return buildAuthHeader(c.token, paddingLen)
+// hello is the first thing sent on a lane: the auth header, its padding and the
+// Settings frame.
+func (c *Client) hello(l *lane) []byte {
+	scheme := c.padding.Load()
+	paddingLen := authPadding(scheme)
+	b := appendAuthHeader(make([]byte, 0, authTokenLen+2+paddingLen+64), c.token, paddingLen)
+	return appendFrame(b, frSettings, l.settings(scheme.Md5))
 }
 
-func (c *Client) newSession(ctx context.Context) (*Session, error) {
+// dial brings up a new lane: the outer handshake, then the hello in one write.
+// No reply is waited for, the lane can carry a stream right away.
+func (c *Client) dial(ctx context.Context) (*lane, error) {
 	conn, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if _, err = conn.Write(c.authHeader()); err != nil {
-		conn.Close()
+	l := newLane(c, conn)
+	if err = l.write(c.hello(l)); err != nil {
+		l.close()
 		return nil, err
 	}
-	return newSession(conn, &c.padding, c.clientMetadata, c.recvWindow), nil
+	c.observe("lane:dial")
+	return l, nil
 }
 
+// Close closes the lanes in the pool. A lane still carrying a stream is closed
+// when that stream lets go of it.
 func (c *Client) Close() error {
-	err := c.pool.Close()
-	c.spares.close()
-	return err
+	c.cancel()
+	c.mu.Lock()
+	idle := c.idle
+	c.idle = nil
+	c.closed = true
+	if c.sweeper != nil {
+		c.sweeper.Stop()
+		c.sweeper = nil
+	}
+	c.mu.Unlock()
+	for _, it := range idle {
+		it.l.close()
+	}
+	return nil
 }

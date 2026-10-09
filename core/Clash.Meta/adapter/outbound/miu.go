@@ -23,6 +23,8 @@ type Miu struct {
 	option *MiuOption
 }
 
+// MiuOption: vision, recv-window, client-metadata and idle-session-check-interval
+// are options of the first version of the protocol, still accepted and ignored.
 type MiuOption struct {
 	BasicOption
 	Name                     string         `proxy:"name"`
@@ -62,8 +64,8 @@ func (t *Miu) ListenPacketContext(ctx context.Context, metadata *C.Metadata) (_ 
 		return nil, err
 	}
 
-	// UDP always rides a MUX stream
-	c, err := t.client.CreateStream(ctx, uot.RequestDestination(2))
+	// UDP rides a stream of its own
+	c, err := t.client.CreateProxy(ctx, uot.RequestDestination(2))
 	if err != nil {
 		return nil, err
 	}
@@ -141,16 +143,12 @@ func NewMiu(option MiuOption) (*Miu, error) {
 	}
 
 	client, err := miu.NewClient(context.TODO(), miu.ClientConfig{
-		PSK:                      option.PSK,
-		ClientMetadata:           option.ClientMetadata,
-		Vision:                   option.Vision,
-		RecvWindow:               option.RecvWindow,
-		IdleSessionCheckInterval: time.Duration(option.IdleSessionCheckInterval) * time.Second,
-		IdleSessionTimeout:       time.Duration(option.IdleSessionTimeout) * time.Second,
-		MinIdleSession:           option.MinIdleSession,
-		Server:                   M.ParseSocksaddrHostPort(option.Server, uint16(option.Port)),
-		Dialer:                   singDialer,
-		TLSConfig:                tlsConfig,
+		PSK:                option.PSK,
+		IdleSessionTimeout: time.Duration(option.IdleSessionTimeout) * time.Second,
+		MinIdleSession:     option.MinIdleSession,
+		Server:             M.ParseSocksaddrHostPort(option.Server, uint16(option.Port)),
+		Dialer:             singDialer,
+		TLSConfig:          tlsConfig,
 	})
 	if err != nil {
 		return nil, err

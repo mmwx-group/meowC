@@ -2,178 +2,192 @@ package miu
 
 import (
 	"context"
-	"fmt"
 	"io"
-	"math"
-	"sync"
-	"sync/atomic"
 	"time"
-
-	"github.com/metacubex/mihomo/transport/anytls/skiplist"
-	"github.com/metacubex/mihomo/transport/anytls/util"
 )
 
-// sessionPool keeps idle MUX sessions for reuse, same policy as the AnyTLS client.
-type sessionPool struct {
-	die       context.Context
-	dieCancel context.CancelFunc
+const (
+	// How long an idle lane stays in the pool. The warmLanes put back last stay
+	// for warmLaneIdle: two taps are often more than half a minute apart, and with
+	// the pool empty the next one pays for a handshake again, while an idle lane
+	// sends no heartbeat and costs next to nothing. The others go after
+	// defaultLaneIdle. Neither is longer than what the server announced minus a
+	// margin.
+	defaultLaneIdle = 30 * time.Second
+	warmLaneIdle    = 120 * time.Second
+	warmLanes       = 4
+	laneIdleMargin  = 5 * time.Second
+	// idle lanes beyond this many: the oldest is closed
+	maxIdleLanes = 32
+	// Idle lanes are only topped up to minIdle when two streams were opened
+	// within this long: the odd background connection is not worth more handshakes.
+	laneBurstWindow = 10 * time.Second
+	defaultMinIdle  = 2
+	// for the dials that are not made for a request: prewarming, replaying
+	dialTimeout = 10 * time.Second
+)
 
-	newSession func(ctx context.Context) (*Session, error)
-
-	sessionCounter atomic.Uint64
-
-	idleSession     *skiplist.SkipList[uint64, *Session]
-	idleSessionLock sync.Mutex
-
-	sessions     map[uint64]*Session
-	sessionsLock sync.Mutex
-
-	idleSessionTimeout time.Duration
-	minIdleSession     int
+type idleLane struct {
+	l     *lane
+	since time.Time
 }
 
-func newSessionPool(ctx context.Context, newSession func(ctx context.Context) (*Session, error), idleSessionCheckInterval, idleSessionTimeout time.Duration, minIdleSession int) *sessionPool {
-	p := &sessionPool{
-		sessions:           make(map[uint64]*Session),
-		newSession:         newSession,
-		idleSessionTimeout: idleSessionTimeout,
-		minIdleSession:     minIdleSession,
+// ttl is how long l may stay idle as the idle lane number rank, 0 being the one
+// put back last.
+func (c *Client) ttl(l *lane, rank int) time.Duration {
+	ttl := c.laneIdle
+	if rank < warmLanes && ttl < c.warmIdle {
+		ttl = c.warmIdle
 	}
-	if idleSessionCheckInterval <= time.Second*5 {
-		idleSessionCheckInterval = time.Second * 30
+	if peer := time.Duration(l.peerIdle.Load()) * time.Second; peer > 2*laneIdleMargin && peer-laneIdleMargin < ttl {
+		ttl = peer - laneIdleMargin
 	}
-	if p.idleSessionTimeout <= time.Second*5 {
-		p.idleSessionTimeout = time.Second * 30
-	}
-	p.die, p.dieCancel = context.WithCancel(ctx)
-	p.idleSession = skiplist.NewSkipList[uint64, *Session]()
-	util.StartRoutine(p.die, idleSessionCheckInterval, p.idleCleanup)
-	return p
+	return ttl
 }
 
-func (p *sessionPool) CreateStream(ctx context.Context) (*Stream, error) {
-	select {
-	case <-p.die.Done():
+// takeIdle returns the idle lane put back last that is still alive, nil when
+// there is none.
+func (c *Client) takeIdle(now time.Time) *lane {
+	for {
+		c.mu.Lock()
+		n := len(c.idle)
+		if n == 0 {
+			c.mu.Unlock()
+			return nil
+		}
+		it := c.idle[n-1]
+		c.idle[n-1] = idleLane{}
+		c.idle = c.idle[:n-1]
+		c.mu.Unlock()
+
+		// a look without taking data: the server may have closed it meanwhile.
+		// Data waiting on a lane that carried a stream is the server closing it.
+		alive, pending := connAlive(it.l.raw)
+		if now.Sub(it.since) < c.ttl(it.l, 0) && alive && !(pending && it.l.used) {
+			it.l.pooled = true
+			return it.l
+		}
+		it.l.close()
+	}
+}
+
+// get returns a lane for a new stream: an idle one, or else a new one. Streams
+// coming in a burst have more lanes prewarmed in the background.
+func (c *Client) get(ctx context.Context) (*lane, error) {
+	now := time.Now()
+	l := c.takeIdle(now)
+
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		if l != nil {
+			l.close()
+		}
 		return nil, io.ErrClosedPipe
-	default:
+	}
+	burst := !c.lastOpen.IsZero() && now.Sub(c.lastOpen) <= laneBurstWindow
+	c.lastOpen = now
+	warm := 0
+	if burst {
+		if warm = c.minIdle - len(c.idle) - c.pending; warm < 0 {
+			warm = 0
+		}
+		c.pending += warm
+	}
+	c.mu.Unlock()
+	for i := 0; i < warm; i++ {
+		go c.prewarm()
 	}
 
-	var err error
-	session := p.getIdleSession()
-	if session == nil {
-		session, err = p.createSession(ctx)
+	if l != nil {
+		c.observe("lane:reuse")
+		return l, nil
 	}
-	if session == nil {
-		return nil, fmt.Errorf("failed to create session: %w", err)
-	}
-	stream, err := session.OpenStream()
-	if err != nil {
-		session.Close()
-		return nil, fmt.Errorf("failed to create stream: %w", err)
-	}
+	return c.dial(ctx)
+}
 
-	stream.dieHook = func() {
-		// If Session is not closed, put this Stream to pool
-		if !session.IsClosed() {
-			select {
-			case <-p.die.Done():
-				// Now client has been closed
-				session.Close()
-			default:
-				p.idleSessionLock.Lock()
-				session.idleSince = time.Now()
-				p.idleSession.Insert(math.MaxUint64-session.seq, session)
-				p.idleSessionLock.Unlock()
-			}
+// prewarm dials a lane for the pool. It outlives the request that triggered it,
+// so it does not run on the context of that request.
+func (c *Client) prewarm() {
+	ctx, cancel := context.WithTimeout(c.ctx, dialTimeout)
+	l, err := c.dial(ctx)
+	cancel()
+	c.mu.Lock()
+	c.pending--
+	c.mu.Unlock()
+	if err == nil {
+		c.put(l)
+	}
+}
+
+// put hands an idle lane to the pool.
+func (c *Client) put(l *lane) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		l.close()
+		return
+	}
+	var oldest *lane
+	if len(c.idle) >= maxIdleLanes {
+		oldest = c.idle[0].l
+		c.idle = append(c.idle[:0], c.idle[1:]...)
+	}
+	c.idle = append(c.idle, idleLane{l: l, since: time.Now()})
+	// a lane more on top may have cut the time of one further down
+	c.arm()
+	c.mu.Unlock()
+	if oldest != nil {
+		oldest.close()
+	}
+}
+
+// arm sets the sweeper to when the first idle lane runs out of time. mu must be held.
+func (c *Client) arm() {
+	if c.sweeper != nil {
+		c.sweeper.Stop()
+		c.sweeper = nil
+	}
+	if len(c.idle) == 0 {
+		return
+	}
+	now := time.Now()
+	var next time.Duration
+	for i, it := range c.idle {
+		if left := c.ttl(it.l, len(c.idle)-1-i) - now.Sub(it.since); i == 0 || left < next {
+			next = left
 		}
 	}
-
-	return stream, nil
+	if next < 0 {
+		next = 0
+	}
+	c.sweeper = time.AfterFunc(next, c.sweep)
 }
 
-func (p *sessionPool) getIdleSession() (idle *Session) {
-	p.idleSessionLock.Lock()
-	if !p.idleSession.IsEmpty() {
-		it := p.idleSession.Iterate()
-		idle = it.Value()
-		p.idleSession.Remove(it.Key())
+// sweep closes the lanes that sat idle for too long and comes back for the rest.
+func (c *Client) sweep() {
+	now := time.Now()
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return
 	}
-	p.idleSessionLock.Unlock()
-	return
-}
-
-func (p *sessionPool) createSession(ctx context.Context) (*Session, error) {
-	session, err := p.newSession(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	session.seq = p.sessionCounter.Add(1)
-	session.dieHook = func() {
-		p.idleSessionLock.Lock()
-		p.idleSession.Remove(math.MaxUint64 - session.seq)
-		p.idleSessionLock.Unlock()
-
-		p.sessionsLock.Lock()
-		delete(p.sessions, session.seq)
-		p.sessionsLock.Unlock()
-	}
-
-	p.sessionsLock.Lock()
-	p.sessions[session.seq] = session
-	p.sessionsLock.Unlock()
-
-	session.Run()
-	return session, nil
-}
-
-func (p *sessionPool) Close() error {
-	p.dieCancel()
-
-	p.sessionsLock.Lock()
-	sessionToClose := make([]*Session, 0, len(p.sessions))
-	for _, session := range p.sessions {
-		sessionToClose = append(sessionToClose, session)
-	}
-	p.sessions = make(map[uint64]*Session)
-	p.sessionsLock.Unlock()
-
-	for _, session := range sessionToClose {
-		session.Close()
-	}
-
-	return nil
-}
-
-func (p *sessionPool) idleCleanup() {
-	expTime := time.Now().Add(-p.idleSessionTimeout)
-	activeCount := 0
-	sessionToClose := make([]*Session, 0, p.idleSession.Len())
-
-	p.idleSessionLock.Lock()
-	it := p.idleSession.Iterate()
-	for it.IsNotEnd() {
-		session := it.Value()
-		key := it.Key()
-		it.MoveToNext()
-
-		if !session.idleSince.Before(expTime) {
-			activeCount++
-			continue
+	var stale []*lane
+	keep := c.idle[:0]
+	for i, it := range c.idle {
+		if now.Sub(it.since) < c.ttl(it.l, len(c.idle)-1-i) {
+			keep = append(keep, it)
+		} else {
+			stale = append(stale, it.l)
 		}
-
-		if activeCount < p.minIdleSession {
-			session.idleSince = time.Now()
-			activeCount++
-			continue
-		}
-
-		sessionToClose = append(sessionToClose, session)
-		p.idleSession.Remove(key)
 	}
-	p.idleSessionLock.Unlock()
-
-	for _, session := range sessionToClose {
-		session.Close()
+	for i := len(keep); i < len(c.idle); i++ {
+		c.idle[i] = idleLane{}
+	}
+	c.idle = keep
+	c.arm()
+	c.mu.Unlock()
+	for _, l := range stale {
+		l.close()
 	}
 }
