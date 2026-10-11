@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -212,6 +213,56 @@ exit 0
     test('PowerShell 用 SystemRoot 下的绝对路径，不查 PATH', () {
       expect(powerShellPath({'SystemRoot': r'D:\Win'}), r'D:\Win\System32\WindowsPowerShell\v1.0\powershell.exe');
       expect(powerShellPath({}), r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe');
+    });
+
+    test('拉起命令：Start-Process 另起带隐藏控制台的 PowerShell，脚本路径包双引号、单引号转义', () {
+      final command = updaterLaunchCommand(r"C:\Users\O'Neil Zhu\AppData\Local\Temp\meowx-update-1\update.ps1", powerShell: r'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe');
+      expect(command, startsWith(r"Start-Process -FilePath 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe' -WindowStyle Hidden -ArgumentList @("));
+      expect(command, contains("'-File',('\"' + 'C:\\Users\\O''Neil Zhu\\AppData\\Local\\Temp\\meowx-update-1\\update.ps1' + '\"'))"));
+      // 不能再带 Dart 的 detached（没有控制台，PowerShell 5.1 起不来）：命令里必须是 Start-Process
+      expect(command, isNot(contains('-NoNewWindow')));
+    });
+
+    // 只在 Windows 上跑（CI 的 updater-windows 任务）：真的起 PowerShell，看脚本写不写得出 started 标记。
+    // 桩测不出「PowerShell 根本没起来」——0.2.4 及以前真机上一直报「更新脚本未能启动」就是这么漏掉的。
+    test('真实拉起：路径带空格和中文，脚本写得出 started 标记', () async {
+      Future<(Directory, File)> prepare() async {
+        final dir = await Directory.systemTemp.createTemp('meowx updater 测试 ');
+        addTearDown(() async {
+          try {
+            await dir.delete(recursive: true);
+          } catch (_) {}
+        });
+        final script = File('${dir.path}${Platform.pathSeparator}update.ps1');
+        const body = '\$Work = Split-Path -Parent \$MyInvocation.MyCommand.Path\r\n'
+            "Set-Content -LiteralPath (Join-Path \$Work '$updaterStartedMarker') -Value 1\r\n";
+        await script.writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(body)]);
+        return (dir, script);
+      }
+
+      final (dir, script) = await prepare();
+      await launchUpdaterScript(script);
+      final started = await waitForFile(File('${dir.path}${Platform.pathSeparator}$updaterStartedMarker'), timeout: const Duration(seconds: 40));
+      expect(started, isTrue, reason: 'Start-Process 另起的 PowerShell 没有写出 started 标记');
+
+      // 对照（只打印不断言）：以前的办法——Dart 的 detached 直接起 PowerShell，子进程没有控制台
+      final (oldDir, oldScript) = await prepare();
+      await Process.start(
+        powerShellPath(),
+        ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', oldScript.path],
+        mode: ProcessStartMode.detached,
+      );
+      final oldStarted = await waitForFile(File('${oldDir.path}${Platform.pathSeparator}$updaterStartedMarker'), timeout: const Duration(seconds: 20));
+      // ignore: avoid_print
+      print('对照：detached 直接起 PowerShell → started=$oldStarted');
+    }, skip: !Platform.isWindows, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('EncodedCommand：UTF-16LE + base64，中文路径原样往返', () {
+      const command = r"Start-Process 'C:\用户\临时\update.ps1'";
+      final bytes = base64.decode(encodePowerShellCommand(command));
+      expect(bytes.length, command.codeUnits.length * 2);
+      final units = [for (var i = 0; i < bytes.length; i += 2) bytes[i] | (bytes[i + 1] << 8)];
+      expect(String.fromCharCodes(units), command);
     });
   });
 

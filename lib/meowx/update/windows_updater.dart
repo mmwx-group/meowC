@@ -306,13 +306,46 @@ String powerShellPath([Map<String, String>? env]) {
   return '$root\\System32\\WindowsPowerShell\\v1.0\\powershell.exe';
 }
 
-/// 脱离本进程、隐藏窗口拉起更新脚本。
+/// 拉起更新脚本用的 PowerShell 命令：用 `Start-Process` 再起一个**独立的、自带（隐藏）控制台**的 PowerShell 去跑脚本。
+String updaterLaunchCommand(String scriptPath, {String? powerShell}) {
+  final exe = _ps(powerShell ?? powerShellPath());
+  // -File 后面的路径自己再包一层双引号：用户名带空格时临时目录里有空格
+  return 'Start-Process -FilePath $exe -WindowStyle Hidden -ArgumentList '
+      "@('-NoProfile','-ExecutionPolicy','Bypass','-WindowStyle','Hidden','-File',('\"' + ${_ps(scriptPath)} + '\"'))";
+}
+
+/// `powershell -EncodedCommand` 要的编码：UTF-16LE 再 base64。整条命令不经过命令行的引号规则，路径里有什么字符都不怕。
+String encodePowerShellCommand(String command) {
+  final bytes = <int>[];
+  for (final unit in command.codeUnits) {
+    bytes
+      ..add(unit & 0xFF)
+      ..add(unit >> 8);
+  }
+  return base64.encode(bytes);
+}
+
+/// 拉起更新脚本，让它脱离本进程继续跑。
+///
+/// 以前直接 `Process.start(powershell, …, mode: detached)`：Dart 的 detached 在 Windows 上带 `DETACHED_PROCESS`，子进程
+/// **没有控制台**，而 Windows PowerShell 5.1 的宿主启动时要拿控制台输出缓冲，拿不到就当场退出——脚本一行都没跑，
+/// App 等不到 started 标记，报「更新脚本未能启动」（真机上一直如此，单测里的桩发现不了）。
+/// 现在分两步：先以普通方式（Dart 给的是 `CREATE_NO_WINDOW`，有一个隐藏的控制台）跑一个很短的 PowerShell，
+/// 它用 `Start-Process` 起真正跑脚本的那个——新进程有自己的隐藏控制台、不继承管道，本进程退出也不受影响。
 Future<void> launchUpdaterScript(File script) async {
-  await Process.start(
+  final result = await Process.run(
     powerShellPath(),
-    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', script.path],
-    mode: ProcessStartMode.detached,
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodePowerShellCommand(updaterLaunchCommand(script.path))],
   );
+  if (result.exitCode != 0) {
+    final detail = '${result.stderr}'.trim();
+    throw ProcessException(
+      'powershell.exe',
+      const [],
+      detail.isEmpty ? '退出码 ${result.exitCode}' : (detail.length > 300 ? detail.substring(0, 300) : detail),
+      result.exitCode,
+    );
+  }
 }
 
 /// 轮询等 [file] 出现，[timeout] 内出现返回 true。
@@ -348,7 +381,7 @@ class WindowsUpdater {
     required this.exitApp,
     this.dio,
     this.launch = launchUpdaterScript,
-    this.startTimeout = const Duration(seconds: 8),
+    this.startTimeout = const Duration(seconds: 25),   // 先后起两个 PowerShell，冷启动加上杀毒软件扫描，慢的机器上要十来秒
   });
 
   Future<void> run(
