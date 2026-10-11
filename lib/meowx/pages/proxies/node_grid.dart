@@ -19,7 +19,6 @@ import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
-import '../../theme/widgets.dart';
 import 'node_parts.dart';
 
 const _gridSpacing = 8.0;
@@ -33,7 +32,7 @@ const _gridSpacing = 8.0;
 TextStyle _nameStyle(double size, [Color? color]) => TextStyle(fontSize: size, fontWeight: FontWeight.w600, color: color);
 TextStyle _subStyle([Color? color]) => MeowFont.mono(size: 11, color: color);
 
-/// 节点格高度：两行（地区码 + 名 / 副标题 + 徽标 + 延迟胶囊）。网格是懒加载、定高的（mainAxisExtent），不能让格子自己撑开，
+/// 节点格高度：两行（名 / 副标题 + 徽标 + 延迟胶囊）。网格是懒加载、定高的（mainAxisExtent），不能让格子自己撑开，
 /// 所以按主题字样和文字缩放量出来——写死的话文字继承 M3 bodyMedium 的行高 1.43，字号调大一档第二行就越出格子底边。
 double _nodeCellExtent(BuildContext context, bool dense) {
   final s = _spec(dense);
@@ -52,10 +51,7 @@ double _nodeCellExtent(BuildContext context, bool dense) {
   }
 
   // 样例带中文和国旗：CJK 字体与彩色 emoji 的行高都比拉丁字母高
-  final name = math.max(
-    lineHeight(_nameStyle(s.name), 'Ag节点🇺🇸'),
-    19.0,   // RegionTag：字 10 × 行高 1.2、缩放封顶 1.2、上下 padding 2+2
-  );
+  final name = lineHeight(_nameStyle(s.name), 'Ag节点🇺🇸');
   final sub = [
     lineHeight(_subStyle(), 'vless · reality 直连'),
     lineHeight(MeowFont.mono(size: 11, weight: FontWeight.w700), '88 ms超时') + 4,   // 延迟胶囊上下 padding 2+2
@@ -250,7 +246,6 @@ class _NodeCell extends ConsumerWidget {
             : (meta?.securitySubtitle.isNotEmpty == true
                   ? '${style.label} · ${meta!.securitySubtitle}'
                   : style.label));
-    final (code, name) = splitRegion(proxy.name);
     final delay = ref.watch(
       getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl),
     );
@@ -280,10 +275,9 @@ class _NodeCell extends ConsumerWidget {
           children: [
             Row(
               children: [
-                if (code != null) ...[RegionTag(code), const SizedBox(width: 6)],
                 Expanded(
                   child: Text(
-                    name,
+                    proxy.name,   // 国旗原样显示，和代理组名一个画法
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: _nameStyle(s.name, mm.t1),

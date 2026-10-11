@@ -201,9 +201,9 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     expect(find.text('按延迟自动切换'), findsOneWidget);
     expect(find.text('测速'), findsOneWidget);
-    // 摘要里的当前节点和节点格：国旗换成地区码；猜不出地区的不画标签
-    expect(find.widgetWithText(RegionTag, 'HK'), findsNWidgets(3));
-    expect(find.text('香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsNWidgets(2));
+    // 摘要里的当前节点和节点格：名字连国旗原样显示（和代理组名一个画法），不画地区码标签
+    expect(find.byType(RegionTag), findsNothing);
+    expect(find.text(_longName), findsNWidgets(2));
     expect(find.text('Premium-Node-Without-Region-12345'), findsOneWidget);
     expect(find.text('vless · reality · vision'), findsOneWidget);
     expect(find.text('hy2'), findsOneWidget);

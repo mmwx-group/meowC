@@ -151,7 +151,6 @@ class _NodeRow extends ConsumerWidget {
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final node = ref.watch(currentNodeProvider);
     final String name, sub;
-    String? code;
     (String, Color)? delay;
     if (mode == Mode.direct) {
       name = '直连';
@@ -167,9 +166,8 @@ class _NodeRow extends ConsumerWidget {
       name = node.group;
       sub = '还没有选中节点';
     } else {
-      name = stripFlag(node.leaf);
+      name = node.leaf;
       sub = node.pathText;
-      code = regionCode(node.leaf);
       delay = msStyle(mm, ref.watch(currentNodeDelayProvider), ref.watch(meowSettingProvider.select((s) => s.latencyMode)));
     }
 
@@ -184,7 +182,6 @@ class _NodeRow extends ConsumerWidget {
           padding: EdgeInsets.symmetric(horizontal: 12, vertical: dense ? 6 : 8),
           child: Row(
             children: [
-              if (code != null) ...[RegionTag(code, large: true), const SizedBox(width: 10)],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

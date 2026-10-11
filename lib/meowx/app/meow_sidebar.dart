@@ -207,9 +207,8 @@ class _ConnectionCard extends ConsumerWidget {
       Mode.direct => '直连',
       _ => (node == null || node.leaf.isEmpty)
           ? (node?.group ?? (ref.watch(initProvider) ? '没有代理组' : '正在加载…'))
-          : stripFlag(node.leaf),
+          : node.leaf,
     };
-    final code = mode == Mode.direct || node == null ? null : regionCode(node.leaf);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
@@ -265,7 +264,6 @@ class _ConnectionCard extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Row(
                   children: [
-                    if (code != null) ...[RegionTag(code), const SizedBox(width: 6)],
                     Expanded(
                       child: Text(
                         nodeName,

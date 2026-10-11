@@ -300,8 +300,8 @@ void main() {
     expect(find.text('规则模式 · 核心运行中'), findsOneWidget);
     expect(find.text('已连接'), findsOneWidget);
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    // 当前节点：国旗换成地区码，路径是组链
-    expect(find.text('香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
+    // 当前节点：名字连国旗原样显示，路径是组链
+    expect(find.text('🇭🇰 香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
     expect(find.text('节点选择 › 自动选择'), findsOneWidget);
     expect(find.text('38 ms'), findsOneWidget);
     expect(find.text('上传 · 会话 86.2 MB'), findsOneWidget);
@@ -313,7 +313,7 @@ void main() {
     expect(find.text('41'), findsOneWidget);
     expect(find.text('58.0 MB'), findsOneWidget);
     expect(find.text('Fake-IP'), findsOneWidget);
-    expect(find.text('国际 · 经 香港 01 · IEPL'), findsOneWidget);
+    expect(find.text('国际 · 经 🇭🇰 香港 01 · IEPL'), findsOneWidget);
     expect(find.text('198.51.100.7'), findsOneWidget);
     // 长的 IPv6 折成两行完整显示
     expect(find.text('2408:8207:1234:5678:\n9abc:def0:1234:5678'), findsOneWidget);

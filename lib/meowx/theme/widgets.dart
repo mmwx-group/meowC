@@ -225,7 +225,8 @@ class MeowPowerButton extends StatelessWidget {
   }
 }
 
-/// 地区码小标签（HK / JP …）。[large] = 节点行首的 34×24，否则是行内的小号。
+/// 地区码小标签（HK / JP …）：只用于出口 IP 查到的归属地代码。节点名里的国旗原样显示（和代理组名一个画法），不再换成这个标签。
+/// [large] = 34×24 的大号。
 class RegionTag extends StatelessWidget {
   const RegionTag(this.code, {super.key, this.large = false});
   final String code;
@@ -254,71 +255,6 @@ class RegionTag extends StatelessWidget {
       child: text,
     );
   }
-}
-
-const _regionWords = <String, String>{
-  '香港': 'HK', '港': 'HK', 'hong kong': 'HK', 'hongkong': 'HK',
-  '台湾': 'TW', '台灣': 'TW', '台北': 'TW', 'taiwan': 'TW',
-  '日本': 'JP', '东京': 'JP', '東京': 'JP', '大阪': 'JP', 'japan': 'JP', 'tokyo': 'JP', 'osaka': 'JP',
-  '新加坡': 'SG', '狮城': 'SG', 'singapore': 'SG',
-  '美国': 'US', '美國': 'US', '洛杉矶': 'US', '硅谷': 'US', '圣何塞': 'US', '西雅图': 'US', '纽约': 'US',
-  'united states': 'US', 'los angeles': 'US', 'san jose': 'US', 'seattle': 'US',
-  '韩国': 'KR', '韓國': 'KR', '首尔': 'KR', 'korea': 'KR', 'seoul': 'KR',
-  '英国': 'GB', '英國': 'GB', '伦敦': 'GB', 'united kingdom': 'GB', 'london': 'GB',
-  '德国': 'DE', '德國': 'DE', '法兰克福': 'DE', 'germany': 'DE', 'frankfurt': 'DE',
-  '法国': 'FR', '巴黎': 'FR', 'france': 'FR',
-  '荷兰': 'NL', '阿姆斯特丹': 'NL', 'netherlands': 'NL',
-  '加拿大': 'CA', 'canada': 'CA',
-  '澳大利亚': 'AU', '澳洲': 'AU', '悉尼': 'AU', 'australia': 'AU', 'sydney': 'AU',
-  '俄罗斯': 'RU', 'russia': 'RU',
-  '印度': 'IN', 'india': 'IN',
-  '土耳其': 'TR', 'turkey': 'TR',
-  '马来西亚': 'MY', 'malaysia': 'MY',
-  '泰国': 'TH', 'thailand': 'TH',
-  '越南': 'VN', 'vietnam': 'VN',
-  '菲律宾': 'PH', 'philippines': 'PH',
-  '印尼': 'ID', '印度尼西亚': 'ID', 'indonesia': 'ID',
-  '阿根廷': 'AR', '巴西': 'BR', '瑞士': 'CH', '瑞典': 'SE', '意大利': 'IT', '西班牙': 'ES', '波兰': 'PL',
-  '乌克兰': 'UA', '迪拜': 'AE', '阿联酋': 'AE', '以色列': 'IL', '南非': 'ZA', '澳门': 'MO', '澳門': 'MO',
-};
-
-final _regionToken = RegExp(r'(?:^|[^A-Za-z])(HK|TW|JP|SG|US|KR|UK|GB|DE|FR|NL|CA|AU|RU|IN|TR|MY|TH|VN|PH|ID)(?:[^A-Za-z]|$)');
-
-/// 从节点名猜地区码：国旗 emoji → 中英文地名 → 独立的两位大写码；猜不出返回 null（调用方不画标签）。
-String? regionCode(String name) {
-  final runes = name.runes.toList();
-  for (var i = 0; i + 1 < runes.length; i++) {
-    final a = runes[i], b = runes[i + 1];
-    if (a >= 0x1F1E6 && a <= 0x1F1FF && b >= 0x1F1E6 && b <= 0x1F1FF) {
-      return String.fromCharCodes([a - 0x1F1E6 + 0x41, b - 0x1F1E6 + 0x41]);
-    }
-  }
-  final lower = name.toLowerCase();
-  String? best;
-  var bestAt = lower.length + 1;
-  for (final e in _regionWords.entries) {
-    final at = lower.indexOf(e.key);
-    if (at >= 0 && at < bestAt) {
-      best = e.value;
-      bestAt = at;
-    }
-  }
-  if (best != null) return best;
-  final m = _regionToken.firstMatch(name);
-  if (m == null) return null;
-  final code = m.group(1)!;
-  return code == 'UK' ? 'GB' : code;
-}
-
-/// 去掉节点名开头的国旗 emoji（地区已经由 [RegionTag] 表示时用）。
-String stripFlag(String name) {
-  final runes = name.runes.toList();
-  var i = 0;
-  while (i + 1 < runes.length && runes[i] >= 0x1F1E6 && runes[i] <= 0x1F1FF && runes[i + 1] >= 0x1F1E6 && runes[i + 1] <= 0x1F1FF) {
-    i += 2;
-  }
-  if (i == 0) return name;
-  return String.fromCharCodes(runes.sublist(i)).trimLeft();
 }
 
 /// 行首的图标方块：柔粉底 + 玫红图标（[tint] 可换色，底取它的 14%）。

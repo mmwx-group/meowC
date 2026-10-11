@@ -12,7 +12,6 @@ import '../../state/format.dart';
 import '../../state/status.dart';
 import '../../theme/glass_card.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart';
 
 /// 一次最多留这么多条（最大化的窗口也排不下更多行）。
 const _maxRows = 30;
@@ -143,7 +142,7 @@ class _HomeActiveConnectionsState extends ConsumerState<HomeActiveConnections> {
           Expanded(
             flex: 2,
             child: Text(
-              proxied ? stripFlag(via) : via,
+              via,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.end,

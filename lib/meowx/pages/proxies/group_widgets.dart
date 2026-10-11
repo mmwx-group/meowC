@@ -372,8 +372,6 @@ class GroupSummary extends ConsumerWidget {
       );
     }
 
-    // 当前节点和节点格同一画法：国旗换成地区码标签
-    final (code, name) = splitRegion(current);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(22)),
@@ -392,11 +390,8 @@ class GroupSummary extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     FitRow(
-                      head: code == null
-                          ? null
-                          : Padding(padding: const EdgeInsets.only(right: 6), child: RegionTag(code)),
                       text: Text(
-                        current.isEmpty ? '—' : name,
+                        current.isEmpty ? '—' : current,   // 国旗原样显示，和节点格、组名一个画法
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),

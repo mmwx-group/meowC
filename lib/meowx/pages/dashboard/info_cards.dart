@@ -466,7 +466,7 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
     return _tileRow([
       tile(S.domesticDirect, st.domestic, loading: st.loadingDomestic, placeholder: '—'),
       tile(
-        running ? '${S.globalVia} ${via == null ? '代理' : stripFlag(via)}' : '国际 · 代理出口',
+        running ? '${S.globalVia} ${via ?? '代理'}' : '国际 · 代理出口',
         st.global,
         loading: st.loadingGlobal,
         placeholder: running ? '—' : S.disconnected,

@@ -8,15 +8,6 @@ import '../../state/latency.dart';
 import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
-import '../../theme/widgets.dart';
-
-/// 节点名 →（地区码, 去掉开头国旗的名字）。地区码猜得出才给（调用方据此画 [RegionTag]）；名字只有一面国旗时保留原样。
-(String?, String) splitRegion(String name) {
-  final code = regionCode(name);
-  if (code == null) return (null, name);
-  final rest = stripFlag(name);
-  return (code, rest.isEmpty ? name : rest);
-}
 
 /// 延迟胶囊：等宽粗体的彩色字，底用所在卡片的次级色（白卡上 = card2，樱粉主卡上 = 卡片底）；[bg] 为 null 只画字。
 class MsChip extends StatelessWidget {
