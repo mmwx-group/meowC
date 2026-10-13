@@ -9,6 +9,7 @@ import 'package:bett_box/common/theme.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/l10n/l10n.dart';
 import 'package:bett_box/meowx/config/meow_patch.dart';
+import 'package:bett_box/meowx/panel/node_match.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/plugins/service.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -807,6 +808,8 @@ class GlobalState {
     applyMeowDns(rawConfig, config.meow.dnsMode);
     applyMeowHosts(rawConfig, config.meow);
     applyMeowAuthentication(rawConfig, config.meow);
+    // MeowX：记下当前订阅各节点的 type / server / port，奖牌与解锁在节点名对不上时（主控的套餐订阅会改名）按它认节点
+    if (profileId == config.currentProfile?.id) captureNodeKeys(rawConfig);
 
     if (rawConfig['dns'] != null &&
         rawConfig['dns']['fallback-filter'] != null) {

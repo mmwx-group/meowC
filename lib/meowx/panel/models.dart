@@ -1,4 +1,5 @@
 // 面板返回的数据模型与纯解析函数（可单测）。
+import 'node_match.dart';
 import 'unlock_catalog.dart';
 
 /// 「我的订阅」条目。
@@ -96,24 +97,44 @@ class ReturnRoute {
 }
 
 class NodeMedal {
-  const NodeMedal({required this.name, required this.medal, required this.routes});
+  const NodeMedal({required this.name, required this.medal, required this.routes, this.key});
   final String name;
 
   /// gold | silver
   final String medal;
   final List<ReturnRoute> routes;
 
-  static Map<String, NodeMedal> parse(dynamic json) {
-    if (json is! Map || json['success'] != true || json['nodes'] is! List) return const {};
-    final out = <String, NodeMedal>{};
+  /// 订阅里这个节点的 type / server / port（新主控才带）：名字对不上时按它认，见 [NodeMatchKey]。
+  final NodeMatchKey? key;
+
+  /// 展示内容是否相同（不看名字与键）。
+  bool samePayload(NodeMedal other) {
+    if (medal != other.medal || routes.length != other.routes.length) return false;
+    for (var i = 0; i < routes.length; i++) {
+      final a = routes[i], b = other.routes[i];
+      if (a.carrier != b.carrier || a.region != b.region || a.routeType != b.routeType || a.gold != b.gold) return false;
+    }
+    return true;
+  }
+
+  /// 按名字建索引（同名后写的生效）。
+  static Map<String, NodeMedal> index(List<NodeMedal> list) => {for (final m in list) m.name: m};
+
+  static Map<String, NodeMedal> parse(dynamic json) => index(parseList(json));
+
+  /// 主控给的全部条目（同名的几个协议都在）。
+  static List<NodeMedal> parseList(dynamic json) {
+    if (json is! Map || json['success'] != true || json['nodes'] is! List) return const [];
+    final out = <NodeMedal>[];
     for (final n in json['nodes'] as List) {
       if (n is! Map) continue;
       final name = n['name']?.toString() ?? '';
       final medal = n['medal']?.toString() ?? '';
       if (name.isEmpty || medal.isEmpty) continue;
-      out[name] = NodeMedal(
+      out.add(NodeMedal(
         name: name,
         medal: medal,
+        key: NodeMatchKey.of(type: n['type'], server: n['server'], port: n['port']),
         routes: [
           for (final r in (n['routes'] is List ? n['routes'] as List : const []))
             if (r is Map)
@@ -124,7 +145,7 @@ class NodeMedal {
                 gold: r['gold'] == true,
               ),
         ],
-      );
+      ));
     }
     return out;
   }
@@ -199,9 +220,25 @@ class UnlockSummary {
 
 /// 一个节点的解锁结论（按目录顺序）。
 class NodeUnlocks {
-  const NodeUnlocks({required this.name, required this.entries});
+  const NodeUnlocks({required this.name, required this.entries, this.key});
   final String name;
   final List<UnlockEntry> entries;
+
+  /// 订阅里这个节点的 type / server / port（新主控才带）：名字对不上时按它认，见 [NodeMatchKey]。
+  final NodeMatchKey? key;
+
+  /// 展示内容是否相同（不看名字与键）。
+  bool samePayload(NodeUnlocks other) {
+    if (entries.length != other.entries.length) return false;
+    for (var i = 0; i < entries.length; i++) {
+      final a = entries[i], b = other.entries[i];
+      if (a.service != b.service || a.status != b.status || a.region != b.region) return false;
+    }
+    return true;
+  }
+
+  /// 按名字建索引（同名后写的生效）。
+  static Map<String, NodeUnlocks> index(List<NodeUnlocks> list) => {for (final u in list) u.name: u};
 
   int get unlockedCount => entries.where((e) => e.unlocked).length;
   UnlockSummary get summary => UnlockSummary.of(entries);
@@ -222,9 +259,12 @@ class NodeUnlocks {
     return i == -1 ? 999 : i;
   }
 
-  static Map<String, NodeUnlocks> parse(dynamic json) {
-    if (json is! Map || json['success'] != true || json['nodes'] is! List) return const {};
-    final out = <String, NodeUnlocks>{};
+  static Map<String, NodeUnlocks> parse(dynamic json) => index(parseList(json));
+
+  /// 主控给的全部有结论的条目（同名的几个协议都在）。
+  static List<NodeUnlocks> parseList(dynamic json) {
+    if (json is! Map || json['success'] != true || json['nodes'] is! List) return const [];
+    final out = <NodeUnlocks>[];
     for (final n in json['nodes'] as List) {
       if (n is! Map) continue;
       final name = n['name']?.toString() ?? '';
@@ -235,7 +275,9 @@ class NodeUnlocks {
           if (u is Map && (u['service']?.toString().isNotEmpty ?? false))
             UnlockEntry(service: u['service'].toString(), status: u['status']?.toString() ?? 'failed', region: u['region']?.toString()),
       ];
-      if (entries.isNotEmpty) out[name] = NodeUnlocks(name: name, entries: entries);
+      if (entries.isNotEmpty) {
+        out.add(NodeUnlocks(name: name, entries: entries, key: NodeMatchKey.of(type: n['type'], server: n['server'], port: n['port'])));
+      }
     }
     return out;
   }

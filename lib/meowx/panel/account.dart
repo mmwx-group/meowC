@@ -12,6 +12,7 @@ import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import 'client.dart';
 import 'models.dart';
+import 'node_match.dart';
 import 'unlock_catalog.dart';
 
 export 'models.dart';
@@ -30,11 +31,48 @@ final remoteSubsProvider = StateProvider<AsyncValue<List<RemoteSubscription>>>((
 /// 主控功能开关：未开启的功能不调接口、不显示图标。
 final panelFeaturesProvider = StateProvider<PanelFeatures>((ref) => const PanelFeatures());
 
-/// 节点奖牌（服务端判定）。
+/// 节点奖牌（服务端判定），按主控给的节点名索引。界面查用 [nodeMedalsProvider]。
 final medalsProvider = StateProvider<Map<String, NodeMedal>>((ref) => const {});
 
-/// 节点解锁结论（服务端判定）。
+/// 节点解锁结论（服务端判定），按主控给的节点名索引。界面查用 [nodeUnlocksProvider]。
 final unlocksProvider = StateProvider<Map<String, NodeUnlocks>>((ref) => const {});
+
+/// 主控给的原始条目（同名的几个协议都在）：名字对不上时按 type / server / port 认节点用。
+final medalEntriesProvider = StateProvider<List<NodeMedal>>((ref) => const []);
+final unlockEntriesProvider = StateProvider<List<NodeUnlocks>>((ref) => const []);
+
+/// 当前订阅里各节点的键（应用配置时记下的，见 [captureNodeKeys]）。
+final localNodeKeysProvider = Provider<Map<String, NodeMatchKey?>>((ref) {
+  void changed() => ref.invalidateSelf();
+  localNodeKeys.addListener(changed);
+  ref.onDispose(() => localNodeKeys.removeListener(changed));
+  return localNodeKeys.value;
+});
+
+/// 界面按订阅里的节点名查奖牌用：名字相同的照旧；主控的套餐订阅改过名的节点（倍率前缀、流量 / 到期尾缀、
+/// 套餐内名称、重名序号）按 type / server / port 认。规则见 [resolveNodeExtras]。
+final nodeMedalsProvider = Provider<Map<String, NodeMedal>>((ref) {
+  return nodeExtrasForLocals<NodeMedal>(
+    byName: ref.watch(medalsProvider),
+    entries: ref.watch(medalEntriesProvider),
+    locals: ref.watch(localNodeKeysProvider),
+    nameOf: (m) => m.name,
+    keyOf: (m) => m.key,
+    samePayload: (a, b) => a.samePayload(b),
+  );
+});
+
+/// 同上，解锁结论。
+final nodeUnlocksProvider = Provider<Map<String, NodeUnlocks>>((ref) {
+  return nodeExtrasForLocals<NodeUnlocks>(
+    byName: ref.watch(unlocksProvider),
+    entries: ref.watch(unlockEntriesProvider),
+    locals: ref.watch(localNodeKeysProvider),
+    nameOf: (u) => u.name,
+    keyOf: (u) => u.key,
+    samePayload: (a, b) => a.samePayload(b),
+  );
+});
 
 /// 正在导入的远端订阅（按名字）。
 final importingSubProvider = StateProvider<String?>((ref) => null);
@@ -105,8 +143,8 @@ class AccountActions {
     }
     _update((a) => a.copyWith(token: '', nickname: '', avatarUrl: ''));
     ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
-    ref.read(medalsProvider.notifier).state = const {};
-    ref.read(unlocksProvider.notifier).state = const {};
+    _setMedals(const []);
+    _setUnlocks(const []);
     ref.read(panelFeaturesProvider.notifier).state = const PanelFeatures();
     ref.read(po0ReporterProvider).stop();
     _extrasAt = null;
@@ -184,22 +222,33 @@ class AccountActions {
     ref.read(panelFeaturesProvider.notifier).state = features;
     if (features.returnRoutes) {
       try {
-        ref.read(medalsProvider.notifier).state = await client.returnRoutes(token);
+        _setMedals(await client.returnRoutes(token));
       } catch (e) {
         commonPrint.log('returnRoutes failed: $e');
       }
     } else {
-      ref.read(medalsProvider.notifier).state = const {};
+      _setMedals(const []);
     }
     if (features.unlockCheck) {
       try {
-        ref.read(unlocksProvider.notifier).state = await client.unlocks(token);
+        _setUnlocks(await client.unlocks(token));
       } catch (e) {
         commonPrint.log('unlocks failed: $e');
       }
     } else {
-      ref.read(unlocksProvider.notifier).state = const {};
+      _setUnlocks(const []);
     }
+  }
+
+  /// 原始条目与按名字的索引一起换（前者给按键认节点用）。
+  void _setMedals(List<NodeMedal> list) {
+    ref.read(medalEntriesProvider.notifier).state = list;
+    ref.read(medalsProvider.notifier).state = NodeMedal.index(list);
+  }
+
+  void _setUnlocks(List<NodeUnlocks> list) {
+    ref.read(unlockEntriesProvider.notifier).state = list;
+    ref.read(unlocksProvider.notifier).state = NodeUnlocks.index(list);
   }
 }
 

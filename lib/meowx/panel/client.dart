@@ -307,13 +307,13 @@ class PanelClient {
     return PanelFeatures.parse(await rpc('/user/features', method: 'GET', token: token));
   }
 
-  Future<Map<String, NodeUnlocks>> unlocks(String token) async {
-    return NodeUnlocks.parse(await rpc('/user/unlocks', method: 'GET', token: token));
+  Future<List<NodeUnlocks>> unlocks(String token) async {
+    return NodeUnlocks.parseList(await rpc('/user/unlocks', method: 'GET', token: token));
   }
 
-  Future<Map<String, NodeMedal>> returnRoutes(String token) async {
+  Future<List<NodeMedal>> returnRoutes(String token) async {
     final r = await rpc('/user/return-routes', method: 'GET', token: token);
-    return NodeMedal.parse(r);
+    return NodeMedal.parseList(r);
   }
 
   /// 用户登记的 po0 服务器列表（客户端 IP 加白目标）；没有时为空列表。未登录 / 出错抛 [PanelException]。

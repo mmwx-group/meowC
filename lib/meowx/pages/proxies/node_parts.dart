@@ -167,8 +167,8 @@ class CurrentBadges extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final leaf = ref.watch(_currentLeafProvider(groupName));
     if (leaf.isEmpty) return const SizedBox.shrink();
-    final medal = ref.watch(medalsProvider.select((m) => m[leaf]));
-    final unlocks = ref.watch(unlocksProvider.select((m) => m[leaf]));
+    final medal = ref.watch(nodeMedalsProvider.select((m) => m[leaf]));
+    final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[leaf]));
     if (medal == null && unlocks == null) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,

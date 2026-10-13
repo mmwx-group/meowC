@@ -249,8 +249,8 @@ class _NodeCell extends ConsumerWidget {
     final delay = ref.watch(
       getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl),
     );
-    final medal = ref.watch(medalsProvider.select((m) => m[proxy.name]));
-    final unlocks = ref.watch(unlocksProvider.select((m) => m[proxy.name]));
+    final medal = ref.watch(nodeMedalsProvider.select((m) => m[proxy.name]));
+    final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[proxy.name]));
     final testable = !const {
       'REJECT',
       'REJECT-DROP',
