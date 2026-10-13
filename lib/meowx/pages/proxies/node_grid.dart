@@ -275,6 +275,8 @@ class _NodeCell extends ConsumerWidget {
           children: [
             Row(
               children: [
+                // 成员是代理组时画它自己的 icon（没配就不画）
+                if (nested) NestedGroupIcon(proxy.name, size: dense ? 16 : 18),
                 Expanded(
                   child: Text(
                     proxy.name,   // 国旗原样显示，和代理组名一个画法

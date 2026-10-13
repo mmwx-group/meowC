@@ -1,5 +1,7 @@
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/providers/providers.dart';
+import 'package:bett_box/widgets/icon.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +10,38 @@ import '../../state/latency.dart';
 import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
+
+/// 名字是某个代理组时它的 icon（配置里组的 `icon`）；不是组、或者没配 icon 为空串。
+/// 成员是代理组的节点格、组卡上的「当前选中」都拿它画图标，和组标签 / 组卡标题上的是同一张。
+final groupIconProvider = Provider.autoDispose.family<String, String>(
+  (ref, name) => ref.watch(
+    currentGroupsStateProvider.select(
+      (s) => s.value.firstWhereOrNull((g) => g.name == name)?.icon ?? '',
+    ),
+  ),
+);
+
+/// 嵌套代理组的小图标：[name] 不是组、或者那个组没配 icon 时什么都不画、不占位。
+class NestedGroupIcon extends ConsumerWidget {
+  const NestedGroupIcon(this.name, {super.key, required this.size, this.gap = 6});
+
+  final String name;
+  final double size;
+
+  /// 图标与后面文字的间距（有图标时才有）。
+  final double gap;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (name.isEmpty) return const SizedBox.shrink();
+    final icon = ref.watch(groupIconProvider(name));
+    if (icon.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: EdgeInsets.only(right: gap),
+      child: CommonTargetIcon(src: icon, size: size),
+    );
+  }
+}
 
 /// 延迟胶囊：等宽粗体的彩色字，底用所在卡片的次级色（白卡上 = card2，樱粉主卡上 = 卡片底）；[bg] 为 null 只画字。
 class MsChip extends StatelessWidget {

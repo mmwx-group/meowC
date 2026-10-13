@@ -241,6 +241,7 @@ class GroupCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 4),
                     FitRow(
+                      head: NestedGroupIcon(current, size: 14, gap: 4),   // 当前选中的是代理组时带上它的 icon
                       text: Text(
                         current.isEmpty ? '—' : current,
                         maxLines: 1,
@@ -298,6 +299,7 @@ class GroupSummary extends ConsumerWidget {
         ? pending
         : (ref.watch(getSelectedProxyNameProvider(group.name)) ?? '');
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
+    final currentIcon = current.isEmpty ? '' : ref.watch(groupIconProvider(current));
     final delay = current.isEmpty
         ? null
         : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
@@ -344,8 +346,22 @@ class GroupSummary extends ConsumerWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          current.isEmpty ? '当前 —' : '当前 $current',
+                        // 当前选中的是代理组、且它配了 icon 时，名字前带上它的 icon
+                        child: Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: current.isEmpty ? '当前 —' : '当前 '),
+                              if (currentIcon.isNotEmpty)
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.middle,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 4),
+                                    child: CommonTargetIcon(src: currentIcon, size: 14),
+                                  ),
+                                ),
+                              if (current.isNotEmpty) TextSpan(text: current),
+                            ],
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(fontSize: 12, color: mm.t2),
@@ -390,6 +406,7 @@ class GroupSummary extends ConsumerWidget {
                     ),
                     const SizedBox(height: 3),
                     FitRow(
+                      head: NestedGroupIcon(current, size: 18),   // 当前选中的是代理组时带上它的 icon
                       text: Text(
                         current.isEmpty ? '—' : current,   // 国旗原样显示，和节点格、组名一个画法
                         maxLines: 1,
