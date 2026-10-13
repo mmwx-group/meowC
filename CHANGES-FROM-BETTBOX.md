@@ -85,3 +85,13 @@
 
 ## 2026-10-09 · 订阅请求带官方客户端标记
 - `lib/common/package.dart`：默认 UA 由 `mihomo/1.19.0 (miaomiaowu; <系统>)` 改为 `mihomo/1.19.0 MeowX/<版本> (<系统>)`（开头的 mihomo/1.19.0 不动：主控与第三方机场靠它给完整 clash YAML；品牌名用 MeowX，不再出现 miaomiaowu）。主控认出这个标记就下发只有官方内核才支持的节点（AnyTLS + REALITY）。用户在「常规」里自定义了全局 UA 时仍以用户填的为准。
+
+## 2026-10-13 · 奖牌 / 解锁按 type·server·port 认节点
+- `lib/state.dart patchRawConfig`：应用当前订阅的配置时调 `captureNodeKeys(rawConfig)`（`lib/meowx/panel/node_match.dart`），记下各节点的 type / server / port。主控的套餐订阅会给节点改名（套餐内名称、倍率前缀、流量 / 到期尾缀、重名序号），奖牌与解锁原来只按节点名匹配、改过名就不显示；现在名字对不上时按这组键认（主控回包里同步多带这三项）。其余改动都在 `lib/meowx/`。
+
+## 2026-10-13 · 内核：Snell 支持 v6
+- `core/Clash.Meta/transport/snell/`：新增 Snell v6 客户端——`v6.go`（三种模式、请求 / 应答、不复用的 TCP 连接、UDP 隧道）、`v6_record.go`（三种模式的 record 读写）、`v6_profile.go`（默认模式的整形参数：全部由 PSK 派生，前缀 / padding 长度、填充字节生成器、salt 块、padding 与密文混排）、`v6_reuse.go`（连接复用池）。按 sagernet/sing-snell 的 `snellv6`（GPL-3.0）移植，各文件头保留出处，没有引入新依赖。`snell.go` 只加了 `Version6` 常量，`PacketConn` 遇到 v6 隧道原样返回；v1–v5 的代码路径没动。
+- `core/Clash.Meta/adapter/outbound/snell.go`：`version: 6` 走新客户端。新增节点字段 `mode`：`default`（整形，不写即此）/ `unshaped`（只加密不整形）/ `unsafe-raw`（明文分帧），须与服务端一致，写错报配置错误；v6 没有 obfs 这一层，带了 `obfs-opts` 一律忽略（参考实现是报配置错误；这里不让一个写错的节点否掉整份配置，与 iOS / macOS 端一致）；`udp: true`、`reuse: true` 可用。v1–v5 照旧不看 `mode`。出站 `Close()` 时关掉 v6 连接池。
+- 复用：一条连接同一时间只跑一个请求，双方各发一个空 record 结束自己这一半之后才给下一个请求用；客户端先关的，由还挂着的读或后台排空等到服务端的空 record 再回池（期间最多丢弃 0x80001 字节）。与参考实现有两处不同：① 只有真的收到服务端的空 record 才复用——参考实现把「服务端直接关掉 TCP」也算正常结束，连接会被放回池里、下一个请求必然失败，而我们的 Xray 服务端正是每个请求结束就关连接（所以对它开 `reuse` 不出错、也复用不上，v4 / v5 同样）；② 池内空闲上限沿用 v4 池的 15 秒（参考实现 180 秒，靠网卡变化时清池兜底，这里没有这个信号）。
+- `core/Clash.Meta/docs/config.yaml`：Snell 示例补 v6（`mode`；v6 的 `obfs-opts` 被忽略）。
+- 测试：`transport/snell/v6_golden_test.go`（20 个 PSK 的整形参数、三种模式按固定脚本写出的完整字节流，逐字节对参考实现的输出）；`v6_test.go`（进程内假服务端：三种模式的往返、record 边界、半关闭 / EOF、复用、UDP）；`v6_outbound_test.go`（经出站：配置校验、复用只拨一次；设 `SNELL_LIVE=<服务端地址>` 时对真实服务端跑 GET / 8MiB 下载 / 上传 / 复用 / UDP，带 v4、v5 回归，其余环境变量见文件内注释）。

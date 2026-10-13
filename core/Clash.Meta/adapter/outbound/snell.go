@@ -27,6 +27,7 @@ type Snell struct {
 	jlsConfig       *jls.ClientConfig
 	version         int
 	reuse           bool
+	v6              *snell.V6Client // set for version 6 only
 }
 
 type SnellOption struct {
@@ -37,6 +38,7 @@ type SnellOption struct {
 	Psk               string         `proxy:"psk"`
 	UDP               bool           `proxy:"udp,omitempty"`
 	Version           int            `proxy:"version,omitempty"`
+	Mode              string         `proxy:"mode,omitempty"` // version 6 only: default / unshaped / unsafe-raw
 	Reuse             bool           `proxy:"reuse,omitempty"`
 	ObfsOpts          map[string]any `proxy:"obfs-opts,omitempty"`
 	ClientFingerprint string         `proxy:"client-fingerprint,omitempty"`
@@ -69,8 +71,30 @@ func (s *Snell) streamConnContext(ctx context.Context, c net.Conn) (*snell.Snell
 	return snell.StreamConn(c, s.psk, s.version), nil
 }
 
+// streamConnV6 starts a version 6 request on c: a UDP tunnel, whose reply is
+// awaited here, or a TCP stream.
+func (s *Snell) streamConnV6(ctx context.Context, c net.Conn, metadata *C.Metadata) (_ net.Conn, err error) {
+	if ctx.Done() != nil {
+		done := N.SetupContextForConn(ctx, c)
+		defer done(&err)
+	}
+
+	if metadata.NetWork == C.UDP {
+		var pc *snell.V6PacketConn
+		pc, err = s.v6.StreamPacketConn(c)
+		if err != nil {
+			return nil, err
+		}
+		return pc, nil
+	}
+	return s.v6.StreamConn(c, metadata.String(), metadata.DstPort)
+}
+
 // StreamConnContext implements C.ProxyAdapter
 func (s *Snell) StreamConnContext(ctx context.Context, c net.Conn, metadata *C.Metadata) (net.Conn, error) {
+	if s.v6 != nil {
+		return s.streamConnV6(ctx, c, metadata)
+	}
 	c, err := s.streamConnContext(ctx, c)
 	if err != nil {
 		return nil, err
@@ -98,8 +122,33 @@ func (s *Snell) writeHeaderContext(ctx context.Context, c net.Conn, metadata *C.
 	return
 }
 
+// dialContextV6 is DialContext for version 6.
+func (s *Snell) dialContextV6(ctx context.Context, metadata *C.Metadata) (C.Conn, error) {
+	if s.reuse {
+		c, err := s.v6.DialContext(ctx, metadata.String(), metadata.DstPort)
+		if err != nil {
+			return nil, err
+		}
+		return NewConn(c, s), nil
+	}
+
+	c, err := s.dialer.DialContext(ctx, "tcp", s.addr)
+	if err != nil {
+		return nil, fmt.Errorf("%s connect error: %w", s.addr, err)
+	}
+	sc, err := s.streamConnV6(ctx, c, metadata)
+	if err != nil {
+		_ = c.Close()
+		return nil, err
+	}
+	return NewConn(sc, s), nil
+}
+
 // DialContext implements C.ProxyAdapter
 func (s *Snell) DialContext(ctx context.Context, metadata *C.Metadata) (_ C.Conn, err error) {
+	if s.v6 != nil {
+		return s.dialContextV6(ctx, metadata)
+	}
 	if s.reuse {
 		c, err := s.pool.Get()
 		if err != nil {
@@ -157,6 +206,14 @@ func (s *Snell) SupportUOT() bool {
 	return true
 }
 
+// Close implements C.ProxyAdapter
+func (s *Snell) Close() error {
+	if s.v6 != nil {
+		return s.v6.Close()
+	}
+	return nil
+}
+
 // ProxyInfo implements C.ProxyAdapter
 func (s *Snell) ProxyInfo() C.ProxyInfo {
 	info := s.Base.ProxyInfo()
@@ -167,6 +224,10 @@ func (s *Snell) ProxyInfo() C.ProxyInfo {
 func NewSnell(option SnellOption) (*Snell, error) {
 	addr := net.JoinHostPort(option.Server, strconv.Itoa(option.Port))
 	psk := []byte(option.Psk)
+
+	if option.Version == snell.Version6 {
+		return newSnellV6(option, addr, psk)
+	}
 
 	decoder := structure.NewDecoder(structure.Option{TagName: "obfs", WeaklyTypedInput: true})
 	obfsOption := &simpleObfsOption{Host: "bing.com"}
@@ -298,6 +359,55 @@ func NewSnell(option SnellOption) (*Snell, error) {
 			}
 			return sc, nil
 		})
+	}
+	return s, nil
+}
+
+// newSnellV6 builds a version 6 outbound. Version 6 has no obfs layer: its
+// default mode shapes the traffic itself. obfs-opts is ignored rather than
+// rejected, so a node that carries it by mistake does not fail the whole
+// config.
+func newSnellV6(option SnellOption, addr string, psk []byte) (*Snell, error) {
+	mode, err := snell.ParseV6Mode(option.Mode)
+	if err != nil {
+		return nil, fmt.Errorf("snell %s: %w", addr, err)
+	}
+
+	s := &Snell{
+		Base: NewBase(BaseOption{
+			Name:         option.Name,
+			Addr:         addr,
+			Type:         C.Snell,
+			ProviderName: option.ProviderName,
+			UDP:          option.UDP,
+			TFO:          option.TFO,
+			MPTCP:        option.MPTCP,
+			Interface:    option.Interface,
+			RoutingMark:  option.RoutingMark,
+			Prefer:       option.IPVersion,
+		}),
+		option:     &option,
+		psk:        psk,
+		obfsOption: &simpleObfsOption{},
+		version:    snell.Version6,
+		reuse:      option.Reuse,
+	}
+	s.dialer = option.NewDialer(s.DialOptions())
+
+	s.v6, err = snell.NewV6Client(snell.V6Option{
+		PSK:   psk,
+		Mode:  mode,
+		Reuse: option.Reuse,
+		Dial: func(ctx context.Context) (net.Conn, error) {
+			c, err := s.dialer.DialContext(ctx, "tcp", addr)
+			if err != nil {
+				return nil, fmt.Errorf("%s connect error: %w", addr, err)
+			}
+			return c, nil
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("snell %s: %w", addr, err)
 	}
 	return s, nil
 }

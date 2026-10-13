@@ -20,6 +20,7 @@ const (
 	Version3            = 3
 	Version4            = 4
 	Version5            = 5
+	Version6            = 6
 	DefaultSnellVersion = Version1
 
 	// max packet length
@@ -174,6 +175,9 @@ func ServerStreamConn(conn net.Conn, psk []byte, version int) *Snell {
 }
 
 func PacketConn(conn net.Conn) net.PacketConn {
+	if pc, ok := conn.(*V6PacketConn); ok {
+		return pc
+	}
 	return &packetConn{
 		Conn: conn,
 	}
