@@ -81,7 +81,7 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
         final label = switch (value.stage) {
           UpdateStage.downloading => S.updateDownloading,
           UpdateStage.extracting => S.updateExtracting,
-          UpdateStage.launching => S.updateLaunching,
+          UpdateStage.launching => widget.file.kind == 'portable' ? S.updateReplacing : S.updateLaunching,
         };
         return CommonDialog(
           title: S.updateTitle,

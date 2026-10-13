@@ -114,5 +114,13 @@ void main() {
     // 清单缺 size / name 时不写出「0 KB」这类假数字
     final bare = UpdateFile.fromJson({'kind': 'apk', 'url': 'https://dl.miaomiaowux.com/meowx/android/x.apk'});
     expect(updateSummaryLines(current: '0.1.8', file: bare), ['当前版本 v0.1.8', '安装包 apk']);
+    // 便携版的 zip 不叫「安装包」：它不跑安装器，只是换文件后重启
+    final portable = UpdateFile.fromJson({
+      'kind': 'portable',
+      'name': 'MeowX-0.2.5-windows-amd64-portable.zip',
+      'url': 'https://dl.miaomiaowux.com/meowx/windows/MeowX-0.2.5-windows-amd64-portable.zip',
+      'size': 31457280,
+    });
+    expect(updateSummaryLines(current: '0.2.4', file: portable).last, '便携包 MeowX-0.2.5-windows-amd64-portable.zip · 30.0 MB');
   });
 }

@@ -68,6 +68,7 @@ class S {
   static const updateDownloading = '正在下载…';
   static const updateExtracting = '正在解压…';
   static const updateLaunching = '正在启动安装，MeowX 将自动重启…';
+  static const updateReplacing = '正在替换文件，MeowX 将自动重启…';   // 便携版：不跑安装器，换完文件就重启
   static const updateFailed = '更新失败';
   static const goDownloadPage = '去下载页';
 

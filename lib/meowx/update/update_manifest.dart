@@ -77,10 +77,11 @@ UpdateFile? pickUpdateFile(
   return null;
 }
 
-/// 「发现新版本」弹窗里版本号下面的说明行：当前版本 + 选中的安装包（文件名 · 大小）。
+/// 「发现新版本」弹窗里版本号下面的说明行：当前版本 + 选中的包（文件名 · 大小）。
+/// 便携版的 zip 叫「便携包」——它不跑安装器，只是换文件后重启。
 /// 没匹配到本机的包（[file] 为 null，会改去下载页）就只有当前版本一行。
 List<String> updateSummaryLines({required String current, UpdateFile? file}) => [
   '当前版本 v$current',
   if (file != null)
-    '安装包 ${file.name.isEmpty ? file.kind : file.name}${file.size > 0 ? ' · ${fmtSize(file.size)}' : ''}',
+    '${file.kind == 'portable' ? '便携包' : '安装包'} ${file.name.isEmpty ? file.kind : file.name}${file.size > 0 ? ' · ${fmtSize(file.size)}' : ''}',
 ];
