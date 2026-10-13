@@ -183,7 +183,9 @@ String _failBox(String what) =>
 /// 便携版更新脚本（PowerShell，UTF-8 BOM 写盘）。等 App 退出后，只在需要时提权（装了 helper 服务要停 / 起它，
 /// 或 App 目录写不进去）：需要就以管理员重跑自己（-Elevated）做换文件，否则直接在当前用户下换；
 /// 之后以当前用户身份重启 App、成功就清掉工作目录（含脚本自己）。
-/// 换文件 = 停 helper 服务 → 只杀 App 目录下的残留进程（别的目录里同名的 MeowX 不动）→ robocopy 覆盖 → 按原状态起服务。
+/// 换文件 = （helper 服务是本目录的才）停服务 → 只杀 App 目录下的残留进程（别的目录里同名的 MeowX 不动）→ robocopy 覆盖
+/// → 按原状态起服务。helper 服务与安装版**同名**：机器上另装着安装版时那个服务是安装版的，便携版更新不能去停它、
+/// 更不该为它弹 UAC——只有服务程序就在本目录里（便携版自己注册的）才归这次更新管（`\$OwnService`）。
 /// robocopy /E 不带 /MIR：便携版用户数据放在 `<appdir>\data`（与 Flutter 自己的 `data\flutter_assets` 同一目录），
 /// 只增改不删，用户文件天然保留；`portable` 标记文件不动。结果经 result.txt 回传，不依赖 -Verb RunAs 的 ExitCode。
 String buildPortableUpdaterScript({
@@ -203,18 +205,27 @@ ${_scriptHead('MeowX 便携版更新脚本：由 App 生成，跑完自删', par
 \$ServiceName = ${_ps(serviceName)}
 \$Log = Join-Path \$Work 'update.log'
 \$Result = Join-Path \$Work 'result.txt'
+\$Prefix = \$AppDir.TrimEnd([char]'\\') + '\\'
+\$OwnService = \$false
+try {
+  \$svcInfo = Get-CimInstance -ClassName Win32_Service -Filter ("Name='" + \$ServiceName + "'") -ErrorAction Stop
+  if (\$svcInfo -and \$svcInfo.PathName) {
+    \$OwnService = ([string]\$svcInfo.PathName).TrimStart('"').StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+  }
+} catch {}
 
 $_waitAppExitFunction
 function Invoke-Update {
   Start-Transcript -Path \$Log -Append | Out-Null
   \$wasRunning = \$false
-  \$svc = Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue
-  if (\$svc) {
-    \$wasRunning = (\$svc.Status -eq 'Running')
-    Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
+  if (\$OwnService) {
+    \$svc = Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue
+    if (\$svc) {
+      \$wasRunning = (\$svc.Status -eq 'Running')
+      Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
+    }
   }
-  \$prefix = \$AppDir.TrimEnd([char]'\\') + '\\'
-  Get-Process -Name $kill -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name $kill -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
   robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
   \$rc = \$LASTEXITCODE
   if (\$wasRunning) { Start-Service -Name \$ServiceName -ErrorAction SilentlyContinue }
@@ -228,10 +239,8 @@ if (\$Elevated) {
 }
 
 $_abortIfAppRunning
-\$needElevate = \$false
-if (Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue) {
-  \$needElevate = \$true
-} else {
+\$needElevate = \$OwnService
+if (-not \$needElevate) {
   try {
     \$probe = Join-Path \$AppDir ('.meowx-write-test-' + [guid]::NewGuid().ToString('N'))
     [IO.File]::WriteAllText(\$probe, '')

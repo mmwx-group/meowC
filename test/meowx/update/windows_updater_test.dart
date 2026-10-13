@@ -107,18 +107,27 @@ Set-Content -LiteralPath (Join-Path \$Work 'started') -Value 1
 \$ServiceName = 'MeowXHelperService'
 \$Log = Join-Path \$Work 'update.log'
 \$Result = Join-Path \$Work 'result.txt'
+\$Prefix = \$AppDir.TrimEnd([char]'\\') + '\\'
+\$OwnService = \$false
+try {
+  \$svcInfo = Get-CimInstance -ClassName Win32_Service -Filter ("Name='" + \$ServiceName + "'") -ErrorAction Stop
+  if (\$svcInfo -and \$svcInfo.PathName) {
+    \$OwnService = ([string]\$svcInfo.PathName).TrimStart('"').StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase)
+  }
+} catch {}
 
 $_waitFn
 function Invoke-Update {
   Start-Transcript -Path \$Log -Append | Out-Null
   \$wasRunning = \$false
-  \$svc = Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue
-  if (\$svc) {
-    \$wasRunning = (\$svc.Status -eq 'Running')
-    Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
+  if (\$OwnService) {
+    \$svc = Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue
+    if (\$svc) {
+      \$wasRunning = (\$svc.Status -eq 'Running')
+      Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
+    }
   }
-  \$prefix = \$AppDir.TrimEnd([char]'\\') + '\\'
-  Get-Process -Name 'MeowXCore', 'MeowXHelperService', 'MeowX' -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process -Name 'MeowXCore', 'MeowXHelperService', 'MeowX' -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
   robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
   \$rc = \$LASTEXITCODE
   if (\$wasRunning) { Start-Service -Name \$ServiceName -ErrorAction SilentlyContinue }
@@ -132,10 +141,8 @@ if (\$Elevated) {
 }
 
 $_abortIfRunning
-\$needElevate = \$false
-if (Get-Service -Name \$ServiceName -ErrorAction SilentlyContinue) {
-  \$needElevate = \$true
-} else {
+\$needElevate = \$OwnService
+if (-not \$needElevate) {
   try {
     \$probe = Join-Path \$AppDir ('.meowx-write-test-' + [guid]::NewGuid().ToString('N'))
     [IO.File]::WriteAllText(\$probe, '')
@@ -170,6 +177,9 @@ exit 0
       // started 标记必须在等 App 退出之前写；不再无条件提权、不再全机杀同名进程
       expect(script.indexOf("Join-Path \$Work 'started'"), lessThan(script.indexOf('Wait-AppExit')));
       expect(script, isNot(contains('Stop-Process -Name')));
+      // helper 服务与安装版同名：只有程序就在本目录里的才停它 / 为它提权，不能只凭「服务存在」
+      expect(script, isNot(contains('if (Get-Service -Name \$ServiceName')));
+      expect(script.indexOf('\$OwnService = \$false'), lessThan(script.indexOf('function Invoke-Update')));
     });
 
     test('安装版脚本内容精确匹配（Inno 静默参数 + 退出码判定 + 自行重启 App）', () {
@@ -256,6 +266,93 @@ exit 0
       // ignore: avoid_print
       print('对照：detached 直接起 PowerShell → started=$oldStarted');
     }, skip: !Platform.isWindows, timeout: const Timeout(Duration(minutes: 2)));
+
+    // 只在 Windows 上跑（CI 的 updater-windows 任务）：便携版的更新脚本从头到尾真跑一遍——
+    // 等「App」进程退出 → robocopy 把新文件覆盖进程序目录 → 重启主程序 → 清掉工作目录。
+    // 以前只有「脚本内容逐字匹配」，脚本本身从没在真实系统上执行过。
+    for (final (label, serviceName) in [
+      ('机器上没有 helper 服务', 'MeowXNoSuchService'),
+      // 用一个系统自带、程序在别处的服务冒充「安装版注册的同名服务」：便携版更新不能停它、也不该为它提权
+      ('同名 helper 服务装在别处（安装版的）', 'EventLog'),
+    ]) {
+      test('真实执行便携版更新：替换文件后重启（$label）', () async {
+        final root = await Directory.systemTemp.createTemp('meowx 便携 测试 ');
+        addTearDown(() async {
+          try {
+            await root.delete(recursive: true);
+          } catch (_) {}
+        });
+        String at(String a, [String? b, String? c]) => p.joinAll([root.path, a, ?b, ?c]);
+        Future<void> put(String path, String content) async {
+          final f = File(path);
+          await f.parent.create(recursive: true);
+          await f.writeAsString(content);
+        }
+
+        // 旧版程序目录：主程序（用 .cmd 代替，启动时把自己的版本写进 restarted.txt）、用户数据、portable 标记、新版里没有的旧文件
+        await put(at('app', 'app.cmd'), '@echo off\r\necho v1> "%~dp0restarted.txt"\r\n');
+        await put(at('app', 'data', 'user.json'), '{"keep": true}');
+        await put(at('app', 'portable'), 'marker');
+        await put(at('app', 'old-only.txt'), 'old');
+        // 解压出来的新版
+        await put(at('work', 'stage', 'app.cmd'), '@echo off\r\necho v2> "%~dp0restarted.txt"\r\n');
+        await put(p.join(at('work', 'stage'), 'data', 'flutter_assets', 'x.txt'), 'asset-v2');
+        await put(at('work', 'stage', 'new.dll'), 'new');
+        await put(at('work', 'stage', 'portable'), '');
+
+        // 「App」：一个过几秒自己退出的进程，脚本要等它退出才动文件
+        final app = await Process.start(powerShellPath(), ['-NoProfile', '-Command', 'Start-Sleep -Seconds 5']);
+        final script = File(at('work', 'update.ps1'));
+        await script.writeAsBytes([
+          0xEF, 0xBB, 0xBF,
+          ...utf8.encode(buildPortableUpdaterScript(
+            pid: app.pid,
+            appDir: at('app'),
+            stagingDir: at('work', 'stage'),
+            exeName: 'app.cmd',
+            serviceName: serviceName,
+            killProcessNames: const ['MeowXCore', 'MeowXHelperService', 'app'],
+          )),
+        ]);
+
+        await launchUpdaterScript(script);
+        expect(await waitForFile(File(at('work', updaterStartedMarker)), timeout: const Duration(seconds: 40)), isTrue,
+            reason: '脚本没有写出 started 标记');
+        // App 还在跑的时候文件不能动
+        expect(await File(at('app', 'app.cmd')).readAsString(), contains('v1'));
+        expect(File(at('app', 'new.dll')).existsSync(), isFalse);
+
+        final restarted = File(at('app', 'restarted.txt'));
+        final done = await waitForFile(restarted, timeout: const Duration(seconds: 90));
+        String log() {
+          final f = File(at('work', 'update.log'));
+          return f.existsSync() ? f.readAsStringSync() : '<没有 update.log>';
+        }
+
+        expect(done, isTrue, reason: '换完文件后主程序没有被重启。update.log：\n${log()}');
+        expect((await restarted.readAsString()).trim(), 'v2', reason: '重启的应该是新版主程序');
+        expect(await File(at('app', 'app.cmd')).readAsString(), contains('v2'));
+        expect(await File(at('app', 'new.dll')).readAsString(), 'new');
+        expect(await File(p.join(at('app'), 'data', 'flutter_assets', 'x.txt')).readAsString(), 'asset-v2');
+        // 用户数据、portable 标记、新版里没有的旧文件都原样留着（只增改不删）
+        expect(await File(at('app', 'data', 'user.json')).readAsString(), '{"keep": true}');
+        expect(await File(at('app', 'portable')).readAsString(), 'marker');
+        expect(await File(at('app', 'old-only.txt')).readAsString(), 'old');
+
+        // 成功后脚本清掉整个工作目录（含它自己）；没清掉 = 结果码不是 0
+        var cleaned = false;
+        for (var i = 0; i < 100 && !cleaned; i++) {
+          cleaned = !Directory(at('work')).existsSync();
+          if (!cleaned) await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+        expect(cleaned, isTrue, reason: '工作目录没被清掉（更新没有以 0 收场）。update.log：\n${log()}');
+
+        if (serviceName == 'EventLog') {
+          final status = await Process.run(powerShellPath(), ['-NoProfile', '-Command', '(Get-Service -Name EventLog).Status']);
+          expect('${status.stdout}'.trim(), 'Running', reason: '别处的同名服务被便携版更新停掉了');
+        }
+      }, skip: !Platform.isWindows, timeout: const Timeout(Duration(minutes: 4)));
+    }
 
     test('EncodedCommand：UTF-16LE + base64，中文路径原样往返', () {
       const command = r"Start-Process 'C:\用户\临时\update.ps1'";
