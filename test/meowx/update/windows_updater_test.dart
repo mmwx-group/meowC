@@ -117,6 +117,28 @@ try {
 } catch {}
 
 $_waitFn
+function Stop-Leftovers {
+  Get-Process -Name 'MeowXCore', 'MeowXHelperService', 'MeowX' -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+function Test-ExeLocked {
+  foreach (\$f in (Get-ChildItem -LiteralPath \$AppDir -Filter *.exe -File -ErrorAction SilentlyContinue)) {
+    try {
+      \$h = [IO.File]::Open(\$f.FullName, 'Open', 'ReadWrite', 'None')
+      \$h.Close()
+    } catch [System.IO.IOException] {
+      return \$true
+    } catch {
+    }
+  }
+  return \$false
+}
+function Wait-Unlocked {
+  for (\$i = 0; \$i -lt 25; \$i++) {
+    if (-not (Test-ExeLocked)) { return \$true }
+    Start-Sleep -Milliseconds 200
+  }
+  return \$false
+}
 function Invoke-Update {
   Start-Transcript -Path \$Log -Append | Out-Null
   \$wasRunning = \$false
@@ -127,9 +149,14 @@ function Invoke-Update {
       Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
     }
   }
-  Get-Process -Name 'MeowXCore', 'MeowXHelperService', 'MeowX' -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
-  robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
-  \$rc = \$LASTEXITCODE
+  Stop-Leftovers
+  if (Wait-Unlocked) {
+    robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
+    \$rc = \$LASTEXITCODE
+  } else {
+    Write-Output 'executables still in use, nothing copied'
+    \$rc = 32
+  }
   if (\$wasRunning) { Start-Service -Name \$ServiceName -ErrorAction SilentlyContinue }
   Stop-Transcript | Out-Null
   if (\$rc -ge 8) { Set-Content -LiteralPath \$Result -Value \$rc } else { Set-Content -LiteralPath \$Result -Value 0 }
@@ -150,6 +177,10 @@ if (-not \$needElevate) {
   } catch {
     \$needElevate = \$true
   }
+}
+if (-not \$needElevate) {
+  Stop-Leftovers
+  if (-not (Wait-Unlocked)) { \$needElevate = \$true }
 }
 \$code = -1
 if (\$needElevate) {
@@ -294,11 +325,15 @@ exit 0
         await put(at('app', 'data', 'user.json'), '{"keep": true}');
         await put(at('app', 'portable'), 'marker');
         await put(at('app', 'old-only.txt'), 'old');
+        // 一个真的可执行文件（没在跑）：换文件前的「可执行文件是否被占用」检查要能放行它
+        final whoami = File(p.join(Platform.environment['SystemRoot'] ?? r'C:\Windows', 'System32', 'whoami.exe'));
+        await whoami.copy(at('app', 'tool.exe'));
         // 解压出来的新版
         await put(at('work', 'stage', 'app.cmd'), '@echo off\r\necho v2> "%~dp0restarted.txt"\r\n');
         await put(p.join(at('work', 'stage'), 'data', 'flutter_assets', 'x.txt'), 'asset-v2');
         await put(at('work', 'stage', 'new.dll'), 'new');
         await put(at('work', 'stage', 'portable'), '');
+        await whoami.copy(at('work', 'stage', 'tool.exe'));
 
         // 「App」：一个过几秒自己退出的进程，脚本要等它退出才动文件
         final app = await Process.start(powerShellPath(), ['-NoProfile', '-Command', 'Start-Sleep -Seconds 5']);

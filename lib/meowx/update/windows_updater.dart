@@ -186,6 +186,9 @@ String _failBox(String what) =>
 /// 换文件 = （helper 服务是本目录的才）停服务 → 只杀 App 目录下的残留进程（别的目录里同名的 MeowX 不动）→ robocopy 覆盖
 /// → 按原状态起服务。helper 服务与安装版**同名**：机器上另装着安装版时那个服务是安装版的，便携版更新不能去停它、
 /// 更不该为它弹 UAC——只有服务程序就在本目录里（便携版自己注册的）才归这次更新管（`\$OwnService`）。
+/// 换文件之前先确认程序目录里的可执行文件都没被占着（`Wait-Unlocked`）：残留进程是提过权的（开过 TUN 的核心）时
+/// 当前用户杀不掉，这时改走提权；提了权还占着就**一个文件都不动**（结果码 32）——robocopy 遇到占用的文件会跳过它、
+/// 把别的照样换掉，留下半新半旧的程序目录，比不更新更糟。
 /// robocopy /E 不带 /MIR：便携版用户数据放在 `<appdir>\data`（与 Flutter 自己的 `data\flutter_assets` 同一目录），
 /// 只增改不删，用户文件天然保留；`portable` 标记文件不动。结果经 result.txt 回传，不依赖 -Verb RunAs 的 ExitCode。
 String buildPortableUpdaterScript({
@@ -215,6 +218,28 @@ try {
 } catch {}
 
 $_waitAppExitFunction
+function Stop-Leftovers {
+  Get-Process -Name $kill -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
+}
+function Test-ExeLocked {
+  foreach (\$f in (Get-ChildItem -LiteralPath \$AppDir -Filter *.exe -File -ErrorAction SilentlyContinue)) {
+    try {
+      \$h = [IO.File]::Open(\$f.FullName, 'Open', 'ReadWrite', 'None')
+      \$h.Close()
+    } catch [System.IO.IOException] {
+      return \$true
+    } catch {
+    }
+  }
+  return \$false
+}
+function Wait-Unlocked {
+  for (\$i = 0; \$i -lt 25; \$i++) {
+    if (-not (Test-ExeLocked)) { return \$true }
+    Start-Sleep -Milliseconds 200
+  }
+  return \$false
+}
 function Invoke-Update {
   Start-Transcript -Path \$Log -Append | Out-Null
   \$wasRunning = \$false
@@ -225,9 +250,14 @@ function Invoke-Update {
       Stop-Service -Name \$ServiceName -Force -ErrorAction SilentlyContinue
     }
   }
-  Get-Process -Name $kill -ErrorAction SilentlyContinue | Where-Object { \$_.Path -and \$_.Path.StartsWith(\$Prefix, [System.StringComparison]::OrdinalIgnoreCase) } | Stop-Process -Force -ErrorAction SilentlyContinue
-  robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
-  \$rc = \$LASTEXITCODE
+  Stop-Leftovers
+  if (Wait-Unlocked) {
+    robocopy \$Staging \$AppDir /E /R:5 /W:1 /NP /NFL /NDL /XF portable
+    \$rc = \$LASTEXITCODE
+  } else {
+    Write-Output 'executables still in use, nothing copied'
+    \$rc = 32
+  }
   if (\$wasRunning) { Start-Service -Name \$ServiceName -ErrorAction SilentlyContinue }
   Stop-Transcript | Out-Null
   if (\$rc -ge 8) { Set-Content -LiteralPath \$Result -Value \$rc } else { Set-Content -LiteralPath \$Result -Value 0 }
@@ -248,6 +278,10 @@ if (-not \$needElevate) {
   } catch {
     \$needElevate = \$true
   }
+}
+if (-not \$needElevate) {
+  Stop-Leftovers
+  if (-not (Wait-Unlocked)) { \$needElevate = \$true }
 }
 \$code = -1
 if (\$needElevate) {
