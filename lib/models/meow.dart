@@ -1,3 +1,5 @@
+// ignore_for_file: invalid_annotation_target
+// （freezed 构造参数上的 @JsonKey 是给生成代码用的，同 lib/models 下其它模型文件）
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'generated/meow.freezed.dart';
@@ -124,6 +126,20 @@ abstract class MeowAccount with _$MeowAccount {
       _$MeowAccountFromJson(json);
 }
 
+/// 用户在客户端里自己添加的 po0 服务器（本机偏好，退出登录不清）。
+/// [address] 是规范化后的 `host[:port]`（见 `normalizePo0Address`），[token] 是 trim 后的原文（可带 `@槽位`）。
+/// token 在界面 / 日志里一律用 `maskPo0Token` 的脱敏写法。
+@freezed
+abstract class Po0CustomServer with _$Po0CustomServer {
+  const factory Po0CustomServer({
+    @Default('') String address,
+    @Default('') String token,
+  }) = _Po0CustomServer;
+
+  factory Po0CustomServer.fromJson(Map<String, Object?> json) =>
+      _$Po0CustomServerFromJson(json);
+}
+
 /// MeowX 壳自己的设置（挂在 Config.meow 上，随 Bettbox 的偏好一起落盘）。
 @freezed
 abstract class MeowSettings with _$MeowSettings {
@@ -158,12 +174,16 @@ abstract class MeowSettings with _$MeowSettings {
     @Default(MeowLocalProxy()) MeowLocalProxy localProxy,
     @Default(MeowAccount()) MeowAccount account,
 
-    /// po0 客户端 IP 加白：打开后才拉主控的 po0 列表并定时 / 网络变化时上报本机出口 IP
+    /// po0 客户端 IP 加白：打开后才拉主控的 po0 列表、连同 [po0Custom] 定时 / 网络变化时上报本机出口 IP
     @Default(false) bool po0Enabled,
 
-    /// 最近一次拿到的 po0 服务器 IP（已去重、规范化）：开关打开时据此在规则最前加 DIRECT。
-    /// 落盘是为了启动 / 磁贴快速启动（服务 isolate 里没有 Reporter）时规则也在
-    @Default([]) List<String> po0DirectIps,
+    /// 用户自己添加的 po0 服务器：追加在主控下发的之后，没登录也报（仍以 [po0Enabled] 为准）
+    @Default([]) List<Po0CustomServer> po0Custom,
+
+    /// 最近一次 po0 服务器（主控的 + 自己添加的）的主机（IP 已规范化、域名小写，去重）：开关打开时据此在规则最前加 DIRECT。
+    /// 落盘是为了启动 / 磁贴快速启动（服务 isolate 里没有 Reporter）时规则也在。
+    /// 以前只存 IP、键名是 po0DirectIps：沿用这个键，旧数据原样读成主机
+    @JsonKey(name: 'po0DirectIps') @Default([]) List<String> po0DirectHosts,
 
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,

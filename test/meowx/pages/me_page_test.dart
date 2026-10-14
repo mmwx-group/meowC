@@ -5,6 +5,8 @@ import 'package:bett_box/meowx/pages/me/me_page.dart';
 import 'package:bett_box/meowx/pages/me/platform_rows.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
 import 'package:bett_box/meowx/pages/settings/overrides_pages.dart';
+import 'package:bett_box/meowx/pages/settings/po0_servers_page.dart';
+import 'package:bett_box/meowx/panel/po0.dart';
 import 'package:bett_box/meowx/pages/settings/sys_proxy_bypass_page.dart';
 import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/connection.dart';
@@ -408,5 +410,57 @@ void main() {
     await tester.tap(find.byTooltip('删除').first);
     await tester.pump();
     expect(_container(tester, SysProxyBypassPage).read(networkSettingProvider).bypassDomain, before.sublist(1));
+  });
+
+  testWidgets('自定义 po0 服务器：入口行显示条数；列表只出现脱敏 token；添加时校验、去重；点 × 删除', (tester) async {
+    const meow = MeowSettings(
+      po0Enabled: true,
+      po0Custom: [Po0CustomServer(address: 'fw.example.com:8443', token: 'pgnfw_abcd1234wxyz@2')],
+    );
+    await _pump(tester, const SingleChildScrollView(child: SyncRows()), size: const Size(320, 900), overrides: _overrides(meow: meow));
+    expect(find.text('自定义 po0 服务器'), findsOneWidget);
+    expect(find.text('1 条'), findsOneWidget);
+    await tester.tap(find.text('自定义 po0 服务器'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Po0ServersPage), findsOneWidget);
+    expect(find.text('fw.example.com:8443'), findsOneWidget);
+    expect(find.text('pgnfw_••••wxyz@2'), findsOneWidget);
+    expect(find.textContaining('abcd1234wxyz'), findsNothing);
+
+    // 添加：地址 / token 不合法 → 各自的提示，不保存
+    await tester.tap(find.byTooltip('添加'));
+    await tester.pumpAndSettle();
+    final fields = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    expect(tester.widget<TextField>(fields.at(1)).obscureText, isTrue);
+    await tester.enterText(fields.at(0), '1.2.3.4/api');
+    await tester.enterText(fields.at(1), 'abc');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pump();
+    expect(find.text(po0AddressPathMessage), findsOneWidget);
+    expect(find.text(po0TokenInvalidMessage), findsOneWidget);
+
+    // 与已有条目同一个上报地址 → 提示已添加
+    await tester.enterText(fields.at(0), 'https://FW.example.com:08443/');
+    await tester.enterText(fields.at(1), ' pgnfw_abcd1234wxyz@2 ');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pump();
+    expect(find.text('这个地址与 token 已经添加过'), findsOneWidget);
+
+    // 合法：存规范形式，列表里脱敏
+    await tester.enterText(fields.at(0), '2001:DB8::1');
+    await tester.enterText(fields.at(1), 'pgnfw_efgh5678ijkl');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.last,
+        const Po0CustomServer(address: '[2001:db8::1]', token: 'pgnfw_efgh5678ijkl'));
+    expect(find.text('[2001:db8::1]'), findsOneWidget);
+    expect(find.text('pgnfw_••••ijkl'), findsOneWidget);
+    expect(find.textContaining('efgh5678ijkl'), findsNothing);
+
+    await tester.tap(find.byTooltip('删除').first);
+    await tester.pump();
+    expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.map((c) => c.address), ['[2001:db8::1]']);
   });
 }

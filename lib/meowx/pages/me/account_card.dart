@@ -218,7 +218,7 @@ Future<void> showLoginSheet(
               setState(() => twoFactorToken = r.twoFactorToken);
               return;
             }
-            await actions.refreshSubscriptions();
+            await actions.afterLogin();
             if (ctx.mounted) Navigator.of(ctx).pop();
           } catch (e) {
             onError(e);

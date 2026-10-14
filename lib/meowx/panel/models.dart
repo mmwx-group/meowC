@@ -313,3 +313,18 @@ class NodeUnlocks {
     return out;
   }
 }
+
+/// 登录后自动导入哪一份（null = 不自动导入）：当前没在用订阅（内置直连档 / 没有档）、本机还没有这个主控的订阅、
+/// 账户下恰好一份。多份不替用户选，在用别家订阅时也不替用户换。与 iOS / macOS 端同一套规则。
+/// [host] 是主控地址（`https://host[:port]`），按主机名与本机各订阅的地址比。
+RemoteSubscription? autoImportCandidate({
+  required List<RemoteSubscription> remote,
+  required String host,
+  required Iterable<String> localUrls,
+  required bool usingSubscription,
+}) {
+  final h = Uri.tryParse(host)?.host.toLowerCase() ?? '';
+  if (usingSubscription || remote.length != 1 || h.isEmpty) return null;
+  final hasLocal = localUrls.any((u) => u.isNotEmpty && Uri.tryParse(u)?.host.toLowerCase() == h);
+  return hasLocal ? null : remote.first;
+}

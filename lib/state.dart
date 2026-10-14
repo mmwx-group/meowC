@@ -1062,8 +1062,11 @@ class GlobalState {
     }
 
     rawConfig.remove('rule');
-    // MeowX：绕过代理 / 推送直连规则放最前（先于模式与订阅规则）
-    rawConfig['rules'] = [...meowPrependRules(config.meow), ...rules];
+    // MeowX：主控直连 / 绕过代理 / 推送直连规则放最前（先于订阅规则）；主控直连要看各订阅档的地址（订阅域名）
+    rawConfig['rules'] = [
+      ...meowPrependRules(config.meow, subscriptionUrls: config.profiles.map((p) => p.url)),
+      ...rules,
+    ];
     return rawConfig;
   }
 

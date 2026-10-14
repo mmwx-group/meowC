@@ -58,10 +58,10 @@
 - `lib/common/window.dart show()`：从托盘显示前同样检查，藏在托盘期间拔了显示器时挪回主屏居中。
 
 ## 2026-09-30 · po0 客户端 IP 加白
-- 新增 `core/meow_po0.go`：`meowPo0Report` action——用 mihomo 直连 dialer（与 DIRECT 出站同一条路，Android 经 socket protect 出 VPN、Windows TUN 经 sing-tun 绑物理网卡）向 po0 服务器 POST 空 body、跳过证书校验、10s 超时，逐 url 返回状态码与响应体；`core/constant.go` / `core/action.go` 登记该方法。
+- 新增 `core/meow_po0.go`：`meowPo0Report` action——用 mihomo 直连 dialer（与 DIRECT 出站同一条路，Android 经 socket protect 出 VPN、Windows TUN 经 sing-tun 绑物理网卡）向 po0 服务器 POST 空 body、跳过证书校验、10s 超时，逐 url 返回状态码与响应体；`core/constant.go` / `core/action.go` 登记该方法。上报失败的告警日志里 url 与错误（Go 的 url.Error 带整个 url）中的 token 脱敏（`meowPo0Redact`，2026-10-14 加，测试 `core/meow_po0_test.go`）。
 - `lib/enum/enum.dart`（`ActionMethod.meowPo0Report`）与生成文件 `lib/models/generated/core.g.dart`（枚举映射手动补一行，与 build_runner 输出一致）。
-- 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型在 `lib/meowx/panel/po0.dart`。
-- `lib/models/meow.dart MeowSettings`：新增 `po0Enabled`（默认 false）与 `po0DirectIps`（最近一次 po0 服务器 IP 缓存；开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve`，列表变化时与其它覆写同样 `applyProfileDebounce` 热生效）；设置页「订阅」组加「po0 加白」开关，所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化）以它为准。
+- 上报调度在 `lib/meowx/state/po0_reporter.dart`（登录 / 启动后、`refreshExtras`、网络变化（`connectivity_plus`）、每 10 分钟），列表模型与地址 / token 的校验、规范化、脱敏、合并在 `lib/meowx/panel/po0.dart`。
+- `lib/models/meow.dart MeowSettings`：`po0Enabled`（默认 false）、`po0Custom`（2026-10-14 加：用户自己添加的 po0 服务器 `Po0CustomServer{address, token}`，本机偏好、退出登录不清；设置页「po0 加白」开关下面一行「自定义 po0 服务器」进子页 `lib/meowx/pages/settings/po0_servers_page.dart` 增删，token 只显示脱敏写法）与 `po0DirectHosts`（最近一次上报目标——主控下发的 + 自己添加的，按上报地址去重——的主机缓存，IP 或域名；JSON 键沿用旧名 `po0DirectIps`，旧数据原样兼容。开关打开时经 `meowPrependRules` 在规则最前加 `IP-CIDR(6),<ip>,DIRECT,no-resolve` / 域名 `DOMAIN,<host>,DIRECT`，列表或自定义条目变化时与其它覆写同样 `applyProfileDebounce` 热生效）。所有上报入口（启动 / 登录 / refreshExtras / 定时 / 网络变化 / 增删自定义条目）以开关为准；没登录时只报自己添加的。
 
 ## 2026-10-08 · 界面性能（动到 Bettbox 底层的部分）
 - `lib/clash/interface.dart`：新增 `handleMessage`（Android 的 ReceivePort 与 Windows 的 socket 两处监听的统一入口，`lib/clash/lib.dart` / `lib/clash/service.dart` 改为调它）——① 没有界面在看时 `request` 推送不解码（见下）；② `getProxies` 的回包不在 UI isolate 解，原始字符串整包交给调用方（`_completeRawProxies`）；③ 其余超过 32KB 的回包（连接快照、整份配置）放到后台 isolate 解信封，小消息照旧同步解。`handleResult` 取 completer 时即从 `callbackCompleterMap` 移除（原来只 complete 不移除，要等 30s 后的清理定时器，回包被多留 30 秒）。
@@ -98,3 +98,6 @@
 
 ## 2026-10-14 · Android 安装包同时带 v1 签名
 - `android/app/build.gradle.kts`：发布签名配置显式 `enableV1Signing = true`、`enableV2Signing = true`。`minSdk = 26` 时 AGP 默认只签 v2，包里没有 `META-INF/*.SF`、`*.RSA`；OPPO / realme / 一加（ColorOS）的安装器自己先找这些文件，找不到就报「解析失败：安装包没有签名文件」（Parsing failed: APK contains no signature files），不交给系统去验 v2。签名证书不变，可以覆盖安装旧版本。从导入 Bettbox 起每个版本都是这样，0.2.6 及以前的包在这类机器上装不了。
+
+## 2026-10-14 · 主控域名直连
+- `lib/state.dart patchRawConfig`：规则前置那一行把各订阅档的地址传给 `meowPrependRules`（`subscriptionUrls: config.profiles.map((p) => p.url)`）。前置规则最前面多一组主控直连：登录了的主控域名，加上本机订阅里形如主控订阅地址（`/x/…`、`/api/clash/subscribe` 等）的那些域名（主控的「订阅域名」），主控是 IP 时用 `IP-CIDR(6)…,no-resolve`。原因：开着代理时，客户端访问主控（账户订阅列表、奖牌 / 解锁、白名单 token）按订阅规则分流、多半被分到节点上，有的节点连不上主控，用户实报「开了代理拉账户订阅一直超时，关代理正常」；主控生成的订阅里不带这条规则。规则本身与登录后重新套用配置都在 `lib/meowx/`（`config/meow_patch.dart panelDirectRules`、`panel/account.dart`）。只在规则模式下生效。

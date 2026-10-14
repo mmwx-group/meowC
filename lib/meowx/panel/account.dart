@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/direct_profile.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
+import '../state/status.dart';
 import 'client.dart';
 import 'models.dart';
 import 'node_match.dart';
@@ -117,11 +118,17 @@ class AccountActions {
     final r = await client.loginQr(code);
     if (r is! LoginSuccess) throw const PanelException('登录失败');
     await _store(client.base, r);
-    await refreshSubscriptions();
+    await afterLogin();
   }
 
   Future<void> _store(String base, LoginSuccess ok) async {
     _update((a) => a.copyWith(host: base, token: ok.token, nickname: ok.nickname, avatarUrl: ok.avatarUrl));
+    _reapplyRules();
+  }
+
+  /// 主控直连规则跟着登录状态走（见 `panelDirectRules`）：连着时重新套用一次配置，登录后紧接着的账户请求就能直连主控。
+  void _reapplyRules() {
+    if (ref.read(isRunningProvider)) globalState.appController.applyProfileDebounce(silence: true);
   }
 
   /// 登出：先删掉从这个主控导入的订阅档（用户的配置不该留在设备上），再清 token / 昵称 / 头像（保留主控地址）。
@@ -142,6 +149,7 @@ class AccountActions {
       }
     }
     _update((a) => a.copyWith(token: '', nickname: '', avatarUrl: ''));
+    _reapplyRules();
     ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
     _setMedals(const []);
     _setUnlocks(const []);
@@ -165,6 +173,23 @@ class AccountActions {
     } catch (e) {
       commonPrint.log('refreshProfile failed: $e');
     }
+  }
+
+  /// 登录成功后：拉「我的订阅」，账户下恰好一份且本机还没在用订阅时直接导入并切过去（规则见 [autoImportCandidate]）。
+  /// 用户反馈「登录了之后找不到订阅」：以前登录只把列表拉下来，要自己去订阅卡里点那一项才导入。
+  /// 只在登录成功那一刻跑：用户事后自己删掉的订阅不会被自动加回来。导入不挡登录流程（订阅卡那一行会显示导入中）。
+  Future<void> afterLogin() async {
+    await refreshSubscriptions();
+    final pick = autoImportCandidate(
+      remote: ref.read(remoteSubsProvider).value ?? const [],
+      host: _account.host,
+      localUrls: ref.read(profilesProvider).map((p) => p.url),
+      usingSubscription: !isDirectProfile(ref.read(currentProfileIdProvider) ?? directProfileId),
+    );
+    if (pick == null) return;
+    unawaited(
+      importSubscription(pick).catchError((Object e) => commonPrint.log('auto import after login failed: $e')),
+    );
   }
 
   Future<void> refreshSubscriptions() async {

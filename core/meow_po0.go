@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -78,6 +80,24 @@ func meowPo0ReportOne(client *http.Client, url string) Po0ReportResult {
 	return res
 }
 
+var meowPo0TokenSegment = regexp.MustCompile(`/api/firewall/[^/?#"\s]+`)
+
+// meowPo0Redact 把上报地址里 `/api/firewall/<token>` 那段换成脱敏写法（同 Dart 端 maskPo0Token：
+// `pgnfw_••••` + 最后 4 个字符，密钥部分少于 8 个字符时只留 `pgnfw_••••`；不是 pgnfw_ 开头的一律 `••••`）。
+func meowPo0Redact(s string) string {
+	return meowPo0TokenSegment.ReplaceAllStringFunc(s, func(m string) string {
+		token := strings.TrimPrefix(m, "/api/firewall/")
+		masked := "••••"
+		if key, ok := strings.CutPrefix(token, "pgnfw_"); ok {
+			masked = "pgnfw_••••"
+			if len(key) >= 8 {
+				masked += key[len(key)-4:]
+			}
+		}
+		return "/api/firewall/" + masked
+	})
+}
+
 // handleMeowPo0Report 并发向每个 url 发一次空 body 的 POST，逐个返回状态码与响应体 / 错误。
 func handleMeowPo0Report(paramsString string, fn func(string)) {
 	go func() {
@@ -95,7 +115,8 @@ func handleMeowPo0Report(paramsString string, fn func(string)) {
 				defer wg.Done()
 				results[i] = meowPo0ReportOne(client, u)
 				if results[i].Error != "" {
-					log.Warnln("[MeowX] po0 report %s: %s", u, results[i].Error)
+					// url 与错误（url.Error 带着整个 url）里都有 po0 token，进日志前脱敏
+					log.Warnln("[MeowX] po0 report %s: %s", meowPo0Redact(u), meowPo0Redact(results[i].Error))
 				}
 			}(i, u)
 		}

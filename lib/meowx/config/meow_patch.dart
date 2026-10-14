@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bett_box/models/meow.dart';
 
 import '../panel/po0.dart';
@@ -73,13 +75,45 @@ void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {
   rawConfig['hosts'] = hosts;
 }
 
-/// 返回要前置到规则表最前的规则（po0 直连 → 绕过代理 → 推送直连）。
-/// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，IP 来自最近一次拿到的服务器列表。
-List<String> meowPrependRules(MeowSettings meow, {bool? debugPo0}) => [
-  if (meow.po0Enabled || (debugPo0 ?? debugPo0Urls.isNotEmpty)) ...po0DirectRules(meow.po0DirectIps),
+/// 返回要前置到规则表最前的规则（主控直连 → po0 直连 → 绕过代理 → 推送直连）。
+/// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，主机（IP 或域名）来自最近一次的上报目标
+/// （主控列表 + 自己添加的）。
+/// [subscriptionUrls]：本机各订阅档的地址，主控样式的那些（订阅域名）也直连，见 [panelDirectRules]。
+List<String> meowPrependRules(MeowSettings meow, {Iterable<String> subscriptionUrls = const [], bool? debugPo0}) => [
+  ...panelDirectRules(meow.account, subscriptionUrls),
+  if (meow.po0Enabled || (debugPo0 ?? debugPo0Urls.isNotEmpty)) ...po0DirectRules(meow.po0DirectHosts),
   ...bypassRules(meow.bypassDomains, meow.bypassCidrs),
   if (meow.pushDirect) ...pushDirectRules,
 ];
+
+/// 主控直连（与 iOS / macOS 的 `PanelDirect` 同一规则）：登录了的主控，加上本机订阅里形如主控订阅地址的那些主机
+/// （主控的「订阅域名」只放行 `/x/…`、`/api/clash/subscribe`、`/api/user/package-subscribe`、`/api/subscribe`，口径同主控）。
+/// 开着代理时，客户端访问主控（账户订阅列表、奖牌 / 解锁、白名单 token…）会按订阅规则分流、多半被分到节点上，
+/// 有的节点连不上主控（用户实报：开了代理拉账户订阅一直超时，关代理正常）。主控生成的订阅里不带这条规则，由客户端补。
+/// 别家机场的订阅不算：有的订阅源在本地网络上本来就要经代理才拉得到。只在规则模式下生效（全局模式不看规则）。
+List<String> panelDirectRules(MeowAccount account, Iterable<String> subscriptionUrls) {
+  final hosts = <String>[];
+  void add(String? host) {
+    final h = (host ?? '').toLowerCase().replaceAll('[', '').replaceAll(']', '');
+    if (h.isNotEmpty && !hosts.contains(h)) hosts.add(h);
+  }
+
+  if (account.token.isNotEmpty) add(Uri.tryParse(account.host)?.host);
+  for (final raw in subscriptionUrls) {
+    final uri = Uri.tryParse(raw);
+    if (uri != null && isPanelSubscriptionPath(uri.path)) add(uri.host);
+  }
+  return [
+    for (final h in hosts)
+      if (InternetAddress.tryParse(h) case final ip?)
+        ip.type == InternetAddressType.IPv6 ? 'IP-CIDR6,$h/128,DIRECT,no-resolve' : 'IP-CIDR,$h/32,DIRECT,no-resolve'
+      else
+        'DOMAIN,$h,DIRECT',
+  ];
+}
+
+bool isPanelSubscriptionPath(String path) =>
+    path.startsWith('/x/') || const {'/api/clash/subscribe', '/api/user/package-subscribe', '/api/subscribe'}.contains(path);
 
 void applyMeowAuthentication(Map<String, dynamic> rawConfig, MeowSettings meow) {
   final u = meow.localProxy.username.trim();

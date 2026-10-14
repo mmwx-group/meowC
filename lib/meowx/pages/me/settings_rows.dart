@@ -15,6 +15,7 @@ import '../../state/status.dart';
 import '../../theme/tokens.dart';
 import '../../update/update_state.dart';
 import '../settings/overrides_pages.dart';
+import '../settings/po0_servers_page.dart';
 import '../settings/proxy_apps_page.dart';
 import 'me_kit.dart';
 
@@ -233,7 +234,7 @@ class LocalProxyRows extends ConsumerWidget {
   }
 }
 
-/// 订阅同步：同步间隔 / po0 加白。
+/// 订阅同步：同步间隔 / po0 加白 / 自定义 po0 服务器。
 class SyncRows extends ConsumerWidget {
   const SyncRows({super.key});
 
@@ -241,6 +242,7 @@ class SyncRows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final hours = ref.watch(meowSettingProvider.select((s) => s.syncIntervalHours));
     final po0 = ref.watch(meowSettingProvider.select((s) => s.po0Enabled));
+    final po0Custom = ref.watch(meowSettingProvider.select((s) => s.po0Custom.length));
     return MeRows(
       footer: '到期后下次进入 App 自动重拉当前订阅。',
       children: [
@@ -260,12 +262,18 @@ class SyncRows extends ConsumerWidget {
             }
           },
         ),
-        // 开关变化由 MeowRoot 监听 po0Enabled 统一处理：打开立刻拉列表上报，关闭停表清空
+        // 开关与自定义条目的变化由 MeowRoot 统一处理：打开 / 增删立刻拉列表上报，关闭停表清空
         MeSwitchRow(
           label: 'po0 加白',
-          subtitle: '把本机出口 IP 上报到主控里登记的 po0 服务器，每 10 分钟及网络变化时自动加白',
+          subtitle: '把本机出口 IP 上报到 po0 服务器（主控登记的与自己添加的），每 10 分钟及网络变化时自动加白',
           value: po0,
           onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(po0Enabled: v)),
+        ),
+        MeRow(
+          label: '自定义 po0 服务器',
+          value: po0Custom == 0 ? null : '$po0Custom 条',
+          chevron: true,
+          onTap: () => BaseNavigator.push(context, const Po0ServersPage()),
         ),
       ],
     );

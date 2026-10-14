@@ -46,7 +46,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<String?> _profileSub;
   late final ProviderSubscription<bool> _initSub;
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
-  late final ProviderSubscription<(String, bool, bool)> _po0Sub;
+  late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
   RealtimeClient? _realtime;
 
   @override
@@ -66,21 +66,26 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       (prev, next) => _syncRealtime(next),
       fireImmediately: true,
     );
-    // po0 加白：以设置开关为准。开着 → 启动（核心 init 完）/ 登录后拉列表并立刻上报，开关刚打开时无视去重立刻报；
-    // 关掉 / 登出 → 停表清空
+    // po0 加白：以设置开关为准。开着 → 启动（核心 init 完）/ 登录后拉列表并立刻上报；开关刚打开、登录 / 登出、
+    // 自定义条目增删时无视去重立刻报（直连规则随之更新）。关掉 → 停表清空；没登录时只报自己添加的，一条都没有才停
     _po0Sub = ref.listenManual(
-      Provider<(String, bool, bool)>((r) {
-        final s = r.watch(meowSettingProvider.select((s) => (s.account.token, s.po0Enabled)));
-        return (s.$1, s.$2, r.watch(initProvider));
+      Provider<(String, bool, String, bool)>((r) {
+        final s = r.watch(
+          meowSettingProvider.select(
+            // 自定义条目拼成字符串比较：freezed 列表的 == 只认同一个实例
+            (s) => (s.account.token, s.po0Enabled, s.po0Custom.map((c) => '${c.address} ${c.token}').join('\n')),
+          ),
+        );
+        return (s.$1, s.$2, s.$3, r.watch(initProvider));
       }),
       (prev, next) {
-        final (token, enabled, inited) = next;
+        final (token, enabled, custom, inited) = next;
         if (!inited) return;
         final reporter = ref.read(po0ReporterProvider);
-        if (debugPo0Urls.isEmpty && (token.isEmpty || !enabled)) {
+        if (debugPo0Urls.isEmpty && (!enabled || (token.isEmpty && custom.isEmpty))) {
           reporter.stop();
         } else {
-          unawaited(reporter.refresh(force: prev != null && !prev.$2));
+          unawaited(reporter.refresh(force: prev != null && (!prev.$2 || prev.$1 != token || prev.$3 != custom)));
         }
       },
       fireImmediately: true,

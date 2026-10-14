@@ -62,6 +62,22 @@ void main() {
     expect(absoluteAvatarUrl('/api/user/avatar/ff', ''), '/api/user/avatar/ff');
   });
 
+  test('登录后自动导入：账户下恰好一份、没在用订阅、本机还没有这个主控的订阅才导入', () {
+    const a = RemoteSubscription(name: 'A', filename: 'a.yaml', subscriptionPath: '/x/a');
+    const b = RemoteSubscription(name: 'B', filename: 'b.yaml', subscriptionPath: '/x/b');
+    const host = 'https://panel.example.com';
+    expect(autoImportCandidate(remote: [a], host: host, localUrls: const [''], usingSubscription: false), a);
+    // 多份不替用户选；一份都没有
+    expect(autoImportCandidate(remote: [a, b], host: host, localUrls: const [], usingSubscription: false), isNull);
+    expect(autoImportCandidate(remote: const [], host: host, localUrls: const [], usingSubscription: false), isNull);
+    // 正在用别家订阅：不替用户换
+    expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://airport.example.org/sub'], usingSubscription: true), isNull);
+    // 本机已有这个主控的订阅（主机名不分大小写）
+    expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://Panel.Example.com/x/old'], usingSubscription: false), isNull);
+    // 别家机场的订阅不算这个主控的
+    expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://airport.example.org/sub'], usingSubscription: false), a);
+  });
+
   test('回程奖牌解析', () {
     final m = NodeMedal.parse({'success': true, 'nodes': [
       {'name': 'HK-1', 'medal': 'gold', 'routes': [{'carrier': 'CT', 'region': '广东', 'route_type': 'CN2 GIA', 'gold': true}]},
