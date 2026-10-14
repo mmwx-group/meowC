@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -111,9 +112,12 @@ func newStream(c *Client, l *lane, dest []byte) *Stream {
 	return s
 }
 
+// isTimeout: a read or write deadline set on the stream ran out. ETIMEDOUT from
+// the kernel (retransmission gave up on a lane that died silently) is a
+// net.Error with Timeout() true as well, but it means the lane is dead: it has
+// to go through the replay like any other failure, not come back as a deadline.
 func isTimeout(err error) bool {
-	var ne net.Error
-	return errors.As(err, &ne) && ne.Timeout()
+	return errors.Is(err, os.ErrDeadlineExceeded)
 }
 
 // ---- uplink ----
@@ -303,6 +307,9 @@ func (s *Stream) replace(old *lane, cause error) (*lane, error) {
 
 // replay dials a new lane and sends the uplink so far on it.
 func (s *Stream) replay() (*lane, error) {
+	// The lane put back last died silently (no FIN: the network changed, a NAT
+	// mapping went away); the ones put back earlier can only be worse.
+	s.c.closeIdle()
 	ctx, cancel := context.WithTimeout(s.c.ctx, dialTimeout)
 	defer cancel()
 	l, err := s.c.dial(ctx)

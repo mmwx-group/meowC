@@ -142,6 +142,21 @@ func (c *Client) put(l *lane) {
 	}
 }
 
+// closeIdle closes every idle lane.
+func (c *Client) closeIdle() {
+	c.mu.Lock()
+	idle := c.idle
+	c.idle = nil
+	if c.sweeper != nil {
+		c.sweeper.Stop()
+		c.sweeper = nil
+	}
+	c.mu.Unlock()
+	for _, it := range idle {
+		it.l.close()
+	}
+}
+
 // arm sets the sweeper to when the first idle lane runs out of time. mu must be held.
 func (c *Client) arm() {
 	if c.sweeper != nil {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -1840,5 +1841,41 @@ func TestRawSegments(t *testing.T) {
 				t.Fatalf("second stream: %q", got)
 			}
 		})
+	}
+}
+
+// A replay empties the pool: the lane put back last died silently, the ones put
+// back before it are no better, the next streams should not run into them one by
+// one.
+func TestReplayClosesIdleLanes(t *testing.T) {
+	s := newTestServer(t)
+	c, events := newTestClient(t, s, func(conn net.Conn) net.Conn { return &opaqueConn{Conn: conn} })
+	a, b := testOpen(t, c, echoDst), testOpen(t, c, echoDst)
+	testEcho(t, a, []byte("a"))
+	testEcho(t, b, []byte("b"))
+	testFinish(t, a)
+	testFinish(t, b)
+	testWait(t, "two idle lanes", func() bool { return len(c.idleLanes()) == 2 })
+	s.closeConns() // both die, unseen by the peek
+	testWait(t, "the connections to close", func() bool { return s.live.Load() == 0 })
+
+	stream := testOpen(t, c, echoDst)
+	testEcho(t, stream, []byte("after the replay"))
+	if events.count("replay") != 1 {
+		t.Fatalf("replays=%d", events.count("replay"))
+	}
+	if n := len(c.idleLanes()); n != 0 {
+		t.Fatalf("%d dead lane(s) left in the pool after a replay", n)
+	}
+	testFinish(t, stream)
+}
+
+// ETIMEDOUT from the kernel is not a deadline of the stream.
+func TestIsTimeoutOnlyDeadlines(t *testing.T) {
+	if !isTimeout(os.ErrDeadlineExceeded) || !isTimeout(&net.OpError{Op: "read", Err: os.ErrDeadlineExceeded}) {
+		t.Fatal("a deadline must count")
+	}
+	if isTimeout(&net.OpError{Op: "read", Err: os.NewSyscallError("read", syscall.ETIMEDOUT)}) {
+		t.Fatal("ETIMEDOUT is a dead connection, not a deadline")
 	}
 }
