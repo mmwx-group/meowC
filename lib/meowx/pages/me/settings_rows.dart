@@ -346,10 +346,29 @@ class AboutRows extends ConsumerWidget {
           trailing: Icon(Icons.open_in_new_rounded, size: 16, color: context.mm.t2),
           onTap: () => globalState.openUrl('https://github.com/mmwx-group/meowC'),
         ),
+        MeRow(
+          label: '免责声明',
+          chevron: true,
+          onTap: () => globalState.showMessage(
+            title: '免责声明',
+            message: TextSpan(text: [for (final (i, line) in meowDisclaimer.indexed) '${i + 1}. $line'].join('\n\n')),
+            confirmText: '知道了',
+            cancelable: false,
+          ),
+        ),
       ],
     );
   }
 }
+
+/// 「关于」里的免责声明（与 iOS / macOS 的 `AppInfo.disclaimer` 同一份文字）。
+const meowDisclaimer = [
+  'MeowX 是网络代理客户端，本身不提供任何代理服务器、节点或订阅。配置与订阅均由使用者自行导入，其内容与服务由提供方负责，与本软件无关。',
+  '请在遵守所在国家和地区法律法规的前提下使用本软件，不得用于任何违法违规用途。',
+  '本软件按现状提供，不对连接的可用性、稳定性、速度或安全性作任何保证。',
+  '因使用本软件产生的任何直接或间接后果由使用者自行承担，开发者不承担任何责任。',
+  '使用本软件即表示你已阅读、理解并同意本声明。',
+];
 
 /// 进 Bettbox 的完整设置与工具（内核配置、备份、脚本等）。
 void openAdvanced(BuildContext context) => BaseNavigator.push(context, const ToolsView());
