@@ -268,6 +268,24 @@ void main() {
     expect(_container(tester, MePage).read(currentProfileIdProvider), 'p2');
   });
 
+  testWidgets('账户卡头像：主控上传的站内路径接上主控地址再去加载', (tester) async {
+    await _pump(
+      tester,
+      const MePage(),
+      size: const Size(412, 1500),
+      overrides: _overrides(meow: MeowSettings(account: _account.copyWith(avatarUrl: '/api/user/avatar/ab?v=2'))),
+      textScale: 1,
+    );
+    final urls = tester
+        .widgetList<Image>(find.byType(Image))
+        .map((i) => i.image)
+        .map((p) => p is ResizeImage ? p.imageProvider : p)
+        .whereType<NetworkImage>()
+        .map((n) => n.url)
+        .toList();
+    expect(urls, ['https://panel.example.com/api/user/avatar/ab?v=2']);
+  });
+
   testWidgets('手机 · 入口行进二级页，返回钮回来；二级页里的开关直接生效', (tester) async {
     await _pump(tester, const MePage(), size: const Size(412, 1500), overrides: _overrides(), textScale: 1);
     await tester.tap(find.text('流量控制'));
