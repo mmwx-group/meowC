@@ -54,6 +54,7 @@ Map<String, dynamic> _config(String mode, String nodeType) => {
   'dns': {'enhanced-mode': mode},
   'proxies': [
     {'name': '香港 01', 'type': nodeType, 'tls': true, 'flow': 'xtls-rprx-vision'},
+    {'name': 'snell 01', 'type': 'snell', 'version': 6},
   ],
 };
 
@@ -98,6 +99,9 @@ void main() {
       expect(container.read(declaredDnsModeProvider), 'fake-ip');
       final metas = container.read(proxyMetaProvider);
       expect(metas['香港 01']?.securitySubtitle, 'tls · vision');
+      // snell 的版本跟在协议后面（节点卡片左下角显示「snell · 6」），别的协议不加
+      expect(metas['snell 01']?.versionSuffix, ' · 6');
+      expect(metas['香港 01']?.versionSuffix, '');
 
       setProfiles([profile('p1').copyWith(selectedMap: {'节点选择': '香港 01'}), profile('p2')]);
       await _settle();

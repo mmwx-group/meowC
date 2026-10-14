@@ -239,13 +239,12 @@ class _NodeCell extends ConsumerWidget {
     final nested = isGroupType(proxy.type);
     final builtin = builtinSubtitle(proxy.name);
     final style = protoStyle(proxy.type, mm);
+    final proto = '${style.label}${meta?.versionSuffix ?? ''}';
     final subtitle =
         builtin ??
         (nested
             ? '${S.nestedGroup} · ${groupBadge(proxy.type, mm).label}'
-            : (meta?.securitySubtitle.isNotEmpty == true
-                  ? '${style.label} · ${meta!.securitySubtitle}'
-                  : style.label));
+            : (meta?.securitySubtitle.isNotEmpty == true ? '$proto · ${meta!.securitySubtitle}' : proto));
     final delay = ref.watch(
       getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl),
     );

@@ -88,10 +88,21 @@ final currentRawConfigProvider = Provider<Map<String, dynamic>>((ref) {
 
 /// 节点元信息（来自订阅原始配置的 proxies 列表）。
 class ProxyMeta {
-  const ProxyMeta({required this.type, this.tls = false, this.reality = false, this.flow = '', this.network = '', this.encryption = ''});
+  const ProxyMeta({
+    required this.type,
+    this.tls = false,
+    this.reality = false,
+    this.flow = '',
+    this.network = '',
+    this.encryption = '',
+    this.version = '',
+  });
   final String type;
   final bool tls, reality;
-  final String flow, network, encryption;
+  final String flow, network, encryption, version;
+
+  /// 协议短标后面跟的版本：snell 的版本不协商、须与服务端一致，标出来（「snell · 6」）；其它协议为空。
+  String get versionSuffix => type == 'snell' && version.isNotEmpty ? ' · $version' : '';
 
   /// reality|tls → vision → enc → 非 tcp 的 network，`" · "` 连接
   String get securitySubtitle {
@@ -125,6 +136,7 @@ final proxyMetaProvider = Provider<Map<String, ProxyMeta>>((ref) {
       flow: item['flow']?.toString() ?? '',
       network: item['network']?.toString() ?? '',
       encryption: item['type'] == 'shadowsocks' ? '' : (item['encryption']?.toString() ?? ''),
+      version: item['version']?.toString() ?? '',
     );
   }
   return out;
