@@ -380,17 +380,33 @@ func (s *Stream) readLane(l *lane, p []byte) (int, error) {
 	for !s.eof {
 		switch {
 		case s.dataLeft > 0:
-			if len(p) > s.dataLeft {
-				p = p[:s.dataLeft]
-			}
-			n, err := l.conn.Read(p)
-			if n > 0 {
-				s.dataLeft -= n
-				s.down.feed(p[:n])
-				return n, nil
-			}
-			if err != nil {
-				return 0, err
+			total := 0
+			for {
+				q := p[total:]
+				if len(q) > s.dataLeft {
+					q = q[:s.dataLeft]
+				}
+				n, err := l.conn.Read(q)
+				if n > 0 {
+					s.dataLeft -= n
+					s.down.feed(q[:n])
+					total += n
+				}
+				if err != nil || n == 0 {
+					if total > 0 {
+						return total, nil
+					}
+					if err != nil {
+						return 0, err
+					}
+					break
+				}
+				// A frame is through and p has room: when the next frame is DATA and
+				// its header is already decrypted, go on in this Read instead of
+				// handing back at most one frame per call.
+				if s.dataLeft > 0 || total == len(p) || !s.nextBufferedData(l) {
+					return total, nil
+				}
 			}
 		case s.rawLeft > 0:
 			if int64(len(p)) > s.rawLeft {
@@ -411,6 +427,24 @@ func (s *Stream) readLane(l *lane, p []byte) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+// nextBufferedData starts the next frame when it is DATA and its header sits in
+// the decrypted input of the outer TLS connection; anything else is left for
+// readFrame.
+func (s *Stream) nextBufferedData(l *lane) bool {
+	if l.in == nil || s.headN != 0 || l.in.Len() < frameHead {
+		return false
+	}
+	var h [frameHead]byte
+	if _, err := l.in.ReadAt(h[:], l.in.Size()-int64(l.in.Len())); err != nil || h[0] != frData {
+		return false
+	}
+	if _, err := l.in.Seek(frameHead, io.SeekCurrent); err != nil {
+		return false
+	}
+	s.dataLeft = int(h[1])<<8 | int(h[2])
+	return true
 }
 
 // readFrame reads the next frame up to where its data starts: the payload of

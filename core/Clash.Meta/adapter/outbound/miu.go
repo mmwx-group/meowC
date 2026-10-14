@@ -1,6 +1,7 @@
 package outbound
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	N "github.com/metacubex/mihomo/common/net"
+	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/component/proxydialer"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/transport/miu"
@@ -72,7 +74,31 @@ func (t *Miu) ListenPacketContext(ctx context.Context, metadata *C.Metadata) (_ 
 
 	// create uot on tcp
 	destination := M.SocksaddrFromNet(metadata.UDPAddr())
-	return NewPacketConn(N.NewThreadSafePacketConn(uot.NewLazyConn(c, uot.Request{Destination: destination})), t), nil
+	pc := N.NewThreadSafePacketConn(uot.NewLazyConn(&miuBufferedConn{Conn: c, r: bufio.NewReaderSize(c, 32<<10)}, uot.Request{Destination: destination}))
+	return newMiuPacketConn(pc, t), nil
+}
+
+// miuBufferedConn gives the UoT reader a buffer: it reads every packet field by
+// field (address family, address, port, length, payload), and each of those was
+// a trip through the whole read path of the stream.
+type miuBufferedConn struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (c *miuBufferedConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+
+// newMiuPacketConn is NewPacketConn without the deadline wrapper. The tunnel sets
+// a read deadline before every packet, and the wrapper then runs each read in a
+// new goroutine (the stack growth of those alone was a fifth of the CPU of a UDP
+// download). A Miu stream handles read deadlines itself. A deadline firing in the
+// middle of a packet would leave the UoT stream out of step, but the tunnel only
+// sets the session timeout, which runs out while waiting for the next packet,
+// and the session is over then anyway.
+func newMiuPacketConn(pc net.PacketConn, a ProxyAdapter) C.PacketConn {
+	cpc := &packetConn{N.NewEnhancePacketConn(pc), nil, nil, a.Name(), utils.NewUUIDV4().String(), a.Addr(), a.ResolveUDP}
+	cpc.AppendToChains(a)
+	return cpc
 }
 
 // SupportUOT implements C.ProxyAdapter

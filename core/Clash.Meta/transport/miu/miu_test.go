@@ -1744,6 +1744,27 @@ func TestRawSegments(t *testing.T) {
 			if got := read(len(flight), 7); !bytes.Equal(got, flight) {
 				t.Fatal("ServerHello came back changed")
 			}
+			// many small DATA frames arriving together come back together, not one
+			// frame per Read; their payload is whole TLS records, as recScan expects
+			var frames, many []byte
+			for i := 0; i < 12; i++ {
+				r := rec(0x17, bytes.Repeat([]byte{byte('a' + i)}, 995))
+				many = append(many, r...)
+				frames = appendFrame(frames, frData, r)
+			}
+			send(frames)
+			_ = stream.SetReadDeadline(time.Now().Add(10 * time.Second))
+			first := make([]byte, 64<<10)
+			k, err := stream.Read(first)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if k <= 1000 {
+				t.Fatalf("one Read gave %d bytes: DATA frames already decrypted were not merged", k)
+			}
+			if got := append(first[:k:k], read(len(many)-k, 64<<10)...); !bytes.Equal(got, many) {
+				t.Fatal("merged DATA came back changed")
+			}
 			finished := append(rec(0x14, []byte{1}), rec(0x17, make([]byte, 40))...)
 			if _, err = stream.Write(finished); err != nil {
 				t.Fatal(err)
