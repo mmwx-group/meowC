@@ -82,6 +82,37 @@ class LoginSuccess extends LoginResult {
   }
 }
 
+/// 个人资料里账户卡要的两项（`GET /user/profile`，字段同登录应答）：显示名与头像地址。
+class AccountProfile {
+  const AccountProfile({required this.nickname, required this.avatarUrl});
+  final String nickname, avatarUrl;
+
+  /// 没有 `username` 的（主控的出错应答 `{"error": …}`）返回 null：调用方不动现有的昵称和头像，
+  /// 别把一次会话过期当成「用户把头像删了」。
+  static AccountProfile? tryParse(Map<String, dynamic> json) {
+    final username = json['username']?.toString() ?? '';
+    if (username.isEmpty) return null;
+    final nickname = json['nickname']?.toString() ?? '';
+    return AccountProfile(
+      nickname: nickname.isNotEmpty ? nickname : username,
+      avatarUrl: json['avatar_url']?.toString() ?? '',
+    );
+  }
+}
+
+/// 头像地址补成绝对的。在主控上传的头像给的是站内路径（`/api/user/avatar/<key>?v=<时间戳>`，不带鉴权就能取），
+/// 要接在主控地址后面才取得到——原样交给 Image.network 加载不出来，一直是品牌头像。
+/// 用户自己填的外链原样返回；空 = 没设头像。[base] 是主控地址（`https://host[:port]`）。
+String absoluteAvatarUrl(String raw, String base) {
+  final s = raw.trim();
+  if (s.isEmpty) return '';
+  final uri = Uri.tryParse(s);
+  if (uri == null || uri.hasScheme || !s.startsWith('/')) return s;
+  final b = Uri.tryParse(base.trim());
+  if (b == null || !b.hasScheme || b.host.isEmpty) return s;
+  return b.resolveUri(uri).toString();
+}
+
 class LoginNeeds2FA extends LoginResult {
   const LoginNeeds2FA(this.twoFactorToken);
   final String twoFactorToken;

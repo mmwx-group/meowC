@@ -302,6 +302,14 @@ class PanelClient {
     return RemoteSubscription.parseList(r.containsKey('data') && r['data'] is List && r.length == 1 ? r['data'] : r);
   }
 
+  /// 个人资料（昵称 / 头像）。主控回的是出错应答时抛 [PanelException]。
+  Future<AccountProfile> profile(String token) async {
+    final r = await rpc('/user/profile', method: 'GET', token: token);
+    final p = AccountProfile.tryParse(r);
+    if (p == null) throw PanelException(_error(r) ?? '未拿到个人资料');
+    return p;
+  }
+
   /// 主控功能开关（回程金牌 / 解锁检测）。
   Future<PanelFeatures> features(String token) async {
     return PanelFeatures.parse(await rpc('/user/features', method: 'GET', token: token));

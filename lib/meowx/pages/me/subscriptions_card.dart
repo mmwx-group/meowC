@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/pages/pages.dart';
@@ -77,6 +79,7 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     try {
       switch (action) {
         case _ProfileAction.refresh:
+          unawaited(ref.read(accountActionsProvider).refreshProfile());   // 昵称 / 头像跟着用户点的刷新走，不定时拉
           await c.updateProfile(p);
         case _ProfileAction.view:
           final content = await (await p.getFile()).readAsString();
@@ -189,7 +192,13 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
                   IconButton(
                     tooltip: '刷新我的订阅',
                     visualDensity: VisualDensity.compact,
-                    onPressed: subs.isLoading ? null : () => ref.read(accountActionsProvider).refreshSubscriptions(),
+                    onPressed: subs.isLoading
+                        ? null
+                        : () {
+                            final actions = ref.read(accountActionsProvider);
+                            unawaited(actions.refreshProfile());
+                            actions.refreshSubscriptions();
+                          },
                     icon: subs.isLoading
                         ? SizedBox(
                             width: 14,

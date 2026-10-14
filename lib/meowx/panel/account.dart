@@ -150,6 +150,23 @@ class AccountActions {
     _extrasAt = null;
   }
 
+  /// 向主控重取昵称与头像。这两项以前只在登录应答里写一次：用户之后在主控换了头像 / 改了昵称，要重新登录才跟上。
+  /// **不定时拉**（用户明确要求），只由用户点的刷新带着调（订阅卡的「刷新」「刷新我的订阅」）。
+  /// 没拿到答复、主控回的是出错应答、等答复期间退出或换了账号：什么都不动。
+  Future<void> refreshProfile() async {
+    final token = _account.token;
+    if (token.isEmpty) return;
+    try {
+      final p = await _client().profile(token);
+      final now = _account;
+      if (now.token != token) return;
+      if (p.nickname == now.nickname && p.avatarUrl == now.avatarUrl) return;
+      _update((a) => a.copyWith(nickname: p.nickname, avatarUrl: p.avatarUrl));
+    } catch (e) {
+      commonPrint.log('refreshProfile failed: $e');
+    }
+  }
+
   Future<void> refreshSubscriptions() async {
     final token = _account.token;
     if (token.isEmpty) return;

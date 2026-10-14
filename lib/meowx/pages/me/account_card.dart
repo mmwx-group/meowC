@@ -27,6 +27,8 @@ class AccountCard extends ConsumerWidget {
     final mm = context.mm;
     final account = ref.watch(meowSettingProvider.select((s) => s.account));
     final loggedIn = account.token.isNotEmpty;
+    // 主控上传的头像存的是站内路径，接上主控地址才加载得出来
+    final avatarUrl = absoluteAvatarUrl(account.avatarUrl, account.host);
     final avatarSize = compact ? 52.0 : 60.0;
     final fallback = BrandHead(size: avatarSize);
     return Container(
@@ -37,13 +39,13 @@ class AccountCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              if (account.avatarUrl.isEmpty)
+              if (avatarUrl.isEmpty)
                 fallback
               else
                 ClipRRect(
                   borderRadius: BorderRadius.circular(avatarSize * 0.31),
                   child: Image.network(
-                    account.avatarUrl,
+                    avatarUrl,
                     width: avatarSize,
                     height: avatarSize,
                     fit: BoxFit.cover,

@@ -39,6 +39,29 @@ void main() {
     expect(LoginSuccess.tryParse({'requires_2fa': true}), isNull);
   });
 
+  test('个人资料解析：昵称优先、没有昵称用用户名；出错应答不是资料', () {
+    final p = AccountProfile.tryParse({'username': 'alice', 'nickname': '\u591c\u732b', 'avatar_url': '/api/user/avatar/ab?v=2', 'role': 'user'});
+    expect(p?.nickname, '\u591c\u732b');
+    expect(p?.avatarUrl, '/api/user/avatar/ab?v=2');
+    final noNick = AccountProfile.tryParse({'username': 'alice', 'nickname': '', 'avatar_url': ''});
+    expect(noNick?.nickname, 'alice');
+    expect(noNick?.avatarUrl, '');   // 用户在主控上把头像删了：客户端跟着回到品牌头像
+    for (final body in <Map<String, dynamic>>[{'error': 'unauthorized'}, {'error': 'path not allowed'}, {}, {'username': ''}]) {
+      expect(AccountProfile.tryParse(body), isNull, reason: '$body');
+    }
+  });
+
+  test('头像地址：主控上传的站内路径接到主控地址后面，外链原样，空就是空', () {
+    const base = 'https://panel.example.com';
+    expect(absoluteAvatarUrl('/api/user/avatar/0a1b?v=1760000000', base), 'https://panel.example.com/api/user/avatar/0a1b?v=1760000000');
+    expect(absoluteAvatarUrl('/api/user/avatar/ff', 'https://panel.example.com:8443'), 'https://panel.example.com:8443/api/user/avatar/ff');
+    expect(absoluteAvatarUrl('https://img.example.org/a.webp', base), 'https://img.example.org/a.webp');
+    expect(absoluteAvatarUrl('', base), '');
+    expect(absoluteAvatarUrl('  ', base), '');
+    // 不知道主控地址时补不了：原样留着（加载不出来，落到品牌头像）
+    expect(absoluteAvatarUrl('/api/user/avatar/ff', ''), '/api/user/avatar/ff');
+  });
+
   test('回程奖牌解析', () {
     final m = NodeMedal.parse({'success': true, 'nodes': [
       {'name': 'HK-1', 'medal': 'gold', 'routes': [{'carrier': 'CT', 'region': '广东', 'route_type': 'CN2 GIA', 'gold': true}]},
