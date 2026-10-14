@@ -45,6 +45,11 @@ android {
                 storePassword = mStorePassword
                 keyAlias = mKeyAlias
                 keyPassword = mKeyPassword
+                // MeowX：v1（JAR）签名也带上。minSdk >= 24 时 AGP 默认只签 v2，包里没有 META-INF/*.SF、*.RSA；
+                // OPPO / realme / 一加（ColorOS）的安装器自己先找这些文件，找不到就报
+                // 「解析失败：安装包没有签名文件」，根本不交给系统去验 v2。
+                enableV1Signing = true
+                enableV2Signing = true
             }
         }
     }

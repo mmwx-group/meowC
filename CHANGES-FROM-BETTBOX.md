@@ -95,3 +95,6 @@
 - 复用：一条连接同一时间只跑一个请求，双方各发一个空 record 结束自己这一半之后才给下一个请求用；客户端先关的，由还挂着的读或后台排空等到服务端的空 record 再回池（期间最多丢弃 0x80001 字节）。与参考实现有两处不同：① 只有真的收到服务端的空 record 才复用——参考实现把「服务端直接关掉 TCP」也算正常结束，连接会被放回池里、下一个请求必然失败，而我们的 Xray 服务端正是每个请求结束就关连接（所以对它开 `reuse` 不出错、也复用不上，v4 / v5 同样）；② 池内空闲上限沿用 v4 池的 15 秒（参考实现 180 秒，靠网卡变化时清池兜底，这里没有这个信号）。
 - `core/Clash.Meta/docs/config.yaml`：Snell 示例补 v6（`mode`；v6 的 `obfs-opts` 被忽略）。
 - 测试：`transport/snell/v6_golden_test.go`（20 个 PSK 的整形参数、三种模式按固定脚本写出的完整字节流，逐字节对参考实现的输出）；`v6_test.go`（进程内假服务端：三种模式的往返、record 边界、半关闭 / EOF、复用、UDP）；`v6_outbound_test.go`（经出站：配置校验、复用只拨一次；设 `SNELL_LIVE=<服务端地址>` 时对真实服务端跑 GET / 8MiB 下载 / 上传 / 复用 / UDP，带 v4、v5 回归，其余环境变量见文件内注释）。
+
+## 2026-10-14 · Android 安装包同时带 v1 签名
+- `android/app/build.gradle.kts`：发布签名配置显式 `enableV1Signing = true`、`enableV2Signing = true`。`minSdk = 26` 时 AGP 默认只签 v2，包里没有 `META-INF/*.SF`、`*.RSA`；OPPO / realme / 一加（ColorOS）的安装器自己先找这些文件，找不到就报「解析失败：安装包没有签名文件」（Parsing failed: APK contains no signature files），不交给系统去验 v2。签名证书不变，可以覆盖安装旧版本。从导入 Bettbox 起每个版本都是这样，0.2.6 及以前的包在这类机器上装不了。
