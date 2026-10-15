@@ -306,8 +306,7 @@ void main() {
     expect(find.text('38 ms'), findsOneWidget);
     expect(find.text('上传 · 会话 86.2 MB'), findsOneWidget);
     expect(find.text('下载 · 会话 1.42 GB'), findsOneWidget);
-    expect(find.text('128.4 / 500 GB'), findsOneWidget);
-    expect(find.text('到期 2026-12-31'), findsOneWidget);
+    expect(find.text('128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
     expect(find.text('3 小时前更新'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
     expect(find.text('41'), findsOneWidget);

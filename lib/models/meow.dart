@@ -86,14 +86,15 @@ enum HomeCard {
   };
 }
 
-/// 手机端代理页布局：列表 = 可折叠的组卡；标签 = 顶部横向组标签 + 左右滑动换组。宽屏恒为两栏，不受它影响。
+/// 手机端代理页布局：列表 = 可折叠的组卡；单组 = 顶部一个组按钮点开选组，下面只显示这一组的节点。宽屏恒为两栏，不受它影响。
+/// 单组以前叫「标签」（横向组标签 + 左右滑动换组），取值仍是 tabs，沿用存下的偏好。
 enum ProxyLayout {
   list,
   tabs;
 
   String get label => switch (this) {
     ProxyLayout.list => '列表',
-    ProxyLayout.tabs => '标签',
+    ProxyLayout.tabs => '单组',
   };
 }
 

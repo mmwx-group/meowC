@@ -12,6 +12,8 @@ import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
 import '../../config/direct_profile.dart';
 import '../../config/meow_patch.dart';
+import '../../panel/account.dart';
+import '../../panel/client.dart' show PanelException;
 import '../../state/connection.dart';
 import '../../state/exit_ip.dart';
 import '../../state/format.dart';
@@ -25,14 +27,128 @@ import '../settings/proxy_apps_page.dart';
 
 // 这个文件里的卡片都可能放在宽屏首页的 IntrinsicHeight 里（见 dashboard_page.dart），不要用 LayoutBuilder。
 
-/// 订阅卡：名称（点开切换订阅）+「已用 / 总量」等宽 + 6pt 用量条 + 到期 / 更新时间。没有当前订阅时是去「我的」导入的引导。
-class HomeSubscriptionCard extends ConsumerWidget {
+/// 订阅卡（同 iOS 首页）：第一行订阅名 + 行尾「切换订阅 ⌄」胶囊，两处点开同一份切换菜单（以前入口只是名字后面一个小上下箭头，不好点）。
+/// - 内置直连档（没在用订阅）：胶囊换成实心「选择订阅」，下面一行「未使用订阅，流量全部直连」，没有用量；
+/// - 在用订阅：用量条（有总量才画）+「已用 / 总量 · 到期」|「N 小时前更新 ↻」，后者点了直接刷新当前订阅（有地址才可点）。
+/// 菜单：本机订阅（当前那份打勾）→ 已登录时账户下还没下载的（去重见 [notDownloadedSubscriptions]，点了先下载再切）→「导入订阅…」去「我的」。
+/// 没有当前档时是去「我的」导入的引导。[dense] = 宽屏 / Windows 首页的紧凑版：同样的内容与交互，尺寸小一档。
+class HomeSubscriptionCard extends ConsumerStatefulWidget {
   const HomeSubscriptionCard({super.key, this.dense = false});
   final bool dense;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeSubscriptionCard> createState() => _HomeSubscriptionCardState();
+}
+
+/// 切换菜单的选项。
+sealed class _SubPick {
+  const _SubPick();
+}
+
+final class _PickLocal extends _SubPick {
+  const _PickLocal(this.id);
+  final String id;
+}
+
+final class _PickRemote extends _SubPick {
+  const _PickRemote(this.sub);
+  final RemoteSubscription sub;
+}
+
+final class _PickImport extends _SubPick {
+  const _PickImport();
+}
+
+class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
+  bool _refreshing = false;
+
+  /// 最近一次拉到的账户订阅：重新拉取期间（provider 是 loading、没有值）菜单照旧列它
+  List<RemoteSubscription> _lastSubs = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _lastSubs = ref.read(remoteSubsProvider).value ?? const [];
+    ref.listenManual(remoteSubsProvider, (_, next) {
+      if (next.hasValue) _lastSubs = next.value!;
+    });
+    // 首页也要知道账户下有哪些订阅（菜单列「未下载」的）：首页出现 / 登录后各问一次，这次登录拉过就不再拉（节流在 AccountActions 里）
+    ref.listenManual(meowTabProvider, (_, tab) {
+      if (tab == MeowTab.home) _fetchAccountSubs();
+    });
+    ref.listenManual(isLoggedInProvider, (_, loggedIn) {
+      if (loggedIn) _fetchAccountSubs();
+    });
+    Future.microtask(() {
+      if (mounted && ref.read(meowTabProvider) == MeowTab.home) _fetchAccountSubs();
+    });
+  }
+
+  void _fetchAccountSubs() {
+    if (ref.read(isLoggedInProvider)) unawaited(ref.read(accountActionsProvider).refreshSubscriptionsIfNeeded());
+  }
+
+  Future<void> _refresh(Profile p) async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    try {
+      await ref.read(accountActionsProvider).refreshLocalSubscription(p);
+    } catch (e) {
+      globalState.showNotifier('刷新订阅失败：${e is PanelException ? e.message : e}');
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  List<MeowMenuEntry<_SubPick>> _entries(String currentId) {
+    final profiles = withDirectProfileLast(ref.read(profilesProvider));
+    final loggedIn = ref.read(isLoggedInProvider);
+    final loading = ref.read(remoteSubsProvider).isLoading;
+    final pending = loggedIn
+        ? notDownloadedSubscriptions(
+            remote: _lastSubs,
+            host: ref.read(meowSettingProvider).account.host,
+            localUrls: profiles.map((p) => p.url),
+          )
+        : const <RemoteSubscription>[];
+    return [
+      for (final p in profiles) MeowMenuItem(_PickLocal(p.id), p.label ?? p.id, checked: p.id == currentId),
+      if (loggedIn && (pending.isNotEmpty || loading)) ...[
+        const MeowMenuDivider(),
+        const MeowMenuCaption('账户订阅 · 未下载'),
+        if (loading && pending.isEmpty) const MeowMenuCaption('加载中…'),
+        // 菜单项没有图标位：下载箭头写在名字前面
+        for (final s in pending) MeowMenuItem(_PickRemote(s), '↓ ${s.name}'),
+      ],
+      const MeowMenuDivider(),
+      const MeowMenuItem(_PickImport(), '导入订阅…'),
+    ];
+  }
+
+  void _onPick(_SubPick pick) {
+    switch (pick) {
+      case _PickLocal(:final id):
+        // 改 currentProfileId 即切换（ClashManager 监听后自动重载）
+        if (ref.read(profilesProvider).getProfile(id) != null && ref.read(currentProfileIdProvider) != id) {
+          ref.read(currentProfileIdProvider.notifier).value = id;
+        }
+      case _PickRemote(:final sub):
+        if (ref.read(importingSubProvider) != null) return;
+        // 同「我的」页：下载并切过去（连着就按新配置重载）
+        unawaited(
+          ref.read(accountActionsProvider).importSubscription(sub).catchError((Object e) {
+            globalState.showNotifier('下载订阅失败：${e is PanelException ? e.message : e}');
+          }),
+        );
+      case _PickImport():
+        goTab(ref, MeowTab.me);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final mm = context.mm;
+    final dense = widget.dense;
     final profile = ref.watch(currentProfileProvider);
     if (profile == null) {
       return GlassCard(
@@ -69,119 +185,170 @@ class HomeSubscriptionCard extends ConsumerWidget {
       );
     }
 
-    final info = profile.subscriptionInfo;
-    final used = (info?.upload ?? 0) + (info?.download ?? 0);
-    final total = info?.total ?? 0;
-    final expire = info?.expire ?? 0;
-    final frac = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
-    final hasUsage = total > 0 || used > 0;
-    final profiles = withDirectProfileLast(ref.watch(profilesProvider));
-    final String left;
-    if (expire > 0) {
-      left = isPermanentExpire(expire) ? '长期有效' : '到期 ${fmtDate(DateTime.fromMillisecondsSinceEpoch(expire * 1000))}';
-    } else if (isDirectProfile(profile.id)) {
-      left = '内置配置';
-    } else {
-      // 订阅没给 subscription-userinfo：左边写明，免得只剩右边一个更新时间、卡片中间空一块
-      left = profile.url.isEmpty ? '本地配置' : '订阅未提供用量信息';
-    }
-    final updated = profile.url.isNotEmpty && profile.lastUpdateDate != null ? '${fmtRelative(profile.lastUpdateDate!)}更新' : '';
+    final direct = isDirectProfile(profile.id);
+    final importing = ref.watch(importingSubProvider) != null;
     final foot = TextStyle(fontSize: 11, color: mm.t2);
+
+    Widget menu({required bool alignEnd, required Widget Function(VoidCallback open) trigger}) => MeowMenuButton<_SubPick>(
+      width: 240,
+      alignEnd: alignEnd,
+      onSelected: _onPick,
+      entries: () => _entries(profile.id),
+      builder: (_, open) => trigger(open),
+    );
+
+    final name = menu(
+      alignEnd: false,
+      trigger: (open) => InkWell(
+        onTap: open,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Text(
+            profile.label ?? profile.id,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
+          ),
+        ),
+      ),
+    );
+
+    // 直连档 = 实心「选择订阅」（墨色底配页面底色的字，同实心主按钮）；在用订阅 = 淡粉底玫红字「切换订阅」
+    final fg = direct ? mm.bg : mm.accent;
+    final chip = menu(
+      alignEnd: true,
+      trigger: (open) => Material(
+        color: direct ? mm.t1 : mm.soft,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: open,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: dense ? 28 : 30),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: dense ? 10 : 12, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    direct ? '选择订阅' : '切换订阅',
+                    maxLines: 1,
+                    style: TextStyle(fontSize: dense ? 12 : 13, fontWeight: FontWeight.w600, color: fg),
+                  ),
+                  const SizedBox(width: 3),
+                  importing
+                      ? SizedBox.square(
+                          dimension: 10,
+                          child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
+                        )
+                      : MeowIcon.path('M6 9l6 6 6-6', size: dense ? 11 : 12, stroke: 2.8, color: fg),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final children = <Widget>[
+      Row(
+        children: [
+          Expanded(child: Align(alignment: Alignment.centerLeft, child: name)),
+          const SizedBox(width: 8),
+          chip,
+        ],
+      ),
+    ];
+
+    if (direct) {
+      children.addAll([
+        SizedBox(height: dense ? 4 : 6),
+        Text('未使用订阅，流量全部直连', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2)),
+      ]);
+    } else {
+      final info = profile.subscriptionInfo;
+      final used = (info?.upload ?? 0) + (info?.download ?? 0);
+      final total = info?.total ?? 0;
+      final expire = info?.expire ?? 0;
+      final frac = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
+      final hasUsage = total > 0 || used > 0;
+      final String left;
+      if (!hasUsage && expire <= 0) {
+        // 订阅没给 subscription-userinfo：写明，免得只剩右边一个更新时间
+        left = profile.url.isEmpty ? '本地配置' : '订阅未提供用量信息';
+      } else {
+        final expiry = expire <= 0
+            ? '未知到期'
+            : isPermanentExpire(expire)
+            ? '永久'
+            : '到期 ${fmtDate(DateTime.fromMillisecondsSinceEpoch(expire * 1000))}';
+        left = hasUsage ? '${_usageText(used, total)} · $expiry' : expiry;
+      }
+      final at = profile.lastUpdateDate;
+      final updatedText = Text(at == null ? '未更新' : '${fmtRelative(at)}更新', maxLines: 1, style: foot);
+      final Widget? updated = profile.url.isEmpty
+          ? (at == null ? null : updatedText)
+          : Tooltip(
+              message: '刷新订阅',
+              child: InkWell(
+                onTap: _refreshing ? null : () => _refresh(profile),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      updatedText,
+                      const SizedBox(width: 4),
+                      _refreshing
+                          ? SizedBox.square(
+                              dimension: 10,
+                              child: CircularProgressIndicator(strokeWidth: 1.5, color: mm.t2),
+                            )
+                          : MeowIcon(MeowGlyph.refresh, size: 11, stroke: 2.4, color: mm.t2),
+                    ],
+                  ),
+                ),
+              ),
+            );
+      if (total > 0) {
+        children.addAll([
+          SizedBox(height: dense ? 6 : 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: frac,
+              minHeight: 6,
+              backgroundColor: mm.card2,
+              color: frac > 0.9 ? mm.slow : mm.pink,
+            ),
+          ),
+        ]);
+      }
+      children.addAll([
+        SizedBox(height: dense ? 4 : 6),
+        // 一行放不下（窄屏 / 大字号）时更新时间折到下一行
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 0,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Text(left, maxLines: 2, overflow: TextOverflow.ellipsis, style: foot),
+            ),
+            ?updated,
+          ],
+        ),
+      ]);
+    }
 
     return GlassCard(
       radius: dense ? 22 : 24,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: dense ? 12 : 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // 名称最多占六成、用量最多占四成（放不下就缩小）：TB 级套餐 + 窄屏 + 大字号时不把订阅名挤没 / 整行越界
-              Flexible(
-                flex: 3,
-                child: MeowMenuButton<String>(
-                  width: 240,
-                  // 改 currentProfileId 即切换（ClashManager 监听后自动重载）。
-                  // 之前调的 setProfileAndAutoApply 只是「更新并重载当前档」，选了别的订阅不会切过去。
-                  onSelected: (id) {
-                    if (profiles.getProfile(id) != null && ref.read(currentProfileIdProvider) != id) {
-                      ref.read(currentProfileIdProvider.notifier).value = id;
-                    }
-                  },
-                  entries: () => [
-                    for (final p in profiles) MeowMenuItem(p.id, p.label ?? p.id, checked: p.id == profile.id),
-                  ],
-                  builder: (_, open) => Tooltip(
-                    message: '切换订阅',
-                    child: InkWell(
-                      onTap: open,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                profile.label ?? profile.id,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            MeowIcon(MeowGlyph.updown, size: dense ? 12 : 13, color: mm.t2),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (hasUsage) ...[
-                const SizedBox(width: 8),
-                Flexible(
-                  flex: 2,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerRight,
-                    child: Text(
-                      _usageText(used, total),
-                      maxLines: 1,
-                      style: MeowFont.mono(size: 12, color: mm.t2),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (total > 0) ...[
-            SizedBox(height: dense ? 7 : 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: LinearProgressIndicator(
-                value: frac,
-                minHeight: 6,
-                backgroundColor: mm.card2,
-                color: frac > 0.9 ? mm.slow : mm.pink,
-              ),
-            ),
-          ],
-          if (left.isNotEmpty || updated.isNotEmpty) ...[
-            SizedBox(height: dense ? 7 : 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(child: Text(left, maxLines: 1, overflow: TextOverflow.ellipsis, style: foot)),
-                const SizedBox(width: 8),
-                Flexible(child: Text(updated, maxLines: 1, overflow: TextOverflow.ellipsis, style: foot)),
-              ],
-            ),
-          ],
-        ],
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
     );
   }
 }

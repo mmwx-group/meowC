@@ -127,8 +127,14 @@ List<Override> _overrides({
     if (live) ...[
       _liveProfile.overrideWith((ref) => profile),
       currentProfileProvider.overrideWith((ref) => ref.watch(_liveProfile)),
-    ] else
+      // 真实实现经 appController 写进订阅；这里直接换当前订阅对象，效果相同
+      rememberGroupProvider.overrideWith(
+        (ref) => (name) => ref.read(_liveProfile.notifier).update((p) => p?.copyWith(currentGroupName: name)),
+      ),
+    ] else ...[
       currentProfileProvider.overrideWithValue(profile),
+      rememberGroupProvider.overrideWithValue((_) {}),
+    ],
     currentGroupsStateProvider.overrideWithValue(GroupsState(value: gs)),
     groupsProvider.overrideWith(() => _Groups(gs)),
     currentPageLabelProvider.overrideWith(_PageLabel.new),
@@ -173,7 +179,7 @@ Future<void> _pump(
     ),
   );
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 300));   // 组标签滚到当前组的动画
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 /// 网格的列数是布局阶段按网格自己的宽度算的，从渲染对象上取。
@@ -183,7 +189,7 @@ int _gridColumns(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('手机 · 标签布局：窄屏 1.4 倍字号不溢出；标题 / 组标签 / 摘要 / 节点格', (tester) async {
+  testWidgets('手机 · 单组布局：窄屏 1.4 倍字号不溢出；标题 / 组按钮 / 摘要 / 节点格', (tester) async {
     await _pump(
       tester,
       size: const Size(320, 1600),
@@ -193,10 +199,14 @@ void main() {
 
     expect(find.text('节点'), findsOneWidget);
     expect(find.text('4 个代理组 · 13 个节点'), findsOneWidget);   // 12 个节点 + DIRECT，嵌套的组不算
-    expect(find.byType(GroupChip), findsNWidgets(4));
+    // 不再有横向组标签 / 左右滑动换组，只有一个组按钮
+    expect(find.byType(PageView), findsNothing);
+    expect(find.byType(GroupPickerButton), findsOneWidget);
+    expect(find.text('12 个成员 · 共 4 个组'), findsOneWidget);
+    expect(find.text('切换'), findsOneWidget);
     // 停在订阅记下的组（自动选择）：摘要是 url-test 组的，带「自动选择」开关
     expect(find.byType(GroupSummary), findsOneWidget);
-    expect(find.text('url-test'), findsOneWidget);
+    expect(find.text('url-test'), findsNWidgets(2));   // 组按钮 + 摘要
     expect(find.text('12 个成员 · 自动'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     expect(find.text('按延迟自动切换'), findsOneWidget);
@@ -225,7 +235,7 @@ void main() {
     expect(gridPad.padding, const EdgeInsets.fromLTRB(16, 12, 16, 12 + 96));
   });
 
-  testWidgets('手机 · 标签布局：已固定的 url-test 组 / 大卡片单列 / 深色', (tester) async {
+  testWidgets('手机 · 单组布局：已固定的 url-test 组 / 大卡片单列 / 深色', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
@@ -243,7 +253,7 @@ void main() {
     expect(_gridColumns(tester), 1);
   });
 
-  testWidgets('手机 · 标签布局：select 组没有「自动选择」开关，嵌套组 / 内置策略成员的副标题', (tester) async {
+  testWidgets('手机 · 单组布局：select 组没有「自动选择」开关，嵌套组 / 内置策略成员的副标题', (tester) async {
     await _pump(
       tester,
       size: const Size(412, 892),
@@ -252,7 +262,7 @@ void main() {
     );
 
     // 没记过停在哪个组 → 第一个组
-    expect(find.text('select'), findsOneWidget);
+    expect(find.text('select'), findsNWidgets(2));   // 组按钮 + 摘要
     expect(find.text('5 个成员'), findsOneWidget);
     expect(find.byType(Switch), findsNothing);
     expect(find.text('代理组 · url-test'), findsOneWidget);
@@ -269,7 +279,7 @@ void main() {
     );
 
     expect(find.byType(GroupCard), findsNWidgets(4));
-    expect(find.byType(GroupChip), findsNothing);
+    expect(find.byType(GroupPickerButton), findsNothing);
     expect(find.byType(NodeSliverGrid), findsNothing);
     expect(find.text('fallback'), findsOneWidget);
     expect(find.text('load-balance'), findsOneWidget);
@@ -338,7 +348,73 @@ void main() {
     expect(identical(tester.element(lower), before), isTrue);
   });
 
-  testWidgets('手机 · 标签布局：点节点（selectedMap 变）只更新网格，整页与组标签不重建', (tester) async {
+  testWidgets('手机 · 单组布局：点组按钮弹出选组面板，选组后网格换成该组并记下（窄屏 1.4 倍字号）', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 800),
+      overrides: _overrides(profile: _profile(), live: true),
+      bottomInset: 96,
+    );
+    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
+    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '自动选择');
+
+    await tester.tap(find.byType(GroupPickerButton));
+    await tester.pumpAndSettle();
+    // 手机是底部弹出面板：标题 + 每组一张组卡（带成员数），当前组高亮
+    expect(find.byType(BottomSheet), findsOneWidget);
+    expect(find.text('选择代理组'), findsOneWidget);
+    final cards = find.descendant(of: find.byType(BottomSheet), matching: find.byType(GroupCard));
+    expect(cards, findsNWidgets(4));
+    expect(
+      tester.widgetList<GroupCard>(cards).where((c) => c.selected).map((c) => c.group.name),
+      ['自动选择'],
+    );
+    expect(tester.widgetList<GroupCard>(cards).every((c) => c.showCount), isTrue);
+
+    const target = 'AI 服务（名字也很长的一个代理组）';
+    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.widgetWithText(GroupCard, target)));
+    await tester.pump();
+    // 换组当帧旧网格就撤走，只有新的一份在淡入
+    expect(find.byType(NodeSliverGrid), findsOneWidget);
+    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, target);
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('5 个成员 · 共 4 个组'), findsOneWidget);
+    expect(find.text('5 个成员 · 自动'), findsOneWidget);   // 摘要也换成了 fallback 组的
+    expect(find.text('按可用性自动切换'), findsOneWidget);
+    // 记在订阅上（重进节点页、重启后照它停）
+    expect(container.read(currentProfileProvider)?.currentGroupName, target);
+
+    // 点外面收起面板：不换组
+    await tester.tap(find.byType(GroupPickerButton));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(180, 20));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(container.read(currentProfileProvider)?.currentGroupName, target);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('手机 · 单组布局：重进节点页停在记下的组；记下的组不在了 → 第一个组', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 800),
+      overrides: _overrides(profile: _profile(current: '负载均衡')),
+      textScale: 1,
+    );
+    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '负载均衡');
+    expect(find.text('load-balance'), findsNWidgets(2));
+
+    await _pump(
+      tester,
+      size: const Size(360, 800),
+      overrides: _overrides(profile: _profile(current: '换订阅后没了的组')),
+      textScale: 1,
+    );
+    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '节点选择');
+  });
+
+  testWidgets('手机 · 单组布局：点节点（selectedMap 变）只更新网格，组按钮不重建', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
@@ -346,41 +422,16 @@ void main() {
       textScale: 1,
     );
     final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    final chips = tester.widgetList<GroupChip>(find.byType(GroupChip)).toList();
+    final button = tester.widget<GroupPickerButton>(find.byType(GroupPickerButton));
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
 
     container.read(_liveProfile.notifier).state = _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'});
     await tester.pump();
 
-    // 网格跟着变了（固定的节点画上图钉），组标签还是原来那批 widget
+    // 网格跟着变了（固定的节点画上图钉），组按钮还是原来那个 widget
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
     expect(find.text('12 个成员 · 已固定'), findsOneWidget);
-    final after = tester.widgetList<GroupChip>(find.byType(GroupChip)).toList();
-    expect(after, hasLength(chips.length));
-    for (final (i, chip) in chips.indexed) {
-      expect(identical(after[i], chip), isTrue, reason: '第 $i 个组标签被重建了');
-    }
-  });
-
-  testWidgets('手机 · 标签布局：换组（currentGroupName 变）只重建组标签，当前页的网格不动', (tester) async {
-    await _pump(
-      tester,
-      size: const Size(360, 1600),
-      overrides: _overrides(profile: _profile(current: null), live: true),
-      textScale: 1,
-    );
-    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    final grid = tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid));
-    final chip = tester.widget<GroupChip>(find.byType(GroupChip).first);
-    expect(grid.group.name, '节点选择');
-
-    // 没记过停在哪个组时显示的就是第一个组；现在把它记下来——页码不变，只有 currentGroupName 变了
-    container.read(_liveProfile.notifier).state = _profile(current: '节点选择');
-    await tester.pump();
-    await tester.pump();
-
-    expect(identical(tester.widget<GroupChip>(find.byType(GroupChip).first), chip), isFalse);
-    expect(identical(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)), grid), isTrue);
+    expect(identical(tester.widget<GroupPickerButton>(find.byType(GroupPickerButton)), button), isTrue);
   });
 
   testWidgets('节点网格的列数在布局阶段跟着宽度走：窗口变宽 / 只变高都不重建网格', (tester) async {
@@ -419,7 +470,7 @@ void main() {
 
       expect(find.text('全部测速'), findsOneWidget);
       expect(find.byType(GroupCard), findsNWidgets(4));
-      expect(find.byType(GroupChip), findsNothing);
+      expect(find.byType(GroupPickerButton), findsNothing);
       expect(find.byType(GroupSummary), findsOneWidget);
       expect(find.text('5 个成员'), findsOneWidget);
       expect(find.byType(Switch), findsNothing);
@@ -441,9 +492,35 @@ void main() {
       overrides: _overrides(profile: _profile(), wide: true),
     );
 
-    expect(find.byType(GroupChip), findsNWidgets(4));
+    expect(find.byType(GroupPickerButton), findsOneWidget);
     expect(find.text('全部测速'), findsNothing);
     expect(_gridColumns(tester), 3);
+  });
+
+  testWidgets('有侧栏的单列（平板竖屏 / Windows 窄窗口）：选组面板从组按钮下面弹出', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(600, 900),
+      overrides: _overrides(profile: _profile(), wide: true, live: true),
+    );
+    final buttonRect = tester.getRect(find.byType(GroupPickerButton));
+
+    await tester.tap(find.byType(GroupPickerButton));
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('选择代理组'), findsNothing);
+    final popover = find.ancestor(of: find.byType(ListView).last, matching: find.byType(Material)).first;
+    final rect = tester.getRect(popover);
+    expect(rect.top, greaterThan(buttonRect.bottom));
+    expect(rect.width, closeTo(440, 0.5));   // 跟按钮宽，最宽 440，居中在按钮下面
+    expect(rect.center.dx, closeTo(buttonRect.center.dx, 0.5));
+    expect(find.byType(GroupCard), findsNWidgets(4));
+
+    await tester.tap(find.widgetWithText(GroupCard, '负载均衡'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GroupCard), findsNothing);
+    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '负载均衡');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('空态：没有配置 → 点按去「我的」；有配置但没有代理组只给说明', (tester) async {

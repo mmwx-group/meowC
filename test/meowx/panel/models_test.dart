@@ -78,6 +78,42 @@ void main() {
     expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://airport.example.org/sub'], usingSubscription: false), a);
   });
 
+  test('账户订阅去重：短链按路径认（不比主机名），filename 旧式按主控主机 + 参数认', () {
+    // 与 iOS SubAccountStoreTests.notDownloadedDedup 同一组用例
+    final remote = RemoteSubscription.parseList([
+      {'name': '主力', 'filename': 'a.yaml', 'subscription_path': '/x/aaa'},
+      {'name': '备用', 'filename': 'b.yaml', 'subscription_path': 'x/bbb?t=clash'},
+      {'name': '旧式', 'filename': 'c.yaml'},
+      {'name': '没下', 'filename': 'd.yaml', 'subscription_path': '/x/ddd'},
+    ]);
+    const host = 'https://panel.example.com';
+    const locals = [
+      'https://sub.example.net/x/aaa?t=meowx', // 订阅域名 + 别的参数：同一份
+      'https://panel.example.com/x/bbb/', // 结尾斜杠：同一份
+      'https://panel.example.com/api/clash/subscribe?token=t&filename=c.yaml&t=clash', // filename 旧式
+      '', // 内置直连档
+      'https://airport.example.org/sub',
+    ];
+    List<String> names(List<RemoteSubscription> l) => [for (final s in l) s.name];
+    expect(names(notDownloadedSubscriptions(remote: remote, host: host, localUrls: locals)), ['没下']);
+    // 别的主控上同名 filename 不算
+    expect(
+      names(notDownloadedSubscriptions(remote: remote, host: host, localUrls: const ['https://other.example.com/api/clash/subscribe?filename=c.yaml'])),
+      ['主力', '备用', '旧式', '没下'],
+    );
+    // 不知道主控地址：filename 那条认不出，短链照认
+    expect(names(notDownloadedSubscriptions(remote: remote, host: '', localUrls: locals)), ['旧式', '没下']);
+    // 主机名不分大小写；本机只有根路径的地址不会把短链误认成已下载
+    expect(
+      names(notDownloadedSubscriptions(
+        remote: remote,
+        host: host,
+        localUrls: const ['https://Panel.Example.com/api/clash/subscribe?filename=c.yaml', 'https://panel.example.com/'],
+      )),
+      ['主力', '备用', '没下'],
+    );
+  });
+
   test('回程奖牌解析', () {
     final m = NodeMedal.parse({'success': true, 'nodes': [
       {'name': 'HK-1', 'medal': 'gold', 'routes': [{'carrier': 'CT', 'region': '广东', 'route_type': 'CN2 GIA', 'gold': true}]},

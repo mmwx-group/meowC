@@ -45,7 +45,7 @@ List<Proxy> allLeafProxies(List<Group> groups) {
 }
 
 /// 节点页。三种形态：
-/// - 手机「标签」布局（设计稿 ANodes）：代理组标签横滑 + 当前组摘要 + 节点网格，左右滑动换组；
+/// - 手机「单组」布局（同 iOS）：组按钮（点开选组面板）+ 当前组摘要 + 节点网格；
 /// - 手机「列表」布局：整页一个 CustomScrollView，每个组一张可展开的组卡，展开后接懒加载的 SliverGrid；
 /// - 宽屏两栏（设计稿 WNodes）：左栏代理组、右栏当前组的摘要 + 节点网格。
 /// 节点网格都是懒加载的 SliverGrid，300 个节点也只构建可见的格子。
@@ -295,8 +295,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
                     child: _GroupPage(
                       group: selected,
                       size: size,
-                      pad: EdgeInsets.only(bottom: pad.bottom),
-                      wide: true,
+                      bottom: pad.bottom,
                     ),
                   ),
                 ],
@@ -308,18 +307,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
     }
 
     if (layout == ProxyLayout.tabs) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: side.copyWith(top: pad.top, bottom: 12),
-            child: title,
-          ),
-          Expanded(
-            child: _GroupTabs(groups: groups, size: size, pad: pad),
-          ),
-        ],
-      );
+      return _SingleGroup(groups: groups, size: size, pad: pad, title: title);
     }
 
     final expanded = ref.watch(expandedGroupsProvider);
@@ -337,169 +325,116 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
   }
 }
 
-/// 一个组的内容：摘要卡 + 懒加载节点网格。标签布局的每一页、宽屏右栏都是它；滚动位置按组记。
+/// 宽屏右栏：当前组的摘要卡 + 懒加载节点网格（WNodes 的小一号格子）；滚动位置按组记。
 class _GroupPage extends StatelessWidget {
-  const _GroupPage({required this.group, required this.size, required this.pad, this.wide = false});
+  const _GroupPage({required this.group, required this.size, required this.bottom});
   final Group group;
   final NodeCardSize size;
 
-  /// 左右留白 + 底部留白（手机含悬浮底栏的高度）；顶部不用。
-  final EdgeInsets pad;
-  final bool wide;
+  /// 底部留白。
+  final double bottom;
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       key: PageStorageKey('group-${group.name}'),
       slivers: [
+        SliverToBoxAdapter(child: GroupSummary(group: group, wide: true)),
         SliverPadding(
-          padding: EdgeInsets.only(left: pad.left, right: pad.right),
-          sliver: SliverToBoxAdapter(child: GroupSummary(group: group, wide: wide)),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(pad.left, wide ? 10 : 12, pad.right, pad.bottom),
-          sliver: NodeSliverGrid(group: group, size: size, dense: wide),
+          padding: EdgeInsets.only(top: 10, bottom: bottom),
+          sliver: NodeSliverGrid(group: group, size: size, dense: true),
         ),
       ],
     );
   }
 }
 
-/// 标签布局（手机）：顶部一条横向滚动的组标签，下面是 PageView——一页一个组，左右滑动换组。
-/// 一次只构建当前页（及滑动中的相邻页）的可见格子。停在哪个组按订阅记在 `Profile.currentGroupName`。
-class _GroupTabs extends ConsumerStatefulWidget {
-  const _GroupTabs({required this.groups, required this.size, required this.pad});
+/// 记下单组布局停在哪个组：按订阅存在 `Profile.currentGroupName`（重进节点页、重启后还是它）。测试里换成不碰 globalState 的替身。
+final rememberGroupProvider = Provider<void Function(String name)>(
+  (ref) => (name) => globalState.appController.updateCurrentGroupName(name),
+);
+
+/// 单组布局（手机 / 平板竖屏，对齐 iOS）：标题、组按钮、当前组的摘要与懒加载节点网格在同一个滚动视图里。
+/// 点组按钮弹出选组面板换组——以前是一排横向滚动的组标签 + PageView 左右滑动换组，组一多要来回划着找。
+/// 换组：新的一组淡入、旧的当帧撤走（摘要和网格按组名带 key，不让两份大网格同时活着做交叉淡化），并回到顶部。
+class _SingleGroup extends ConsumerStatefulWidget {
+  const _SingleGroup({required this.groups, required this.size, required this.pad, required this.title});
   final List<Group> groups;
   final NodeCardSize size;
   final EdgeInsets pad;
+  final Widget title;
 
   @override
-  ConsumerState<_GroupTabs> createState() => _GroupTabsState();
+  ConsumerState<_SingleGroup> createState() => _SingleGroupState();
 }
 
-class _GroupTabsState extends ConsumerState<_GroupTabs> {
-  late final PageController _pages = PageController(initialPage: _index);
-  final _chipKeys = <String, GlobalKey>{};
+class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerProviderStateMixin {
+  final _scroll = ScrollController();
 
-  /// 点标签触发的翻页动画期间，途经页的 onPageChanged 不算数。
-  bool _programmatic = false;
-
-  /// 建过的页（页码 → widget）。换组会让本部件重建（标签高亮要跟着变），itemBuilder 交回同一个实例，
-  /// Flutter 就不会把当前页和滑入页的整棵子树（可见节点格）再重建一遍；组列表 / 卡片档位 / 留白变了才作废。
-  final _pageCache = <int, Widget>{};
-
-  int get _index {
-    final name = ref.read(
-      currentProfileProvider.select((p) => p?.currentGroupName),
-    );
-    final i = widget.groups.indexWhere((g) => g.name == name);
-    return i < 0 ? 0 : i;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _revealChip(_index));
-  }
-
-  @override
-  void didUpdateWidget(_GroupTabs oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.groups != widget.groups || oldWidget.size != widget.size || oldWidget.pad != widget.pad) {
-      _pageCache.clear();
-    }
-  }
+  /// 换组时新内容的淡入；静止时停在 1（不透明，不开图层）。
+  late final _fade = AnimationController(vsync: this, duration: const Duration(milliseconds: 220), value: 1);
+  late final _opacity = CurvedAnimation(parent: _fade, curve: Curves.easeOut);
 
   @override
   void dispose() {
-    _pages.dispose();
+    _opacity.dispose();
+    _fade.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  void _revealChip(int i) {
-    if (!mounted || i >= widget.groups.length) return;
-    final ctx = _chipKeys[widget.groups[i].name]?.currentContext;
-    if (ctx == null) return;
-    Scrollable.ensureVisible(
-      ctx,
-      alignment: 0.5,
-      // 本页不可见时壳把这里的 Ticker 静音了，动画走不动、会攒到切回来才当着用户滚一下：这时直接跳到位
-      duration: TickerMode.getValuesNotifier(context).value.enabled ? const Duration(milliseconds: 220) : Duration.zero,
-      curve: Curves.easeOut,
+  Future<void> _pick(BuildContext anchor, Group current) async {
+    final name = await showGroupPicker(
+      anchor,
+      groups: widget.groups,
+      current: current.name,
+      wide: ref.read(isWideLayoutProvider),
     );
-  }
-
-  void _setCurrent(int i) {
-    globalState.appController.updateCurrentGroupName(widget.groups[i].name);
-    _revealChip(i);
-  }
-
-  Future<void> _tapChip(int i) async {
-    final from = _pages.page?.round() ?? 0;
-    if (from == i) return;
-    _setCurrent(i);
-    if ((from - i).abs() > 1) {
-      _pages.jumpToPage(i); // 隔得远就直接跳，不让中间几十页一闪而过
-      return;
-    }
-    _programmatic = true;
-    await _pages.animateToPage(
-      i,
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOut,
-    );
-    _programmatic = false;
+    if (!mounted || name == null || name == current.name) return;
+    ref.read(rememberGroupProvider)(name);
+    if (_scroll.hasClients) _scroll.jumpTo(0);   // 换了组从头看
+    if (!MeowMotion.reduced(context)) _fade.forward(from: 0);
   }
 
   @override
   Widget build(BuildContext context) {
     final groups = widget.groups;
     final pad = widget.pad;
-    final current = ref.watch(
-      currentProfileProvider.select((p) => p?.currentGroupName),
-    );
-    var index = groups.indexWhere((g) => g.name == current);
-    if (index < 0) index = 0;
-    // 换订阅 / 组列表变了：页码对不上就跳过去
-    if (!_programmatic) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_pages.hasClients || _programmatic) return;
-        if (_pages.page?.round() != index) _pages.jumpToPage(index);
-      });
-    }
-
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,   // 标签少时也靠左，不被 Column 居中
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: EdgeInsets.only(left: pad.left, right: pad.right),
-            child: Row(
-              children: [
-                for (final (i, g) in groups.indexed)
-                  Padding(
-                    padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
-                    child: GroupChip(
-                      key: _chipKeys.putIfAbsent(g.name, GlobalKey.new),
-                      group: g,
-                      selected: i == index,
-                      onTap: () => _tapChip(i),
-                    ),
-                  ),
-              ],
+    final side = EdgeInsets.only(left: pad.left, right: pad.right);
+    // 没记过、或记下的组已不在当前订阅里 → 第一个组
+    final name = ref.watch(currentProfileProvider.select((p) => p?.currentGroupName));
+    final group = groups.firstWhereOrNull((g) => g.name == name) ?? groups.first;
+    return CustomScrollView(
+      controller: _scroll,
+      slivers: [
+        SliverPadding(
+          padding: side.copyWith(top: pad.top, bottom: 12),
+          sliver: SliverToBoxAdapter(child: widget.title),
+        ),
+        SliverPadding(
+          padding: side.copyWith(bottom: 12),
+          sliver: SliverToBoxAdapter(
+            child: GroupPickerButton(
+              group: group,
+              groupCount: groups.length,
+              onTap: (anchor) => _pick(anchor, group),
             ),
           ),
         ),
-        const SizedBox(height: 12),
-        Expanded(
-          child: PageView.builder(
-            controller: _pages,
-            itemCount: groups.length,
-            onPageChanged: (i) {
-              if (!_programmatic) _setCurrent(i);
-            },
-            itemBuilder: (_, i) => _pageCache[i] ??= _GroupPage(group: groups[i], size: widget.size, pad: pad),
+        SliverFadeTransition(
+          key: ValueKey('summary:${group.name}'),
+          opacity: _opacity,
+          sliver: SliverPadding(
+            padding: side,
+            sliver: SliverToBoxAdapter(child: GroupSummary(group: group)),
+          ),
+        ),
+        SliverFadeTransition(
+          key: ValueKey('grid:${group.name}'),
+          opacity: _opacity,
+          sliver: SliverPadding(
+            padding: EdgeInsets.fromLTRB(pad.left, 12, pad.right, pad.bottom),
+            sliver: NodeSliverGrid(group: group, size: widget.size),
           ),
         ),
       ],

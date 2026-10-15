@@ -390,7 +390,8 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
               ),
             );
           },
-          child: content,
+          // 内容自成一层：变形每帧只改面板的矩形 / 圆角 / 底色和内容的位移，菜单项不跟着重画
+          child: RepaintBoundary(child: content),
         ),
       ],
     );

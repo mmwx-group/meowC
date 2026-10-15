@@ -124,16 +124,15 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     final profiles = withDirectProfileLast(ref.watch(profilesProvider));
     final currentId = ref.watch(currentProfileIdProvider);
     final loggedIn = ref.watch(isLoggedInProvider);
-    final host = Uri.tryParse(ref.watch(meowSettingProvider.select((s) => s.account.host)))?.host ?? '';
+    final host = ref.watch(meowSettingProvider.select((s) => s.account.host));
     final subs = ref.watch(remoteSubsProvider);
     if (subs.hasValue) _lastSubs = subs.value!;
     final importing = ref.watch(importingSubProvider);
-    // 已经导入过的账户订阅就是上面的某一档（导入时档名 = 订阅名），不再重复列
-    final pending = [
-      if (loggedIn)
-        for (final s in _lastSubs)
-          if (!profiles.any((p) => p.label == s.name && p.url.isNotEmpty && Uri.tryParse(p.url)?.host == host)) s,
-    ];
+    // 已经下载到本机的账户订阅就是上面的某一档，不再重复列：按地址认（与首页切换菜单、iOS 同一套规则，
+    // 见 notDownloadedSubscriptions），不看档名——用户可能改过名，开了「订阅域名」后主机名也可能不同
+    final pending = loggedIn
+        ? notDownloadedSubscriptions(remote: _lastSubs, host: host, localUrls: profiles.map((p) => p.url))
+        : const <RemoteSubscription>[];
     final note = TextStyle(fontSize: MeowFont.caption, color: mm.t2);
     final gap = SizedBox(height: compact ? 8 : 10);
 

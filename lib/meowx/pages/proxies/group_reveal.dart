@@ -63,6 +63,10 @@ class GroupReveal {
 }
 
 /// 节点卡（以及「自动选择」行）的错峰出现 / 淡出。[reveal] 为 null = 静止，原样画（结构不变，动画结束时不重建子树）。
+///
+/// 卡片本身包在自己的 [RepaintBoundary] 里、放在位移的里面：动画每帧只改透明度图层与位移图层，卡片内容（文字、图标、徽标）
+/// 只画一次。以前位移在边界外面，每帧每张卡都要重画一遍。所以网格不要再给每格自动套一层 RepaintBoundary
+/// （[NodeSliverGrid] 里关掉了 addRepaintBoundaries），这里这层就是那一层。
 class StaggeredItem extends StatelessWidget {
   const StaggeredItem({super.key, required this.reveal, required this.index, required this.child});
 
@@ -76,14 +80,14 @@ class StaggeredItem extends StatelessWidget {
     return AnimatedBuilder(
       animation: r?.items ?? kAlwaysCompleteAnimation,
       builder: (_, child) {
-        // 静止时也套同样两层（不透明度 1 / 零位移都不开图层），动画结束时子树不被换掉
+        // 静止时也套同样几层（不透明度 1 / 零位移），动画结束时子树不被换掉
         final (:opacity, :dy) = r == null ? (opacity: 1.0, dy: 0.0) : r.item(index);
         return Opacity(
           opacity: opacity,
           child: Transform.translate(offset: Offset(0, dy), child: child),
         );
       },
-      child: child,
+      child: RepaintBoundary(child: child),
     );
   }
 }

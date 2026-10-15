@@ -28,6 +28,7 @@ import '../state/po0_reporter.dart';
 import '../state/status.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
+import 'frame_log.dart';
 import 'meow_sidebar.dart';
 import 'meow_tab.dart';
 import 'tab_stack.dart';
@@ -52,6 +53,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   @override
   void initState() {
     super.initState();
+    FrameLog.install();
     // 主控 RPC 的 User-Agent 带上版本，主控日志与安全事件里认得出是哪个版本的 MeowX
     try {
       PanelClient.userAgent = 'MeowX/${globalState.packageInfo.version} (${system.isAndroid ? 'Android' : 'Windows'})';

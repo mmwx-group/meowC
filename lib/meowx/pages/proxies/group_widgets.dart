@@ -12,60 +12,152 @@ import '../../app/strings.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/motion.dart';
+import '../../theme/popover.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import 'node_grid.dart';
 import 'node_parts.dart';
 
-/// 组标签（手机标签布局顶部横滑的那一条）：icon + 组名；选中 = 墨色实底配页面底色的字。
-class GroupChip extends StatelessWidget {
-  const GroupChip({
-    super.key,
-    required this.group,
-    required this.selected,
-    required this.onTap,
-  });
+/// 单组布局顶部的组按钮：当前组的 icon + 组名 / 类型 · 成员数 · 共几个组，行尾「切换」胶囊。点开选组面板（[showGroupPicker]）。
+/// [onTap] 拿到的是按钮自己的 context：宽屏的选组面板从按钮下面弹出，要按它定位。
+class GroupPickerButton extends StatelessWidget {
+  const GroupPickerButton({super.key, required this.group, required this.groupCount, required this.onTap});
   final Group group;
-  final bool selected;
-  final VoidCallback onTap;
+  final int groupCount;
+  final void Function(BuildContext anchor) onTap;
 
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return Material(
-      color: selected ? mm.t1 : mm.elev,
-      shape: const StadiumBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 44, maxWidth: 240),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (group.icon.isNotEmpty) ...[
-                CommonTargetIcon(src: group.icon, size: 18),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
-                  group.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? mm.bg : mm.t1,
+    return Semantics(
+      button: true,
+      label: '当前代理组 ${group.name}，${S.pickGroup}',
+      excludeSemantics: true,
+      child: Material(
+        color: mm.elev,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => onTap(context),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 58),
+            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+            child: Row(
+              children: [
+                if (group.icon.isNotEmpty) ...[
+                  CommonTargetIcon(src: group.icon, size: 22),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        group.name,   // 国旗原样显示，和组卡、节点格一个画法
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),
+                      ),
+                      const SizedBox(height: 3),
+                      FitRow(
+                        head: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: GroupTypeTag(group.type, bg: mm.card2, small: true),
+                        ),
+                        text: Text(
+                          '${group.all.length} 个成员 · 共 $groupCount 个组',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: mm.t2),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 32),
+                  padding: const EdgeInsets.only(left: 12, right: 8),
+                  decoration: ShapeDecoration(color: Color.alphaBlend(mm.soft, mm.elev), shape: const StadiumBorder()),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '切换',
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: mm.accent),
+                      ),
+                      const SizedBox(width: 2),
+                      Icon(Icons.unfold_more_rounded, size: 18, color: mm.accent),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+/// 选组面板：每组一张组卡（icon / 名 / 类型 / 成员数 / 当前选中 + 延迟），当前组高亮。点一组 → 收起并返回组名；点外面收起 → null。
+/// 手机是底部弹出面板；有侧栏的宽屏（平板竖屏、Windows 窄窗口）从组按钮下面弹出（同奖牌详情的 popover），宽度跟按钮。
+Future<String?> showGroupPicker(
+  BuildContext anchor, {
+  required List<Group> groups,
+  required String current,
+  required bool wide,
+}) {
+  Widget list(BuildContext ctx, EdgeInsets padding) => ListView.separated(
+    shrinkWrap: true,
+    padding: padding,
+    itemCount: groups.length,
+    separatorBuilder: (_, _) => const SizedBox(height: 8),
+    itemBuilder: (_, i) => GroupCard(
+      group: groups[i],
+      selected: groups[i].name == current,
+      showCount: true,
+      onTap: () => Navigator.of(ctx).pop(groups[i].name),
+    ),
+  );
+
+  if (wide) {
+    final width = anchor.size?.width ?? 360;
+    return showAnchoredPopover<String>(
+      anchor,
+      width: math.min(width, 440),
+      builder: (ctx) => ColoredBox(color: ctx.mm.bg, child: list(ctx, const EdgeInsets.all(8))),
+    );
+  }
+  return showModalBottomSheet<String>(
+    context: anchor,
+    showDragHandle: true,
+    isScrollControlled: true,   // 默认上限是屏高的 9/16；组多时放到 3/4
+    useSafeArea: true,
+    backgroundColor: anchor.mm.bg,   // 组卡是白卡，垫在页面底色上（同页面里的样子）
+    builder: (ctx) {
+      final mm = ctx.mm;
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.75),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+              child: Text(
+                S.pickGroup,
+                style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w600, color: mm.t1),
+              ),
+            ),
+            Flexible(child: list(ctx, EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.paddingOf(ctx).bottom))),
+          ],
+        ),
+      );
+    },
+  );
 }
 
 /// 测速本组；测速中转圈。默认是摘要卡里的「测速」胶囊，[compact] = 列表布局组卡上奶白胶囊里的闪电。
@@ -175,15 +267,24 @@ class AutoSelectToggle extends ConsumerWidget {
   }
 }
 
-/// 组卡：名 + 类型 / 当前选中 + 延迟。两处用：
+/// 组卡：名 + 类型 / 当前选中 + 延迟。三处用：
 /// - 宽屏左栏的一行（[selected] = 柔粉底 + 玫红 2px 描边）；
+/// - 单组布局选组面板里的一行（同上，[showCount] 多画成员数）；
 /// - 手机列表布局里可展开的组头（[expanded] 非 null）：多画成员数、测速钮和箭头，展开时换成樱粉底，下面接节点网格。
 class GroupCard extends ConsumerWidget {
-  const GroupCard({super.key, required this.group, required this.onTap, this.selected = false, this.expanded});
+  const GroupCard({
+    super.key,
+    required this.group,
+    required this.onTap,
+    this.selected = false,
+    this.expanded,
+    this.showCount = false,
+  });
   final Group group;
   final VoidCallback onTap;
   final bool selected;
   final bool? expanded;
+  final bool showCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -227,7 +328,7 @@ class GroupCard extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const SizedBox(width: 6),
-                          if (list) ...[
+                          if (list || showCount) ...[
                             Text('${group.all.length}', style: MeowFont.mono(size: 11, color: mm.t2)),
                             const SizedBox(width: 6),
                           ],
@@ -314,7 +415,7 @@ class _GroupChevronState extends State<_GroupChevron> with SingleTickerProviderS
 }
 
 /// 当前组摘要（樱粉主卡）：类型 + 成员数 + 当前选中 + 延迟 + 测速；url-test / fallback 组带「自动选择」开关，手选 = 固定。
-/// 手机（标签布局每页的头）按 ANodes 排成两行；[wide] = 宽屏右栏，按 WNodes 排成一行并带组名。
+/// 手机（单组布局组按钮下面）按 ANodes 排成两行；[wide] = 宽屏右栏，按 WNodes 排成一行并带组名。
 class GroupSummary extends ConsumerWidget {
   const GroupSummary({super.key, required this.group, this.wide = false});
   final Group group;

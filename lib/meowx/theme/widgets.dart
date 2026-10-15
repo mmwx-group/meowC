@@ -159,44 +159,47 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
       constraints: BoxConstraints(minHeight: height),
       padding: const EdgeInsets.all(_segGap),
       decoration: BoxDecoration(color: widget.onCard ? mm.card2 : mm.elev, borderRadius: BorderRadius.circular(outer)),
-      child: CustomPaint(
-        painter: _SegmentThumb(
-          pos: _pos,
-          count: widget.items.length,
-          visible: index >= 0,
-          color: mm.t1,
-          radius: outer - _segGap,
-          slotRadius: outer,
-        ),
-        child: Row(
-          children: [
-            for (final (i, it) in widget.items.indexed) ...[
-              if (i > 0) const SizedBox(width: _segGap),
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  selected: i == index,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => widget.onChanged(it.$1),
-                    child: Container(
-                      constraints: BoxConstraints(minHeight: height - _segGap * 2),
-                      alignment: Alignment.center,
-                      child: AnimatedDefaultTextStyle(
-                        duration: MeowMotion.of(context, MeowMotion.colorFade),
-                        style: TextStyle(
-                          fontSize: widget.fontSize,
-                          fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
-                          color: i == index ? mm.bg : mm.t2,
+      // 滑块每帧重绘：自成一层，不连带整页重画
+      child: RepaintBoundary(
+        child: CustomPaint(
+          painter: _SegmentThumb(
+            pos: _pos,
+            count: widget.items.length,
+            visible: index >= 0,
+            color: mm.t1,
+            radius: outer - _segGap,
+            slotRadius: outer,
+          ),
+          child: Row(
+            children: [
+              for (final (i, it) in widget.items.indexed) ...[
+                if (i > 0) const SizedBox(width: _segGap),
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: i == index,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => widget.onChanged(it.$1),
+                      child: Container(
+                        constraints: BoxConstraints(minHeight: height - _segGap * 2),
+                        alignment: Alignment.center,
+                        child: AnimatedDefaultTextStyle(
+                          duration: MeowMotion.of(context, MeowMotion.colorFade),
+                          style: TextStyle(
+                            fontSize: widget.fontSize,
+                            fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                            color: i == index ? mm.bg : mm.t2,
+                          ),
+                          child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                         ),
-                        child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

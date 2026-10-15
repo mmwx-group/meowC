@@ -160,7 +160,7 @@ class _NodeGridDelegate extends SliverGridDelegate {
   bool shouldRelayout(_NodeGridDelegate oldDelegate) => oldDelegate.size != size || oldDelegate.cellExtent != cellExtent;
 }
 
-/// 懒加载节点网格：只构建可见格子；每格自带 RepaintBoundary。
+/// 懒加载节点网格：只构建可见格子；每格的 RepaintBoundary 由 [StaggeredItem] 套在位移里面（见它的说明）。
 class NodeSliverGrid extends ConsumerWidget {
   const NodeSliverGrid({super.key, required this.group, required this.size, this.dense = false, this.reveal});
   final Group group;
@@ -205,7 +205,7 @@ class NodeSliverGrid extends ConsumerWidget {
             onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
           ),
         );
-      }, childCount: group.all.length),
+      }, childCount: group.all.length, addRepaintBoundaries: false),
     );
   }
 }

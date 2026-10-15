@@ -328,3 +328,47 @@ RemoteSubscription? autoImportCandidate({
   final hasLocal = localUrls.any((u) => u.isNotEmpty && Uri.tryParse(u)?.host.toLowerCase() == h);
   return hasLocal ? null : remote.first;
 }
+
+/// 账户下还没下载到本机的订阅（首页切换菜单的「账户订阅 · 未下载」），与 iOS / macOS 的 `SubAccountStore.notDownloaded` 同一套规则：
+/// - 短链路径（`subscription_path`，可能不带前导斜杠、可能带查询串）与本机某份订阅地址的**路径**相同就算已下载，**不比主机名**：
+///   开了主控的「订阅域名」后，本机那份可能挂在别的域名上；
+/// - 只有 filename 的旧式地址：本机有「主控同主机 + 路径 `/api/clash/subscribe` + 查询参数 filename 相同」的那份才算；
+///   不知道主控地址（[host] 空）时这条认不出，短链照认。
+/// [host] 是主控地址（`https://host[:port]`）；[localUrls] 里的空串（内置直连档、本地配置）不参与比较。
+List<RemoteSubscription> notDownloadedSubscriptions({
+  required List<RemoteSubscription> remote,
+  required String host,
+  required Iterable<String> localUrls,
+}) {
+  final locals = [
+    for (final u in localUrls)
+      if (u.isNotEmpty) ?Uri.tryParse(u),
+  ];
+  final localPaths = {for (final u in locals) _normalizedPath(u.path)}..remove('/');
+  final h = Uri.tryParse(host)?.host.toLowerCase() ?? '';
+  return [
+    for (final s in remote)
+      if (!_isDownloaded(s, locals, localPaths, h)) s,
+  ];
+}
+
+bool _isDownloaded(RemoteSubscription s, List<Uri> locals, Set<String> localPaths, String host) {
+  final path = s.subscriptionPath.isEmpty ? '' : (Uri.tryParse(s.subscriptionPath)?.path ?? '');
+  if (path.isNotEmpty && localPaths.contains(_normalizedPath(path))) return true;
+  if (host.isEmpty || s.filename.isEmpty) return false;
+  return locals.any(
+    (u) =>
+        u.host.toLowerCase() == host &&
+        _normalizedPath(u.path) == '/api/clash/subscribe' &&
+        u.queryParameters['filename'] == s.filename,
+  );
+}
+
+/// `x/abc/` → `/x/abc`：补前导斜杠、去结尾斜杠，路径比较不受写法影响。
+String _normalizedPath(String path) {
+  var p = path.startsWith('/') ? path : '/$path';
+  while (p.length > 1 && p.endsWith('/')) {
+    p = p.substring(0, p.length - 1);
+  }
+  return p;
+}

@@ -156,6 +156,7 @@ class AccountActions {
     ref.read(panelFeaturesProvider.notifier).state = const PanelFeatures();
     ref.read(po0ReporterProvider).stop();
     _extrasAt = null;
+    _subsAttempt = null;
   }
 
   /// 向主控重取昵称与头像。这两项以前只在登录应答里写一次：用户之后在主控换了头像 / 改了昵称，要重新登录才跟上。
@@ -195,15 +196,39 @@ class AccountActions {
   Future<void> refreshSubscriptions() async {
     final token = _account.token;
     if (token.isEmpty) return;
+    _subsAttempt = (token: token, at: DateTime.now(), ok: false);
     ref.read(remoteSubsProvider.notifier).state = const AsyncValue.loading();
     try {
       final list = await _client().subscriptions(token);
       ref.read(remoteSubsProvider.notifier).state = AsyncValue.data(list);
+      _subsAttempt = (token: token, at: DateTime.now(), ok: true);
       unawaited(refreshExtras());
     } catch (e, st) {
       commonPrint.log('refreshSubscriptions failed: $e');
       ref.read(remoteSubsProvider.notifier).state = AsyncValue.error(e, st);
     }
+  }
+
+  /// 最近一次拉「我的订阅」：哪次登录（token）、何时、拿到列表没有。只给 [refreshSubscriptionsIfNeeded] 节流用。
+  ({String token, DateTime at, bool ok})? _subsAttempt;
+
+  /// 首页出现时用（切换菜单要列「账户订阅 · 未下载」）：这次登录已经拉到过（不管是谁拉的）就不再拉，
+  /// 正在拉也不重复；拉失败的隔一分钟再出现才重试。不定时拉，新增的订阅靠「我的」页的刷新钮。
+  Future<void> refreshSubscriptionsIfNeeded() async {
+    final token = _account.token;
+    if (token.isEmpty || ref.read(remoteSubsProvider).isLoading) return;
+    final last = _subsAttempt;
+    if (last != null && last.token == token) {
+      if (last.ok || DateTime.now().difference(last.at) < const Duration(minutes: 1)) return;
+    }
+    await refreshSubscriptions();
+  }
+
+  /// 刷新本机的一份订阅（首页订阅卡的「N 小时前更新」、「我的」页的「刷新」同一个动作）：
+  /// 顺带向主控重取昵称 / 头像（只跟着用户点的刷新走，不定时拉）。失败照原样抛给界面提示。
+  Future<void> refreshLocalSubscription(Profile profile) async {
+    unawaited(refreshProfile());
+    await globalState.appController.updateProfile(profile);
   }
 
   /// 点某条订阅 = 下载并切换为当前（同 url 已存在则刷新它）；连着就重连。
