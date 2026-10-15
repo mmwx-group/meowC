@@ -12,6 +12,7 @@ import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
+import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -232,11 +233,15 @@ void main() {
     expect(find.text('账号登录'), findsOneWidget);
     expect(find.text('导入订阅'), findsOneWidget);
     expect(find.textContaining('还没有订阅'), findsOneWidget);
-    for (final label in ['代理与测速', '流量控制', '本地代理', '订阅同步', '日志', '外观', '高级', '关于']) {
+    for (final label in ['代理与测速', '流量控制', '本地代理', '订阅同步', '记录日志', '外观', '高级', '关于']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(find.text('跟随订阅 · HTTPS 延迟'), findsOneWidget);
     expect(find.text('0.2.0 · 检查更新'), findsOneWidget);
+    // 入口行末尾的箭头垫 40×30 奶白胶囊；开关行没有
+    final chevron = find.descendant(of: find.widgetWithText(MeRow, '流量控制'), matching: find.byType(MeowChip));
+    expect(tester.getSize(chevron), const Size(MeowChip.width, MeowChip.height));
+    expect(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(MeowChip)), findsNothing);
   });
 
   testWidgets('手机 · 已登录：当前档展开显示用量，已导入的账户订阅不重复列，没导入的带下载入口', (tester) async {
@@ -307,6 +312,17 @@ void main() {
     expect(find.text('阻止 QUIC'), findsOneWidget);   // 回到「我的」：入口行的摘要跟着变
   });
 
+  testWidgets('手机 · 「记录日志」直接是列表里的开关行：点了当场切换，不进二级页', (tester) async {
+    await _pump(tester, const MePage(), size: const Size(412, 1500), overrides: _overrides(), textScale: 1);
+    expect(find.text('开启后额外记录每条连接的分流与 DNS 详情'), findsOneWidget);
+    final before = _container(tester, MePage).read(appSettingProvider).openLogs;
+    await tester.tap(find.text('记录日志'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MeSubPage), findsNothing);
+    expect(_container(tester, MePage).read(appSettingProvider).openLogs, !before);
+    expect(tester.widget<Switch>(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(Switch))).value, !before);
+  });
+
   testWidgets('宽屏三列：最小窗口 1.4 倍字号不溢出；设置分组直接铺开，「高级设置」在标题行', (tester) async {
     for (final size in const [Size(900 - 100, 600), Size(1100 - 236, 680), Size(1700, 900)]) {
       await _pump(
@@ -371,7 +387,7 @@ void main() {
           MeSection(children: [TrafficRows(showProxyApps: true)]),
           MeSection(children: [LocalProxyRows()]),
           MeSection(children: [SyncRows()]),
-          MeSection(children: [LogRows()]),
+          MeSection(children: [LogSwitchRow()]),
           MeSection(children: [AppearanceRows()]),
           MeSection(children: [AboutRows()]),
         ],

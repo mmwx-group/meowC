@@ -280,22 +280,21 @@ class SyncRows extends ConsumerWidget {
   }
 }
 
-/// 日志：记录日志。
-class LogRows extends ConsumerWidget {
-  const LogRows({super.key});
+/// 「记录日志」开关：「我的」页设置列表里直接一行（不再进二级页）。[leading] = 手机入口列表里的图标方块。
+class LogSwitchRow extends ConsumerWidget {
+  const LogSwitchRow({super.key, this.leading});
+
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final openLogs = ref.watch(appSettingProvider.select((s) => s.openLogs));
-    return MeRows(
-      footer: '默认关闭；开启后在「动态」页查看日志流。',
-      children: [
-        MeSwitchRow(
-          label: '记录日志',
-          value: openLogs,
-          onChanged: (v) => ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(openLogs: v)),
-        ),
-      ],
+    return MeSwitchRow(
+      leading: leading,
+      label: '记录日志',
+      subtitle: '开启后额外记录每条连接的分流与 DNS 详情',
+      value: openLogs,
+      onChanged: (v) => ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(openLogs: v)),
     );
   }
 }

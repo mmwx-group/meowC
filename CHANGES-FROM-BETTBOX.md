@@ -101,3 +101,8 @@
 
 ## 2026-10-14 · 主控域名直连
 - `lib/state.dart patchRawConfig`：规则前置那一行把各订阅档的地址传给 `meowPrependRules`（`subscriptionUrls: config.profiles.map((p) => p.url)`）。前置规则最前面多一组主控直连：登录了的主控域名，加上本机订阅里形如主控订阅地址（`/x/…`、`/api/clash/subscribe` 等）的那些域名（主控的「订阅域名」），主控是 IP 时用 `IP-CIDR(6)…,no-resolve`。原因：开着代理时，客户端访问主控（账户订阅列表、奖牌 / 解锁、白名单 token）按订阅规则分流、多半被分到节点上，有的节点连不上主控，用户实报「开了代理拉账户订阅一直超时，关代理正常」；主控生成的订阅里不带这条规则。规则本身与登录后重新套用配置都在 `lib/meowx/`（`config/meow_patch.dart panelDirectRules`、`panel/account.dart`）。只在规则模式下生效。
+
+## 2026-10-14 · 拉订阅加超时，经内核失败时直连重试
+
+- `lib/common/request.dart`：拉订阅的 `_clashDio` 原来没有任何超时，请求挂住就永远不结束，`AppController.updateProfile` 的防重入标记（`_updatingProfileIds`）一直不清，之后点「刷新」全部直接返回（用户在 Windows 上报「刷新订阅没反应、内容不更新」；启动时的自动更新挂住也会这样）。加了超时：连接 / 发送 15s、两次收到数据之间 30s。
+- 同一处：内核起着时订阅请求先经本机混合端口走规则 / 当前节点（`BettboxHttpOverrides.handleFindProxy`）；节点连不上（全局模式、或被分到坏节点）时，网络层失败（超时 / 连不上，不含 4xx / 5xx）就用直连客户端再试一次，还拉不到才把错误报上去。内核没起时本来就直连，不重试。

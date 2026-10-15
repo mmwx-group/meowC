@@ -3,12 +3,15 @@ import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/views/proxies/common.dart';
 import 'package:bett_box/widgets/icon.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/motion.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import 'node_grid.dart';
@@ -65,7 +68,7 @@ class GroupChip extends StatelessWidget {
   }
 }
 
-/// 测速本组；测速中转圈。默认是摘要卡里的「测速」胶囊，[compact] = 列表布局组卡上的小闪电。
+/// 测速本组；测速中转圈。默认是摘要卡里的「测速」胶囊，[compact] = 列表布局组卡上奶白胶囊里的闪电。
 class GroupTestButton extends StatelessWidget {
   const GroupTestButton({super.key, required this.group, this.compact = false, this.height = 44});
   final Group group;
@@ -86,24 +89,17 @@ class GroupTestButton extends StatelessWidget {
             child: PillButton(label: '测速', busy: testing, height: height, onTap: run),
           );
         }
-        return SizedBox(
-          width: 36,
-          height: 36,
+        return MeowChip(
+          tooltip: S.testGroup,
+          onTap: testing ? null : run,
           child: testing
-              ? Center(
-                  child: SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent),
-                  ),
+              ? SizedBox(
+                  width: 13,
+                  height: 13,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent),
                 )
-              : IconButton(
-                  padding: EdgeInsets.zero,
-                  iconSize: 20,
-                  icon: Icon(Icons.bolt_rounded, color: mm.accent),
-                  tooltip: S.testGroup,
-                  onPressed: run,
-                ),
+              // 20 号：Material 的 bolt 在 24 格里留白多，20 号才和 iOS 胶囊里 14pt 的 bolt.fill 一样大
+              : Icon(Icons.bolt_rounded, size: 20, color: mm.accent),
         );
       },
     );
@@ -266,12 +262,11 @@ class GroupCard extends ConsumerWidget {
                 ),
               ),
               if (list) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 8),
                 GroupTestButton(group: group, compact: true),
-                RotatedBox(
-                  quarterTurns: open ? 3 : 1,
-                  child: MeowIcon(MeowGlyph.chevron, size: 16, color: mm.t2),
-                ),
+                const SizedBox(width: 6),
+                // 箭头胶囊本身也能点：与点组卡同一个动作（展开 / 收起）
+                MeowChip(onTap: onTap, child: _GroupChevron(open: open)),
               ],
             ],
           ),
@@ -279,6 +274,43 @@ class GroupCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// 组卡上的箭头：收起朝下、展开朝上，转动用弹跳弹簧。初值按当前状态给：滚动回来 / 重建时不重播。
+class _GroupChevron extends StatefulWidget {
+  const _GroupChevron({required this.open});
+  final bool open;
+
+  @override
+  State<_GroupChevron> createState() => _GroupChevronState();
+}
+
+class _GroupChevronState extends State<_GroupChevron> with SingleTickerProviderStateMixin {
+  /// 0 = 朝下，1 = 朝上（转过 180°）
+  late final _turn = AnimationController.unbounded(vsync: this, value: widget.open ? 1 : 0);
+
+  @override
+  void didUpdateWidget(_GroupChevron old) {
+    super.didUpdateWidget(old);
+    if (old.open != widget.open) {
+      MeowMotion.spring(_turn, widget.open ? 1 : 0, MeowMotion.bouncy, reduce: MeowMotion.reduced(context));
+    }
+  }
+
+  @override
+  void dispose() {
+    _turn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _turn,
+    // 图形本身朝右：先转 90° 朝下，再按进度转到朝上
+    // 同 iOS：收起朝右、展开转 90° 朝下（以前收起朝下、展开转 180° 朝上，和 iOS 不一致）
+    builder: (_, child) => Transform.rotate(angle: _turn.value * math.pi / 2, child: child),
+    child: const MeowChipChevron(),
+  );
 }
 
 /// 当前组摘要（樱粉主卡）：类型 + 成员数 + 当前选中 + 延迟 + 测速；url-test / fallback 组带「自动选择」开关，手选 = 固定。

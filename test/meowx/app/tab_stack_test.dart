@@ -1,5 +1,7 @@
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/app/tab_stack.dart';
+import 'package:bett_box/meowx/theme/motion.dart';
+import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -116,8 +118,11 @@ void main() {
       expect(enabled, {MeowTab.home: true, MeowTab.connections: false, MeowTab.me: false});
       expect(find.text('点了 1 次'), findsOneWidget);
       expect(find.text(MeowTab.home.label), findsNothing);
-      // 下一帧换过去
+      // 下一帧开始平推：两页同时在画面上，推完只剩新页
       await tester.pump();
+      expect(find.text(MeowTab.home.label), findsOneWidget);
+      expect(find.text('点了 1 次'), findsOneWidget);
+      await tester.pump(MeowMotion.tabSlide);
       expect(find.text(MeowTab.home.label), findsOneWidget);
       expect(find.text('点了 1 次'), findsNothing);
       expect(find.text('点了 1 次', skipOffstage: false), findsOneWidget);
@@ -280,6 +285,152 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       await tester.pump(const Duration(milliseconds: 100));
       expect(bubble, findsNothing);
+    });
+  });
+
+  group('MeowTabStack 平推', () {
+    const width = 400.0;
+    Key pageKey(MeowTab t) => ValueKey('page-${t.name}');
+    Widget pages(MeowTab t) => SizedBox.expand(key: pageKey(t), child: Text(t.label));
+
+    Widget stack(MeowTab current, {bool reduce = false}) => MaterialApp(
+      builder: (context, c) => MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: reduce), child: c!),
+      home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages)),
+    );
+
+    Future<void> setUpView(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    /// 页在画面上的左边（页宽 = 视口宽）；不在画面上为 null。
+    double? x(WidgetTester tester, MeowTab t) {
+      final f = find.byKey(pageKey(t));
+      return f.evaluate().isEmpty ? null : tester.getTopLeft(f).dx;
+    }
+
+    double eased(Duration d) =>
+        MeowMotion.tabSlideCurve.transform(d.inMicroseconds / MeowMotion.tabSlide.inMicroseconds);
+
+    /// 切页并走到平推的第一帧（t = 0）。
+    Future<void> switchTo(WidgetTester tester, MeowTab tab, {bool reduce = false}) async {
+      await tester.pumpWidget(stack(tab, reduce: reduce));
+      await tester.pump();
+    }
+
+    testWidgets('往后切：新页从右侧整页推入，旧页往左退 30%；380ms 推完只剩新页', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.me);
+      expect(x(tester, MeowTab.me), width);
+      expect(x(tester, MeowTab.home), 0);
+
+      const half = Duration(milliseconds: 190);
+      await tester.pump(half);
+      expect(x(tester, MeowTab.me), closeTo(width * (1 - eased(half)), 0.5));
+      expect(x(tester, MeowTab.home), closeTo(-width * MeowMotion.tabParallax * eased(half), 0.5));
+      expect(x(tester, MeowTab.proxies), isNull);
+
+      await tester.pump(MeowMotion.tabSlide - half - const Duration(milliseconds: 10));
+      expect(x(tester, MeowTab.home), isNotNull);   // 还没推完
+      await tester.pump(const Duration(milliseconds: 10));
+      expect(x(tester, MeowTab.me), 0);
+      expect(x(tester, MeowTab.home), isNull);
+      await tester.pump(const Duration(milliseconds: 1));   // 控制器越过终点的下一帧报完成，之后不再要帧
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('往前切：方向相反——新页从左侧推入，旧页往右退', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.connections));
+      await switchTo(tester, MeowTab.proxies);
+      expect(x(tester, MeowTab.proxies), -width);
+      const t = Duration(milliseconds: 100);
+      await tester.pump(t);
+      expect(x(tester, MeowTab.proxies), closeTo(-width * (1 - eased(t)), 0.5));
+      expect(x(tester, MeowTab.connections), closeTo(width * MeowMotion.tabParallax * eased(t), 0.5));
+      await tester.pump(MeowMotion.tabSlide);
+      expect(x(tester, MeowTab.proxies), 0);
+      expect(x(tester, MeowTab.connections), isNull);
+    });
+
+    testWidgets('不改透明度，每页垫着页面底色；新页压在旧页上面', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.proxies);
+      await tester.pump(const Duration(milliseconds: 120));
+      for (final t in [MeowTab.home, MeowTab.proxies]) {
+        final page = find.byKey(pageKey(t));
+        // 页与栈之间没有任何透明度（路由自己的 FadeTransition 在栈外面，不算）
+        final fades = find.ancestor(
+          of: page,
+          matching: find.byWidgetPredicate((w) => w is Opacity || w is FadeTransition || w is AnimatedOpacity),
+        );
+        final inStack = find.descendant(of: find.byType(MeowTabStack), matching: fades);
+        expect(inStack, findsNothing);
+        final box = tester.widget<ColoredBox>(find.ancestor(of: page, matching: find.byType(ColoredBox)).first);
+        expect(box.color, MeowTokens.light.bg);
+      }
+      // 点两页重叠的地方：命中的是新页
+      final hit = tester.hitTestOnBinding(const Offset(width - 10, 10));
+      final top = hit.path.map((e) => e.target).whereType<RenderObject>().map((r) => r.debugCreator.toString());
+      expect(top.any((c) => c.contains('page-proxies')), isTrue);
+      expect(top.any((c) => c.contains('page-home')), isFalse);
+    });
+
+    testWidgets('平推中又点了别的 Tab：各页从当时的位置接着走，新目标从右侧推入，推完只剩它', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.proxies);
+      await tester.pump(const Duration(milliseconds: 150));
+      final homeX = x(tester, MeowTab.home)!, proxiesX = x(tester, MeowTab.proxies)!;
+      expect(proxiesX, inExclusiveRange(0, width));
+
+      await switchTo(tester, MeowTab.me);
+      // 接上的第一帧：画面上的两页一格没跳，新目标在右侧边外
+      expect(x(tester, MeowTab.home), closeTo(homeX, 0.5));
+      expect(x(tester, MeowTab.proxies), closeTo(proxiesX, 0.5));
+      expect(x(tester, MeowTab.me), width);
+
+      const t = Duration(milliseconds: 200);
+      await tester.pump(t);
+      expect(x(tester, MeowTab.me), closeTo(width * (1 - eased(t)), 0.5));
+      expect(x(tester, MeowTab.proxies), closeTo(proxiesX - width * MeowMotion.tabParallax * eased(t), 0.5));
+      await tester.pump(MeowMotion.tabSlide);
+      expect(x(tester, MeowTab.me), 0);
+      expect(x(tester, MeowTab.home), isNull);
+      expect(x(tester, MeowTab.proxies), isNull);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('平推中往回点：原页从当时的位置回正，推到一半的页退回右侧', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.proxies);
+      await tester.pump(const Duration(milliseconds: 150));
+      final homeX = x(tester, MeowTab.home)!, proxiesX = x(tester, MeowTab.proxies)!;
+
+      await switchTo(tester, MeowTab.home);
+      expect(x(tester, MeowTab.home), closeTo(homeX, 0.5));
+      expect(x(tester, MeowTab.proxies), closeTo(proxiesX, 0.5));
+      const t = Duration(milliseconds: 200);
+      await tester.pump(t);
+      expect(x(tester, MeowTab.home), closeTo(homeX * (1 - eased(t)), 0.5));
+      expect(x(tester, MeowTab.proxies), closeTo(proxiesX + (width - proxiesX) * eased(t), 0.5));
+      await tester.pump(MeowMotion.tabSlide);
+      expect(x(tester, MeowTab.home), 0);
+      expect(x(tester, MeowTab.proxies), isNull);
+    });
+
+    testWidgets('系统「移除动画」：直接换页，不平推', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home, reduce: true));
+      await switchTo(tester, MeowTab.me, reduce: true);
+      expect(x(tester, MeowTab.me), 0);
+      expect(x(tester, MeowTab.home), isNull);
+      expect(tester.binding.hasScheduledFrame, isFalse);
     });
   });
 

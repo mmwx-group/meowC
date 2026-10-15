@@ -276,14 +276,38 @@ void main() {
     // 负载均衡组没有「当前选中」
     expect(find.text('—'), findsOneWidget);
 
+    // 展开动画从高度 0 开始（这一帧网格还不在屏上），播完才整段露出
     await tester.tap(find.text('url-test'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(find.byType(AutoSelectToggle), findsOneWidget);
     expect(find.text('大阪 02'), findsOneWidget);
 
+    // 收起：节点卡倒序淡出、容器收完之后才拆掉
     await tester.tap(find.text('url-test'));
     await tester.pump();
+    expect(find.byType(NodeSliverGrid), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byType(NodeSliverGrid), findsNothing);
+  });
+
+  testWidgets('手机 · 列表布局：组卡头部的测速 / 箭头是 40×30 胶囊，点箭头胶囊同样展开 / 收起', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 1600),
+      overrides: _overrides(profile: _profile(), layout: ProxyLayout.list),
+    );
+    Finder chips() => find.descendant(of: find.widgetWithText(GroupCard, 'url-test'), matching: find.byType(MeowChip));
+    expect(chips(), findsNWidgets(2));
+    expect(tester.getSize(chips().first), const Size(MeowChip.width, MeowChip.height));
+    expect(tester.getSize(chips().last), const Size(MeowChip.width, MeowChip.height));
+    expect(find.descendant(of: chips().first, matching: find.byIcon(Icons.bolt_rounded)), findsOneWidget);
+
+    await tester.tap(chips().last);
+    await tester.pumpAndSettle();
+    expect(find.byType(NodeSliverGrid), findsOneWidget);
+    await tester.tap(chips().last);
+    await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNothing);
   });
 
@@ -297,19 +321,19 @@ void main() {
     final lower = find.byWidgetPredicate((w) => w is NodeSliverGrid && w.group.type == GroupType.Fallback);
 
     await tester.tap(find.text('fallback'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     final before = tester.element(lower);
     final cell = tester.element(find.text('洛杉矶 01 · 9929').last);
 
     // 在它上面插进一行「自动选择」和一张网格
     await tester.tap(find.text('url-test'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNWidgets(2));
     expect(identical(tester.element(lower), before), isTrue);
     expect(identical(tester.element(find.text('洛杉矶 01 · 9929').last), cell), isTrue);
 
     await tester.tap(find.text('url-test'));
-    await tester.pump();
+    await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(identical(tester.element(lower), before), isTrue);
   });

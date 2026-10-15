@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/morph_menu.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -289,8 +290,9 @@ class MeRow extends StatelessWidget {
                     ),
                   ],
                   if (chevron) ...[
-                    const SizedBox(width: 4),
-                    MeowIcon(MeowGlyph.chevron, size: dense ? 13 : 15, color: mm.t2),
+                    const SizedBox(width: 8),
+                    // 箭头垫奶白胶囊（同节点页组卡的测速 / 展开钮）；整行仍由行自己接点按
+                    MeowChip(child: MeowChipChevron(color: mm.t2)),
                   ],
                 ],
               );
@@ -306,6 +308,7 @@ class MeRow extends StatelessWidget {
 class MeSwitchRow extends StatelessWidget {
   const MeSwitchRow({
     super.key,
+    this.leading,
     required this.label,
     this.subtitle,
     this.subtitleColor,
@@ -313,6 +316,7 @@ class MeSwitchRow extends StatelessWidget {
     required this.onChanged,
   });
 
+  final Widget? leading;
   final String label;
   final String? subtitle;
   final Color? subtitleColor;
@@ -323,6 +327,7 @@ class MeSwitchRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final sw = Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap);
     return MeRow(
+      leading: leading,
       label: label,
       subtitle: subtitle,
       subtitleColor: subtitleColor,
@@ -352,13 +357,16 @@ class MePickerRow<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<T>(
-      tooltip: '',
+    // 整行可点，但面板只从行尾（值 + 箭头那一段）变形出来，行首的标题不动
+    return MeowMenuButton<T>(
+      width: 240,
+      alignEnd: true,
+      anchorWidth: 160,
+      fadeTrigger: false,
+      fromRadius: 12,
       onSelected: onChanged,
-      itemBuilder: (_) => [
-        for (final v in values) CheckedPopupMenuItem(value: v, checked: v == value, child: Text(text(v))),
-      ],
-      child: MeRow(label: label, value: text(value), chevron: true),
+      entries: () => [for (final v in values) MeowMenuItem(v, text(v), checked: v == value)],
+      builder: (_, open) => MeRow(label: label, value: text(value), chevron: true, onTap: open),
     );
   }
 }

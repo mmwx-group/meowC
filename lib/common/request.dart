@@ -29,7 +29,9 @@ class Request {
         return client;
       },
     );
-    _clashDio = Dio();
+    // MeowX：拉订阅加超时（原来没有，请求挂住就永远不结束，updateProfile 的防重入标记一直不清，之后点「刷新」全都没反应，
+    // 用户在 Windows 上报的就是这个）。读取超时是两次收到数据之间的间隔，大订阅照样能拉完。
+    _clashDio = Dio(_subscriptionTimeouts);
     _clashDio.httpClientAdapter = IOHttpClientAdapter(
       createHttpClient: () {
         final client = HttpClient();
@@ -41,7 +43,37 @@ class Request {
         return client;
       },
     );
+    // MeowX：经本机内核拉失败（当前节点连不上 / 超时）时直连再试一次用的客户端
+    _directSubscriptionDio = Dio(_subscriptionTimeouts);
+    _directSubscriptionDio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient();
+        client.autoUncompress = false;
+        client.findProxy = (Uri uri) {
+          client.userAgent = globalState.ua;
+          return 'DIRECT';
+        };
+        return client;
+      },
+    );
   }
+
+  static final _subscriptionTimeouts = BaseOptions(
+    connectTimeout: const Duration(seconds: 15),
+    sendTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 30),
+  );
+  late final Dio _directSubscriptionDio;
+
+  /// 网络层的失败（连不上 / 超时），不含服务器回了 4xx / 5xx：只有这类值得换条路再试。
+  static bool _isNetworkFailure(DioException e) => switch (e.type) {
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout ||
+    DioExceptionType.connectionError => true,
+    DioExceptionType.unknown => e.error is SocketException || e.error is HttpException,
+    _ => false,
+  };
 
   Uint8List _decompressIfNeeded(Uint8List bytes, Headers headers) {
     final encodings =
@@ -201,10 +233,18 @@ class Request {
       headers['Authorization'] = 'Basic $auth';
     }
 
-    final response = await _clashDio.get(
-      requestUrl,
-      options: Options(responseType: ResponseType.bytes, headers: headers),
-    );
+    final options = Options(responseType: ResponseType.bytes, headers: headers);
+    Response response;
+    try {
+      response = await _clashDio.get(requestUrl, options: options);
+    } on DioException catch (e) {
+      // MeowX：内核起着时请求先经本机混合端口走规则 / 当前节点；节点连不上（全局模式、或被分到坏节点）就直连再试一次，
+      // 拉不到再把错误报上去。内核没起时本来就是直连，不重试。
+      final viaCore = globalState.appState.runTime != null;
+      if (!viaCore || !_isNetworkFailure(e)) rethrow;
+      commonPrint.log('subscription fetch via core failed (${e.type}), retrying direct');
+      response = await _directSubscriptionDio.get(requestUrl, options: options);
+    }
 
     final rawBytes = _bytesFromResponse(response);
     final decompressedBytes = _decompressIfNeeded(rawBytes, response.headers);

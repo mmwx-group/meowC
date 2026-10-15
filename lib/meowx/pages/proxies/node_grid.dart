@@ -19,6 +19,7 @@ import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
+import 'group_reveal.dart';
 import 'node_parts.dart';
 
 const _gridSpacing = 8.0;
@@ -161,8 +162,11 @@ class _NodeGridDelegate extends SliverGridDelegate {
 
 /// 懒加载节点网格：只构建可见格子；每格自带 RepaintBoundary。
 class NodeSliverGrid extends ConsumerWidget {
-  const NodeSliverGrid({super.key, required this.group, required this.size, this.dense = false});
+  const NodeSliverGrid({super.key, required this.group, required this.size, this.dense = false, this.reveal});
   final Group group;
+
+  /// 列表布局里正在展开 / 收起时的错峰动画；null = 静止。
+  final GroupReveal? reveal;
 
   /// 卡片档位（决定最小格宽；列数在布局阶段按网格宽度算）。
   final NodeCardSize size;
@@ -185,17 +189,21 @@ class NodeSliverGrid extends ConsumerWidget {
       gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense)),
       delegate: SliverChildBuilderDelegate((context, i) {
         final p = group.all[i];
-        return _NodeCell(
+        return StaggeredItem(
           key: ValueKey(p.name),
-          proxy: p,
-          group: group,
-          meta: metas[p.name],
-          selected: p.name == shownSelected,
-          pinned: pinned.isNotEmpty && p.name == pinned,
-          busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
-          mode: mode,
-          dense: dense,
-          onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
+          reveal: reveal,
+          index: i,
+          child: _NodeCell(
+            proxy: p,
+            group: group,
+            meta: metas[p.name],
+            selected: p.name == shownSelected,
+            pinned: pinned.isNotEmpty && p.name == pinned,
+            busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
+            mode: mode,
+            dense: dense,
+            onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
+          ),
         );
       }, childCount: group.all.length),
     );
@@ -206,7 +214,6 @@ class NodeSliverGrid extends ConsumerWidget {
 /// 白卡；选中 = 柔粉底 + 玫红 2px 描边。
 class _NodeCell extends ConsumerWidget {
   const _NodeCell({
-    super.key,
     required this.proxy,
     required this.group,
     required this.meta,

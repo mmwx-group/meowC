@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import 'motion.dart';
 import 'svg_path.dart';
 import 'tokens.dart';
 
@@ -98,9 +101,10 @@ class _GlyphPainter extends CustomPainter {
   bool shouldRepaint(_GlyphPainter old) => old.path != path || old.color != color || old.stroke != stroke;
 }
 
-/// 分段选择：卡片底胶囊里放等宽分段，选中 = 墨色底配页面底色的字。
+/// 分段选择：卡片底胶囊里放等宽分段，选中 = 墨色滑块配页面底色的字。
 /// [onCard] = 放在白卡片上时槽用次级底（放在主卡 / 页面底上时槽用卡片底）。
-class MeowSegment<T> extends StatelessWidget {
+/// 换段时滑块用弹跳弹簧滑过去（只平移、不拉伸，越过两端的部分被槽的圆角裁掉），段内文字颜色 220ms 交叉渐变。
+class MeowSegment<T> extends StatefulWidget {
   const MeowSegment({
     super.key,
     required this.items,
@@ -119,55 +123,134 @@ class MeowSegment<T> extends StatelessWidget {
   final double fontSize;
 
   @override
+  State<MeowSegment<T>> createState() => _MeowSegmentState<T>();
+}
+
+class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProviderStateMixin {
+  int get _index => widget.items.indexWhere((it) => it.$1 == widget.value);
+
+  /// 滑块所在的段（小数 = 正在两段之间）；[_target] 是它要去的段
+  late int _target = math.max(0, _index);
+  late final _pos = AnimationController.unbounded(vsync: this, value: _target.toDouble());
+
+  @override
+  void didUpdateWidget(MeowSegment<T> old) {
+    super.didUpdateWidget(old);
+    final i = _index;
+    if (i >= 0 && i != _target) {
+      _target = i;
+      MeowMotion.spring(_pos, i.toDouble(), MeowMotion.bouncy, reduce: MeowMotion.reduced(context));
+    }
+  }
+
+  @override
+  void dispose() {
+    _pos.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    final height = widget.height;
     final outer = height >= 40 ? 14.0 : 11.0;
+    final index = _index;
     return Container(
       constraints: BoxConstraints(minHeight: height),
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(color: onCard ? mm.card2 : mm.elev, borderRadius: BorderRadius.circular(outer)),
-      child: Row(
-        children: [
-          for (final (i, it) in items.indexed) ...[
-            if (i > 0) const SizedBox(width: 3),
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: it.$1 == value,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => onChanged(it.$1),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 160),
-                    constraints: BoxConstraints(minHeight: height - 6),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: it.$1 == value ? mm.t1 : Colors.transparent,
-                      borderRadius: BorderRadius.circular(outer - 3),
-                    ),
-                    child: Text(
-                      it.$2,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: it.$1 == value ? FontWeight.w600 : FontWeight.w500,
-                        color: it.$1 == value ? mm.bg : mm.t2,
+      padding: const EdgeInsets.all(_segGap),
+      decoration: BoxDecoration(color: widget.onCard ? mm.card2 : mm.elev, borderRadius: BorderRadius.circular(outer)),
+      child: CustomPaint(
+        painter: _SegmentThumb(
+          pos: _pos,
+          count: widget.items.length,
+          visible: index >= 0,
+          color: mm.t1,
+          radius: outer - _segGap,
+          slotRadius: outer,
+        ),
+        child: Row(
+          children: [
+            for (final (i, it) in widget.items.indexed) ...[
+              if (i > 0) const SizedBox(width: _segGap),
+              Expanded(
+                child: Semantics(
+                  button: true,
+                  selected: i == index,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => widget.onChanged(it.$1),
+                    child: Container(
+                      constraints: BoxConstraints(minHeight: height - _segGap * 2),
+                      alignment: Alignment.center,
+                      child: AnimatedDefaultTextStyle(
+                        duration: MeowMotion.of(context, MeowMotion.colorFade),
+                        style: TextStyle(
+                          fontSize: widget.fontSize,
+                          fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                          color: i == index ? mm.bg : mm.t2,
+                        ),
+                        child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-/// 电源键：已连接 = 樱粉底 + 粉色光晕；未连接 = 墨色底；不可用 = 半透明。
-class MeowPowerButton extends StatelessWidget {
+const _segGap = 3.0;
+
+/// 分段的滑块：画在分段行的背后，位置跟着 [pos] 只重绘、不重排。
+class _SegmentThumb extends CustomPainter {
+  _SegmentThumb({
+    required this.pos,
+    required this.count,
+    required this.visible,
+    required this.color,
+    required this.radius,
+    required this.slotRadius,
+  }) : super(repaint: pos);
+
+  final Animation<double> pos;
+  final int count;
+  final bool visible;
+  final Color color;
+  final double radius, slotRadius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (!visible || count <= 0) return;
+    final w = (size.width - _segGap * (count - 1)) / count;
+    final x = pos.value * (w + _segGap);
+    // 弹簧越过两端时滑块伸进槽的内边距，再往外就被槽的圆角裁掉
+    canvas
+      ..save()
+      ..clipRRect(RRect.fromRectAndRadius((Offset.zero & size).inflate(_segGap), Radius.circular(slotRadius)))
+      ..drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, 0, w, size.height), Radius.circular(radius)), Paint()..color = color)
+      ..restore();
+  }
+
+  @override
+  bool shouldRepaint(_SegmentThumb old) =>
+      old.pos != pos ||
+      old.count != count ||
+      old.visible != visible ||
+      old.color != color ||
+      old.radius != radius ||
+      old.slotRadius != slotRadius;
+}
+
+/// 电源键（圆角方块）：墨色底，「液面」是一层从底边纵向缩放的樱粉色块，只走变换不触发布局，进度本身就是液面、不再叠转圈。
+/// - 连接中（[busy]）：液面 1.2s 先快后慢注到七成，之后 6s 线性涨到 0.92（久连不上也不会注满）；
+/// - 连上（[on]）：弹簧补满，同时一圈樱粉描边外扩一次（涟漪），图标从 0.6 弹回 1、颜色渐变成墨色；
+/// - 断开 / 连接失败：350ms 排空。
+/// 初值按出现时的状态给：切回首页时已连接就是满的，不重放。不可用 = 半透明。
+class MeowPowerButton extends StatefulWidget {
   const MeowPowerButton({
     super.key,
     required this.on,
@@ -182,42 +265,156 @@ class MeowPowerButton extends StatelessWidget {
   final double size;
 
   @override
+  State<MeowPowerButton> createState() => _MeowPowerButtonState();
+}
+
+enum _PowerPhase { off, connecting, on }
+
+class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderStateMixin {
+  late final _level = AnimationController.unbounded(vsync: this, value: widget.on ? 1 : 0);
+  late final _ripple = AnimationController(vsync: this, duration: MeowMotion.ripple);
+  late final _icon = AnimationController.unbounded(vsync: this, value: 1);
+  bool _started = false;
+
+  _PowerPhase _phaseOf(MeowPowerButton w) =>
+      w.on ? _PowerPhase.on : (w.busy ? _PowerPhase.connecting : _PowerPhase.off);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 连接中切回来：接着注（从底开始，之前注到哪了不知道）
+    if (!_started) {
+      _started = true;
+      if (_phaseOf(widget) == _PowerPhase.connecting) _apply(_PowerPhase.connecting);
+    }
+  }
+
+  @override
+  void didUpdateWidget(MeowPowerButton old) {
+    super.didUpdateWidget(old);
+    final next = _phaseOf(widget);
+    if (next != _phaseOf(old)) _apply(next);
+  }
+
+  void _apply(_PowerPhase phase) {
+    final reduce = MeowMotion.reduced(context);
+    switch (phase) {
+      case _PowerPhase.connecting:
+        if (reduce) {
+          _level.value = MeowMotion.pourFastLevel;
+        } else {
+          _level.animateWith(PourSimulation(_level.value));
+        }
+      case _PowerPhase.on:
+        MeowMotion.spring(_level, 1, MeowMotion.bouncy, reduce: reduce);
+        if (!reduce) {
+          _ripple.forward(from: 0);
+          _icon.value = MeowMotion.iconPopFrom;
+          MeowMotion.spring(_icon, 1, MeowMotion.bouncy);
+        }
+      case _PowerPhase.off:
+        if (reduce) {
+          _level.value = 0;
+        } else {
+          _level.animateTo(0, duration: MeowMotion.drainDuration, curve: MeowMotion.drain);
+        }
+    }
+  }
+
+  @override
+  void dispose() {
+    _level.dispose();
+    _ripple.dispose();
+    _icon.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final bg = on ? mm.btnOn : mm.t1;
-    final fg = on ? mm.onBtn : mm.bg;
-    final glyph = size * 0.43;
+    final on = widget.on;
+    final size = widget.size;
+    final radius = BorderRadius.circular(size * 0.325);
     return Semantics(
       button: true,
-      enabled: enabled,
-      label: on ? '断开连接' : '连接',
+      enabled: widget.enabled,
+      label: on ? '断开连接' : (widget.busy ? '正在连接' : '连接'),
       child: Opacity(
-        opacity: enabled || busy ? 1 : 0.4,
+        opacity: widget.enabled || widget.busy ? 1 : 0.4,
         child: GestureDetector(
-          onTap: enabled ? onTap : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: BorderRadius.circular(size * 0.325),
-              boxShadow: [
-                BoxShadow(
-                  color: on ? mm.pink.withValues(alpha: 0.5) : const Color(0x382A2130),
-                  blurRadius: size * 0.25,
-                  offset: Offset(0, size * 0.1),
+          onTap: widget.enabled ? widget.onTap : null,
+          child: SizedBox.square(
+            dimension: size,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // 底：阴影只换颜色、半径不变
+                Positioned.fill(
+                  child: AnimatedContainer(
+                    duration: MeowMotion.of(context, MeowMotion.colorFade),
+                    decoration: BoxDecoration(
+                      color: mm.t1,
+                      borderRadius: radius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: on ? mm.pink.withValues(alpha: 0.5) : const Color(0x382A2130),
+                          blurRadius: size * 0.25,
+                          offset: Offset(0, size * 0.1),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // 液面：弹簧补满时会越过 1，越出的部分被圆角裁掉
+                Positioned.fill(
+                  child: ClipRRect(
+                    borderRadius: radius,
+                    child: AnimatedBuilder(
+                      animation: _level,
+                      builder: (_, child) => Transform(
+                        alignment: Alignment.bottomCenter,
+                        transform: Matrix4.diagonal3Values(1, _level.value.clamp(0.0, 1.5), 1),
+                        child: child,
+                      ),
+                      child: ColoredBox(color: mm.btnOn),
+                    ),
+                  ),
+                ),
+                // 涟漪：连上那一下外扩一圈，平时不画
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: _ripple,
+                      builder: (_, child) {
+                        final v = _ripple.value;
+                        if (v <= 0 || v >= 1) return const SizedBox.shrink();
+                        final t = MeowMotion.emphasized.transform(v);
+                        return Opacity(
+                          opacity: 0.8 * (1 - t),
+                          child: Transform.scale(scale: 1 + 0.5 * t, child: child),
+                        );
+                      },
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: radius,
+                          border: Border.all(color: mm.btnOn, width: 2),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Center(
+                  child: ScaleTransition(
+                    scale: _icon,
+                    child: TweenAnimationBuilder<Color?>(
+                      tween: ColorTween(end: on ? mm.onBtn : mm.bg),
+                      duration: MeowMotion.of(context, MeowMotion.colorFade),
+                      builder: (_, c, _) => MeowIcon(MeowGlyph.power, size: size * 0.43, color: c, stroke: 2.2),
+                    ),
+                  ),
                 ),
               ],
             ),
-            alignment: Alignment.center,
-            child: busy
-                ? SizedBox(
-                    width: glyph * 0.7,
-                    height: glyph * 0.7,
-                    child: CircularProgressIndicator(strokeWidth: 2.4, color: fg),
-                  )
-                : MeowIcon(MeowGlyph.power, size: glyph, color: fg, stroke: 2.2),
           ),
         ),
       ),
@@ -280,6 +477,47 @@ class IconTile extends StatelessWidget {
       child: glyph != null ? MeowIcon(glyph!, size: size * 0.53, color: fg) : Icon(icon, size: size * 0.56, color: fg),
     );
   }
+}
+
+/// 小按钮的底：40×30 奶白胶囊（同延迟胶囊一族，底色 card2），里面放 13–14 号的图标。
+/// 节点页组卡的测速 / 展开钮、设置行末尾的箭头都用它（以前是裸的小图标，iOS 上用户反馈太小不好点）。
+/// [onTap] 为 null = 只是个底（整行的点按照旧由行自己接）。
+class MeowChip extends StatelessWidget {
+  const MeowChip({super.key, required this.child, this.onTap, this.tooltip});
+
+  static const width = 40.0, height = 30.0;
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final body = Material(
+      color: context.mm.card2,
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(width: width, height: height, child: Center(child: child)),
+      ),
+    );
+    return tooltip == null ? body : Tooltip(message: tooltip, child: body);
+  }
+}
+
+/// 胶囊里的箭头（设置行行尾、节点页组卡的展开钮共用），对齐 iOS 的 13pt 中粗 `chevron.right`：约 8dp 高、2dp 粗。
+/// 箭头路径在 24 网格里只占 12 格高、描边也跟着缩放——以前直接用 14 号的 [MeowIcon]，画出来 7dp 高、1.1dp 粗，
+/// 用户对照 iOS 说「箭头按钮要和 iOS 保持一致」。
+class MeowChipChevron extends StatelessWidget {
+  const MeowChipChevron({super.key, this.color});
+  final Color? color;
+
+  static const size = 16.0, stroke = 3.0;
+
+  @override
+  Widget build(BuildContext context) =>
+      MeowIcon(MeowGlyph.chevron, size: size, stroke: stroke, color: color ?? context.mm.t2);
 }
 
 /// 状态小圆点 + 文案。

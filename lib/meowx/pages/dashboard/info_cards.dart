@@ -18,6 +18,7 @@ import '../../state/format.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/glass_card.dart';
+import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../settings/proxy_apps_page.dart';
@@ -100,9 +101,8 @@ class HomeSubscriptionCard extends ConsumerWidget {
               // 名称最多占六成、用量最多占四成（放不下就缩小）：TB 级套餐 + 窄屏 + 大字号时不把订阅名挤没 / 整行越界
               Flexible(
                 flex: 3,
-                child: PopupMenuButton<String>(
-                  tooltip: '切换订阅',
-                  padding: EdgeInsets.zero,
+                child: MeowMenuButton<String>(
+                  width: 240,
                   // 改 currentProfileId 即切换（ClashManager 监听后自动重载）。
                   // 之前调的 setProfileAndAutoApply 只是「更新并重载当前档」，选了别的订阅不会切过去。
                   onSelected: (id) {
@@ -110,24 +110,33 @@ class HomeSubscriptionCard extends ConsumerWidget {
                       ref.read(currentProfileIdProvider.notifier).value = id;
                     }
                   },
-                  itemBuilder: (_) => [
-                    for (final p in profiles)
-                      PopupMenuItem(value: p.id, child: Text(p.label ?? p.id, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  entries: () => [
+                    for (final p in profiles) MeowMenuItem(p.id, p.label ?? p.id, checked: p.id == profile.id),
                   ],
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          profile.label ?? profile.id,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
+                  builder: (_, open) => Tooltip(
+                    message: '切换订阅',
+                    child: InkWell(
+                      onTap: open,
+                      borderRadius: BorderRadius.circular(10),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                profile.label ?? profile.id,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            MeowIcon(MeowGlyph.updown, size: dense ? 12 : 13, color: mm.t2),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      MeowIcon(MeowGlyph.updown, size: dense ? 12 : 13, color: mm.t2),
-                    ],
+                    ),
                   ),
                 ),
               ),

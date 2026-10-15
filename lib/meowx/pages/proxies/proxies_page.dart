@@ -13,10 +13,14 @@ import '../../panel/account.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
+import '../../theme/morph_menu.dart';
+import '../../theme/motion.dart';
 import '../../theme/page_title.dart';
+import '../../theme/sliver_reveal.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
+import 'group_reveal.dart';
 import 'group_widgets.dart';
 import 'node_grid.dart';
 import 'node_parts.dart';
@@ -52,8 +56,11 @@ class ProxiesPage extends ConsumerStatefulWidget {
   ConsumerState<ProxiesPage> createState() => _ProxiesPageState();
 }
 
-class _ProxiesPageState extends ConsumerState<ProxiesPage> {
+class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderStateMixin {
   bool _testingAll = false;
+
+  /// 正在展开 / 收起的组（列表布局）。收起中的组还在 [expandedGroupsProvider] 之外画着，播完才拆掉。
+  final _reveals = <String, GroupReveal>{};
 
   @override
   void initState() {
@@ -61,6 +68,39 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     ref.listenManual(meowTabProvider, (prev, next) {
       if (next == MeowTab.proxies) _refreshExtras();
     }, fireImmediately: true);
+  }
+
+  @override
+  void dispose() {
+    for (final r in _reveals.values) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  /// 点组卡：展开 / 收起，并只在这一下播动画（滚动回来、重建都不重播）。
+  void _toggleGroup(Group g) {
+    final set = {...ref.read(expandedGroupsProvider)};
+    final opening = !set.remove(g.name);
+    if (opening) set.add(g.name);
+    ref.read(expandedGroupsProvider.notifier).state = set;
+    if (MeowMotion.reduced(context)) {
+      _drop(g.name);
+      return;
+    }
+    final r = _reveals.putIfAbsent(g.name, () => GroupReveal(vsync: this, count: g.all.length, from: opening ? 0 : 1))
+      ..count = g.all.length;
+    void done() => _drop(g.name);
+    opening ? r.open(done) : r.close(done);
+    setState(() {});
+  }
+
+  /// 动画播完（或不播）：回到静止形态。控制器等这一帧画完再释放——这一帧里还有监听它们的部件。
+  void _drop(String name) {
+    final r = _reveals.remove(name);
+    if (r == null) return;
+    if (mounted) setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) => r.dispose());
   }
 
   void _refreshExtras() {
@@ -82,8 +122,17 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
   /// 不用 SliverMainAxisGroup：它滚动后的命中测试有偏移，节点点不中。
   /// 每个 sliver 按组名带 key：展开 / 收起一个组会在中间插入 / 抽走 sliver，没有 key 的话后面的 sliver 逐个错位重配——
   /// 组卡被换成另一个组的内容，下方已展开的网格被拆掉重建。
+  /// 展开 / 收起时，组卡下面那段（「自动选择」行 + 网格）由 [SliverReveal] 按 [GroupReveal.height] 露出，
+  /// 里面的格子按序号错峰（[StaggeredItem]）。静止时同样套着这两层（比例 1、不透明），结构不变、动画结束不重建网格。
   List<Widget> _groupSlivers(Group g, {required bool expanded, required NodeCardSize size, required EdgeInsets pad}) {
     final side = EdgeInsets.only(left: pad.left, right: pad.right);
+    final reveal = _reveals[g.name];
+    final shown = expanded || reveal != null;
+    Widget revealed(Widget sliver) => AnimatedBuilder(
+      animation: reveal?.height ?? kAlwaysCompleteAnimation,
+      builder: (_, child) => SliverReveal(factor: reveal?.height.value ?? 1, sliver: child!),
+      child: sliver,
+    );
     return [
       SliverPadding(
         key: ValueKey('card:${g.name}'),
@@ -92,25 +141,31 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
           child: GroupCard(
             group: g,
             expanded: expanded,
-            onTap: () {
-              final set = {...ref.read(expandedGroupsProvider)};
-              if (!set.remove(g.name)) set.add(g.name);
-              ref.read(expandedGroupsProvider.notifier).state = set;
-            },
+            onTap: () => _toggleGroup(g),
           ),
         ),
       ),
-      if (expanded) ...[
+      if (shown) ...[
         if (g.type.isComputedSelected)
-          SliverPadding(
+          KeyedSubtree(
             key: ValueKey('auto:${g.name}'),
-            padding: side.copyWith(bottom: 8),
-            sliver: SliverToBoxAdapter(child: AutoSelectToggle(group: g)),
+            child: revealed(
+              SliverPadding(
+                padding: side.copyWith(bottom: 8),
+                sliver: SliverToBoxAdapter(
+                  child: StaggeredItem(reveal: reveal, index: 0, child: AutoSelectToggle(group: g)),
+                ),
+              ),
+            ),
           ),
-        SliverPadding(
+        KeyedSubtree(
           key: ValueKey('grid:${g.name}'),
-          padding: side.copyWith(bottom: 16),
-          sliver: NodeSliverGrid(group: g, size: size),
+          child: revealed(
+            SliverPadding(
+              padding: side.copyWith(bottom: 16),
+              sliver: NodeSliverGrid(group: g, size: size, reveal: reveal),
+            ),
+          ),
         ),
       ],
     ];
@@ -147,8 +202,10 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          PopupMenuButton<Object>(
-            tooltip: S.nodeView,
+          MeowMenuButton<Object>(
+            width: 200,
+            alignEnd: true,
+            fromColor: mm.elev,
             onSelected: (v) => ref
                 .read(meowSettingProvider.notifier)
                 .updateState(
@@ -158,27 +215,17 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
                     _ => s,
                   },
                 ),
-            itemBuilder: (_) => [
+            entries: () => [
               // 两栏时布局是定的，布局切换只给单列（手机、平板竖屏）
               if (!twoPane) ...[
-                _menuCaption(S.layout, mm),
-                for (final v in ProxyLayout.values)
-                  CheckedPopupMenuItem<Object>(
-                    value: v,
-                    checked: v == layout,
-                    child: Text(v.label),
-                  ),
-                const PopupMenuDivider(),
-                _menuCaption(S.cardSize, mm),
+                const MeowMenuCaption(S.layout),
+                for (final v in ProxyLayout.values) MeowMenuItem<Object>(v, v.label, checked: v == layout),
+                const MeowMenuDivider(),
               ],
-              for (final v in NodeCardSize.values)
-                CheckedPopupMenuItem<Object>(
-                  value: v,
-                  checked: v == size,
-                  child: Text(v.label),
-                ),
+              const MeowMenuCaption(S.cardSize),
+              for (final v in NodeCardSize.values) MeowMenuItem<Object>(v, v.label, checked: v == size),
             ],
-            child: const RoundGlassButton(icon: Icons.grid_view_rounded, onTap: null),
+            builder: (_, open) => RoundGlassButton(icon: Icons.grid_view_rounded, tooltip: S.nodeView, onTap: open),
           ),
           const SizedBox(width: 8),
           if (twoPane)
@@ -289,15 +336,6 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> {
     );
   }
 }
-
-PopupMenuItem<Object> _menuCaption(String text, MeowTokens mm) => PopupMenuItem(
-  enabled: false,
-  height: 28,
-  child: Text(
-    text,
-    style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
-  ),
-);
 
 /// 一个组的内容：摘要卡 + 懒加载节点网格。标签布局的每一页、宽屏右栏都是它；滚动位置按组记。
 class _GroupPage extends StatelessWidget {

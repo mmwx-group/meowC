@@ -13,6 +13,7 @@ import '../../config/direct_profile.dart';
 import '../../panel/account.dart';
 import '../../state/format.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 
@@ -64,14 +65,10 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     }
   }
 
-  List<PopupMenuEntry<_ProfileAction>> _menuItems(Profile p) => [
-    if (p.url.isNotEmpty) const PopupMenuItem(value: _ProfileAction.refresh, child: Text('刷新')),
-    const PopupMenuItem(value: _ProfileAction.view, child: Text('查看配置')),
-    if (!isDirectProfile(p.id))
-      PopupMenuItem(
-        value: _ProfileAction.delete,
-        child: Text('删除', style: TextStyle(color: context.mm.slow)),
-      ),
+  List<MeowMenuEntry<_ProfileAction>> _menuItems(Profile p) => [
+    if (p.url.isNotEmpty) const MeowMenuItem(_ProfileAction.refresh, '刷新'),
+    const MeowMenuItem(_ProfileAction.view, '查看配置'),
+    if (!isDirectProfile(p.id)) MeowMenuItem(_ProfileAction.delete, '删除', color: context.mm.slow),
   ];
 
   Future<void> _run(_ProfileAction action, Profile p) async {
@@ -100,11 +97,14 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
 
   /// 非当前档没有「⋯」钮：长按 / 右键在指针处弹同一份菜单。
   Future<void> _menuAt(Offset position, Profile p) async {
-    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
-    final action = await showMenu<_ProfileAction>(
-      context: context,
-      position: RelativeRect.fromRect(position & Size.zero, Offset.zero & overlay.size),
-      items: _menuItems(p),
+    // 没有触发按钮：从指针那一点长出来（起点是卡片白、直角）
+    final action = await showMeowMenu<_ProfileAction>(
+      context,
+      anchor: position & Size.zero,
+      entries: _menuItems(p),
+      width: 200,
+      fromColor: context.mm.elev,
+      fromRadius: 0,
     );
     if (action != null) await _run(action, p);
   }
@@ -142,12 +142,17 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
         if (p.id == currentId)
           _CurrentTile(
             profile: p,
-            menu: PopupMenuButton<_ProfileAction>(
-              tooltip: '订阅管理',
-              padding: EdgeInsets.zero,
-              icon: Icon(Icons.more_horiz_rounded, size: 20, color: mm.t2),
+            menu: MeowMenuButton<_ProfileAction>(
+              width: 200,
+              alignEnd: true,
               onSelected: (a) => _run(a, p),
-              itemBuilder: (_) => _menuItems(p),
+              entries: () => _menuItems(p),
+              builder: (_, open) => IconButton(
+                tooltip: '订阅管理',
+                padding: EdgeInsets.zero,
+                icon: Icon(Icons.more_horiz_rounded, size: 20, color: mm.t2),
+                onPressed: open,
+              ),
             ),
           )
         else

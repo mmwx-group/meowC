@@ -104,7 +104,7 @@ class _MePageState extends ConsumerState<MePage> {
     ];
     const rest = <Widget>[
       MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
-      MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogRows(), AboutRows()]),
+      MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
     ];
     // Windows：第 2 列全是专属分组，通用分组都在第 3 列；平板没有那么多专属项，通用分组两列对半分
     final colA = isDesktopUi ? platform : [proxy, traffic, ...platform];
@@ -196,7 +196,7 @@ enum _Glyph {
 @visibleForTesting
 List<String> get meEntryGlyphPaths => [for (final g in _Glyph.values) g.d];
 
-/// 手机上的设置入口：每行 = 图标方块 + 名字 + 当前值摘要 + 箭头，点进二级页。
+/// 手机上的设置入口：每行 = 图标方块 + 名字 + 当前值摘要 + 箭头，点进二级页（「记录日志」只有一个开关，直接是开关行）。
 /// 平台专属的几行（Android：代理应用 / VPN 与系统；Windows：启动与窗口 / 接管方式 / 全局快捷键）用粉色图标方块。
 class _EntryList extends ConsumerWidget {
   const _EntryList();
@@ -215,14 +215,15 @@ class _EntryList extends ConsumerWidget {
     final bypassCount = meow.bypassDomains.length + meow.bypassCidrs.length;
     final availableUpdate = ref.watch(availableUpdateProvider);
 
+    Widget icon(_Glyph glyph, {bool platform = false}) => Container(
+      width: 32,
+      height: 32,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(color: platform ? mm.soft : mm.card2, borderRadius: BorderRadius.circular(10)),
+      child: MeowIcon.path(glyph.d, size: 17, color: platform ? mm.accent : mm.t1),
+    );
     Widget entry(_Glyph glyph, String label, String? value, VoidCallback onTap, {bool platform = false}) => MeRow(
-      leading: Container(
-        width: 32,
-        height: 32,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(color: platform ? mm.soft : mm.card2, borderRadius: BorderRadius.circular(10)),
-        child: MeowIcon.path(glyph.d, size: 17, color: platform ? mm.accent : mm.t1),
-      ),
+      leading: icon(glyph, platform: platform),
       label: label,
       value: value,
       chevron: true,
@@ -294,7 +295,8 @@ class _EntryList extends ConsumerWidget {
           '${syncIntervalLabels[meow.syncIntervalHours] ?? syncIntervalLabels[24]}${meow.po0Enabled ? ' · po0 加白' : ''}',
           page('订阅同步', const SyncRows()),
         ),
-        entry(_Glyph.log, '日志', app.openLogs ? '已开启' : '未开启', page('日志', const LogRows())),
+        // 只有一个开关，直接放在列表里，不进二级页
+        LogSwitchRow(leading: icon(_Glyph.log)),
         entry(_Glyph.appearance, '外观', themeModeLabel(themeMode), page('外观', const AppearanceRows())),
         entry(_Glyph.advanced, '高级', '内核配置 · 备份 · 脚本', () => openAdvanced(context)),
         entry(
