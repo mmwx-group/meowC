@@ -3,7 +3,7 @@ import 'package:bett_box/meowx/panel/unlock_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const item = {'name': '套餐 A', 'filename': 'a.yaml', 'subscription_path': '/s/abc', 'expire_at': '2027-01-02T03:04:05Z', 'traffic_used': 1024, 'traffic_total': '2048'};
+  const item = {'name': '套餐 A', 'filename': 'a.yaml', 'subscription_path': '/x/abc', 'expire_at': '2027-01-02T03:04:05Z', 'traffic_used': 1024, 'traffic_total': '2048'};
 
   test('订阅列表三种形状', () {
     for (final shape in [
@@ -28,9 +28,41 @@ void main() {
 
   test('下载地址：短链优先，回退 subscribe 接口', () {
     final s = RemoteSubscription.parseList([item]).single;
-    expect(s.downloadUrl('https://panel.example.com/', subscriptionToken: 'T'), 'https://panel.example.com/s/abc');
+    expect(s.downloadUrl('https://panel.example.com/', subscriptionToken: 'T'), 'https://panel.example.com/x/abc');
     final noPath = RemoteSubscription.parseList([{'name': 'x', 'filename': 'x y.yaml', 'subscription_path': ''}]).single;
     expect(noPath.downloadUrl('https://panel.example.com', subscriptionToken: 'T'), 'https://panel.example.com/api/clash/subscribe?token=T&filename=x+y.yaml&t=clash');
+  });
+
+  test('下载地址：主控关了短链接时 subscription_path 是要令牌的接口，补上订阅令牌', () {
+    RemoteSubscription sub(String path) => RemoteSubscription.parseList([{'name': 'x', 'filename': 'x.yaml', 'subscription_path': path}]).single;
+    expect(sub('/api/user/package-subscribe?assignment_id=7').downloadUrl('https://panel.example.com', subscriptionToken: 'T'),
+        'https://panel.example.com/api/user/package-subscribe?assignment_id=7&token=T');
+    expect(sub('/api/user/package-subscribe?merged=1').downloadUrl('http://203.0.113.5:12889/', subscriptionToken: 'T'),
+        'http://203.0.113.5:12889/api/user/package-subscribe?merged=1&token=T');
+    expect(sub('/api/clash/subscribe?filename=x.yaml').downloadUrl('https://panel.example.com', subscriptionToken: 'T'),
+        'https://panel.example.com/api/clash/subscribe?filename=x.yaml&token=T');
+    // 已经带了 token 的不重复加；短链不加
+    expect(sub('/api/clash/subscribe?filename=x.yaml&token=X').downloadUrl('https://panel.example.com', subscriptionToken: 'T'),
+        'https://panel.example.com/api/clash/subscribe?filename=x.yaml&token=X');
+    expect(sub('x/abc?t=clash').downloadUrl('https://panel.example.com', subscriptionToken: 'T'), 'https://panel.example.com/x/abc?t=clash');
+  });
+
+  test('账户订阅去重：主控关了短链接时同一路径下按 assignment_id / merged 区分', () {
+    // 与 iOS SubAccountStoreTests.notDownloadedAPIPaths 同一组用例
+    final remote = RemoteSubscription.parseList([
+      {'name': '套餐 7', 'filename': '__package__:7', 'subscription_path': '/api/user/package-subscribe?assignment_id=7'},
+      {'name': '套餐 8', 'filename': '__package__:8', 'subscription_path': '/api/user/package-subscribe?assignment_id=8'},
+      {'name': '全部套餐', 'filename': '__merged__', 'subscription_path': '/api/user/package-subscribe?merged=1'},
+    ]);
+    List<String> names(List<RemoteSubscription> l) => [for (final s in l) s.name];
+    expect(
+      names(notDownloadedSubscriptions(remote: remote, host: 'https://panel.example.com', localUrls: const ['https://panel.example.com/api/user/package-subscribe?assignment_id=7&token=T'])),
+      ['套餐 8', '全部套餐'],
+    );
+    expect(
+      notDownloadedSubscriptions(remote: remote, host: 'https://panel.example.com', localUrls: const ['https://other.example.com/api/user/package-subscribe?assignment_id=7&token=T']).length,
+      3,
+    );
   });
 
   test('登录结果解析', () {

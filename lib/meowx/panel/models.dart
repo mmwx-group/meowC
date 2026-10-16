@@ -42,11 +42,20 @@ class RemoteSubscription {
     ];
   }
 
-  /// 下载地址：短链 `base + subscription_path` 优先，回退 `/api/clash/subscribe?token=&filename=&t=clash`
+  /// 下载地址：`base + subscription_path` 优先，回退 `/api/clash/subscribe?token=&filename=&t=clash`。
+  /// `subscription_path` 只有是短链（`/x/{code}`）时才自带凭证、原样用；主控关掉短链接（或这份订阅没有短码）时给的是
+  /// `/api/clash/subscribe?filename=…`、`/api/user/package-subscribe?assignment_id=…` / `?merged=1`，要补
+  /// `token=<订阅令牌>`（主控网页 buildSubscriptionURL 同样这么拼）。以前不补，主控按令牌无效回「⚠️ 订阅已过期 /
+  /// ⚠️ 请联系管理员」的占位配置、也没有 profile-title，订阅名落成主控的主机名。与 iOS / macOS `SubAccountStore.importURL` 同规则。
   String downloadUrl(String base, {required String subscriptionToken}) {
     final b = base.endsWith('/') ? base.substring(0, base.length - 1) : base;
     if (subscriptionPath.isNotEmpty) {
-      return subscriptionPath.startsWith('/') ? '$b$subscriptionPath' : '$b/$subscriptionPath';
+      final url = subscriptionPath.startsWith('/') ? '$b$subscriptionPath' : '$b/$subscriptionPath';
+      final uri = Uri.tryParse(url);
+      if (uri == null || _normalizedPath(uri.path).startsWith('/x/') || uri.queryParameters.containsKey('token') || subscriptionToken.isEmpty) {
+        return url;
+      }
+      return uri.replace(queryParameters: {...uri.queryParameters, 'token': subscriptionToken}).toString();
     }
     final q = Uri(queryParameters: {'token': subscriptionToken, 'filename': filename, 't': 'clash'}).query;
     return '$b/api/clash/subscribe?$q';
@@ -344,17 +353,30 @@ List<RemoteSubscription> notDownloadedSubscriptions({
     for (final u in localUrls)
       if (u.isNotEmpty) ?Uri.tryParse(u),
   ];
-  final localPaths = {for (final u in locals) _normalizedPath(u.path)}..remove('/');
+  final localPaths = {
+    for (final u in locals)
+      if (_normalizedPath(u.path).startsWith('/x/')) _normalizedPath(u.path),
+  };
+  final localApis = {for (final u in locals) ?_apiIdentity(u)};
   final h = Uri.tryParse(host)?.host.toLowerCase() ?? '';
   return [
     for (final s in remote)
-      if (!_isDownloaded(s, locals, localPaths, h)) s,
+      if (!_isDownloaded(s, locals, localPaths, localApis, h)) s,
   ];
 }
 
-bool _isDownloaded(RemoteSubscription s, List<Uri> locals, Set<String> localPaths, String host) {
-  final path = s.subscriptionPath.isEmpty ? '' : (Uri.tryParse(s.subscriptionPath)?.path ?? '');
-  if (path.isNotEmpty && localPaths.contains(_normalizedPath(path))) return true;
+bool _isDownloaded(RemoteSubscription s, List<Uri> locals, Set<String> localPaths, Set<String> localApis, String host) {
+  final sub = s.subscriptionPath.isEmpty ? null : Uri.tryParse(s.subscriptionPath);
+  if (sub != null && sub.path.isNotEmpty) {
+    final path = _normalizedPath(sub.path);
+    if (path.startsWith('/x/')) {
+      if (localPaths.contains(path)) return true;
+    } else if (host.isNotEmpty) {
+      // 主控关了短链接时的接口地址：同一个路径（如 /api/user/package-subscribe）下靠 assignment_id 等区分，只比路径会把几份套餐当成一份
+      final id = _apiIdentity(Uri(scheme: 'https', host: host, path: path, query: sub.hasQuery ? sub.query : null));
+      if (id != null && localApis.contains(id)) return true;
+    }
+  }
   if (host.isEmpty || s.filename.isEmpty) return false;
   return locals.any(
     (u) =>
@@ -362,6 +384,18 @@ bool _isDownloaded(RemoteSubscription s, List<Uri> locals, Set<String> localPath
         _normalizedPath(u.path) == '/api/clash/subscribe' &&
         u.queryParameters['filename'] == s.filename,
   );
+}
+
+/// 接口式订阅地址的身份：主机 + 路径 + 除 token / t 以外的查询参数（排好序）。短链与没有主机的地址返回 null。
+String? _apiIdentity(Uri u) {
+  final host = u.host.toLowerCase();
+  final path = _normalizedPath(u.path);
+  if (host.isEmpty || path == '/' || path.startsWith('/x/')) return null;
+  final query = [
+    for (final e in u.queryParameters.entries)
+      if (e.key != 'token' && e.key != 't') '${e.key}=${e.value}',
+  ]..sort();
+  return '$host$path?${query.join('&')}';
 }
 
 /// `x/abc/` → `/x/abc`：补前导斜杠、去结尾斜杠，路径比较不受写法影响。
