@@ -256,6 +256,7 @@ Future<void> _pump(
   double textScale = 1.4,
   double bottomInset = 0,
   Brightness brightness = Brightness.light,
+  bool disableAnimations = false,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -273,6 +274,7 @@ Future<void> _pump(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
             padding: EdgeInsets.only(bottom: bottomInset),
+            disableAnimations: disableAnimations,
           ),
           child: child!,
         ),
@@ -334,6 +336,8 @@ void main() {
         meowTabProvider.overrideWith((ref) => MeowTab.proxies),
       ],
       textScale: 1,
+      // 首页网速图在首页时逐帧重画（下一个用例单独测它）；这里要看的是数据写入会不会带出重建，关掉动画免得它一直要帧
+      disableAnimations: true,
     );
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
     // 首次构建用的是当时的值
@@ -377,6 +381,24 @@ void main() {
     await tester.pump();
     container.read(runTimeProvider.notifier).value = 8080400;
     await expectNoFrameRequested(tester, reason: '同一秒的第二次写入');
+  });
+
+  testWidgets('网速折线：在首页且已连接时逐帧重画（连续滚动），切到别的页就停、不再要帧', (tester) async {
+    await _pump(tester, _page(), size: const Size(412, 1400), overrides: _overrides(running: true, profile: _profile), textScale: 1);
+    final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
+    useReleaseProviderFrames();
+    for (var second = 1; second <= 3; second++) {
+      container.read(trafficsProvider.notifier).addTraffic(Traffic(up: 1024 * second, down: 1024 * 1024 * second));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+    // 两次推送之间没有数据变化，折线照样在动
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.binding.hasScheduledFrame, isTrue, reason: '在首页：折线逐帧重画');
+
+    container.read(meowTabProvider.notifier).state = MeowTab.proxies;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    await expectNoFrameRequested(tester, reason: '离开首页：折线停下');
   });
 
   testWidgets('不在首页时起停：主卡照常跟上（连接状态不是每秒数据）', (tester) async {
