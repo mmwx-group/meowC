@@ -108,6 +108,5 @@
 - 同一处：内核起着时订阅请求先经本机混合端口走规则 / 当前节点（`BettboxHttpOverrides.handleFindProxy`）；节点连不上（全局模式、或被分到坏节点）时，网络层失败（超时 / 连不上，不含 4xx / 5xx）就用直连客户端再试一次，还拉不到才把错误报上去。内核没起时本来就直连，不重试。
 
 ## 2026-10-17 · 网络测速
-- 新增 `core/Clash.Meta/component/speedtest`（内核包，与 OpenWrt 版共用）：经选定**节点**直接拨号（`proxy.DialContext`，不经分流规则）连测速服务器，测延迟 → 下载 10 秒 → 上传 10 秒，单线程或 8 线程；四个测速源 Google / Apple / Speedtest / Cloudflare；字节记进 mihomo 流量统计。
-- `core/Clash.Meta/hub/route/speedtest.go` + `server.go`：external controller 加 `/speedtest`（POST 开始 / GET 进度 / DELETE 取消），给 OpenWrt 版的 LuCI 用。
+- 新增 `core/Clash.Meta/component/speedtest`（内核包）：经选定**节点**直接拨号（`proxy.DialContext`，不经分流规则）连测速服务器，测延迟 → 下载 10 秒 → 上传 10 秒，单线程或 8 线程；四个测速源 Google / Apple / Speedtest / Cloudflare；字节记进 mihomo 流量统计。
 - `core/meow_speedtest.go`、`core/constant.go`、`core/action.go`：桥层加 `meowSpeedTestStart` / `meowSpeedTestStatus` / `meowSpeedTestStop` 三个方法；`lib/enum/enum.dart`、`lib/models/generated/core.g.dart` 加对应的 `ActionMethod`。

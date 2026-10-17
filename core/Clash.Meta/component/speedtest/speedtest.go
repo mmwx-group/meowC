@@ -24,7 +24,7 @@ import (
 )
 
 // Package speedtest 是 MeowX 的网络测速（与 iOS / macOS 的 SpeedTestRunner 同一套测法），
-// meowC（Android / Windows，经 Bettbox 桥 core/meow_speedtest.go）与 OpenWrt 版（经 external controller 的 /speedtest）共用。
+// meowC（Android / Windows）经 Bettbox 桥 core/meow_speedtest.go 调用。
 //
 // 经用户选定的**节点**直接拨号连测速服务器（proxy.DialContext，不经分流规则、不经 TUN / 本地混合端口）：
 // 先测延迟（同一条已建好的连接上连发小请求、取中位数），再下载、上传各 10 秒（单线程或多线程），
