@@ -263,6 +263,11 @@ enum ActionMethod {
   /// MeowX：po0 客户端 IP 加白上报（核心直连 POST）
   meowPo0Report,
 
+  /// MeowX：网络测速（经选定节点直连测速服务器，见 core/meow_speedtest.go）
+  meowSpeedTestStart,
+  meowSpeedTestStatus,
+  meowSpeedTestStop,
+
   ///Android,
   setState,
   startTun,

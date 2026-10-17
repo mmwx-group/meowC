@@ -135,6 +135,10 @@ const (
 	getModeMethod                         Method = "getMode"
 	// MeowX：po0 客户端 IP 加白上报（见 meow_po0.go）
 	meowPo0ReportMethod                   Method = "meowPo0Report"
+	// MeowX：网络测速（见 meow_speedtest.go）
+	meowSpeedTestStartMethod              Method = "meowSpeedTestStart"
+	meowSpeedTestStatusMethod             Method = "meowSpeedTestStatus"
+	meowSpeedTestStopMethod               Method = "meowSpeedTestStop"
 	parseExternalProviderContentMethod    Method = "parseExternalProviderContent"
 	getCoreStatusMethod                   Method = "getCoreStatus"
 )

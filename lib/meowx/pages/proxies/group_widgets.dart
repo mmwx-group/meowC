@@ -160,38 +160,68 @@ Future<String?> showGroupPicker(
   );
 }
 
-/// 测速本组；测速中转圈。默认是摘要卡里的「测速」胶囊，[compact] = 列表布局组卡上奶白胶囊里的闪电。
-class GroupTestButton extends StatelessWidget {
-  const GroupTestButton({super.key, required this.group, this.compact = false, this.height = 44});
+/// 测速本组 + 组延迟合成一个钮（与 iOS / macOS 的 LatencyTestButton 一致）：没测过是闪电（摘要卡的胶囊带「测速」二字），
+/// 测过显示组延迟（= 当前选中节点的延迟，色阶同 [MsChip]），测速中转圈；点一下重新测本组。
+/// 默认是摘要卡里的胶囊，[compact] = 列表布局组卡上奶白胶囊。
+class GroupTestButton extends ConsumerWidget {
+  const GroupTestButton({super.key, required this.group, required this.delay, this.compact = false, this.height = 44});
   final Group group;
+
+  /// 组延迟（getDelayProvider 同口径：null = 没测过，0 = 测试中，<0 = 超时）
+  final int? delay;
   final bool compact;
   final double height;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final mm = context.mm;
+    final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     return ListenableBuilder(
       listenable: delayTestCoordinator,
       builder: (_, _) {
-        final testing = delayTestCoordinator.isTestingGroup(group.name);
+        final testing = delayTestCoordinator.isTestingGroup(group.name) || delay == 0;
         void run() => delayTest(group.all, testUrl: group.testUrl, groupName: group.name);
-        if (!compact) {
-          return Tooltip(
-            message: S.testGroup,
-            child: PillButton(label: '测速', busy: testing, height: height, onTap: run),
+        final Widget content;
+        if (testing) {
+          content = SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent));
+        } else if (delay == null) {
+          // 20 号：Material 的 bolt 在 24 格里留白多，20 号才和 iOS 胶囊里 14pt 的 bolt.fill 一样大
+          final bolt = Icon(Icons.bolt_rounded, size: compact ? 20 : 17, color: mm.accent);
+          content = compact
+              ? bolt
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    bolt,
+                    const SizedBox(width: 2),
+                    Text('测速', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: mm.t1)),
+                  ],
+                );
+        } else {
+          final (text, color) = msStyle(mm, delay, mode);
+          content = Text(
+            text,
+            maxLines: 1,
+            softWrap: false,
+            style: MeowFont.mono(size: compact ? 12 : 13, weight: FontWeight.w700, color: color),
           );
         }
-        return MeowChip(
-          tooltip: S.testGroup,
-          onTap: testing ? null : run,
-          child: testing
-              ? SizedBox(
-                  width: 13,
-                  height: 13,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent),
-                )
-              // 20 号：Material 的 bolt 在 24 格里留白多，20 号才和 iOS 胶囊里 14pt 的 bolt.fill 一样大
-              : Icon(Icons.bolt_rounded, size: 20, color: mm.accent),
+        return Tooltip(
+          message: S.testGroup,
+          child: Material(
+            color: compact ? mm.card2 : mm.elev,
+            shape: const StadiumBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: testing ? null : run,
+              child: Container(
+                constraints: BoxConstraints(minWidth: compact ? MeowChip.width : 64, minHeight: compact ? MeowChip.height : height),
+                padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 14),
+                alignment: Alignment.center,
+                child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: content),
+              ),
+            ),
+          ),
         );
       },
     );
@@ -293,6 +323,7 @@ class GroupCard extends ConsumerWidget {
     final open = expanded == true;
     final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
+    final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
     return Material(
       // 深色主题的 soft 是半透明的，先叠到卡片底上
       color: selected ? Color.alphaBlend(mm.soft, mm.elev) : (open ? mm.hero : mm.elev),
@@ -349,12 +380,10 @@ class GroupCard extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           CurrentBadges(groupName: group.name),
-                          if (current.isNotEmpty) ...[
+                          // 列表布局里延迟在组头的测速钮上；选组面板的组卡没有测速钮，延迟留在这一行
+                          if (current.isNotEmpty && !list) ...[
                             const SizedBox(width: 6),
-                            MsChip(
-                              ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl)),
-                              mode: mode,
-                            ),
+                            MsChip(delay, mode: mode),
                           ],
                         ],
                       ),
@@ -364,7 +393,7 @@ class GroupCard extends ConsumerWidget {
               ),
               if (list) ...[
                 const SizedBox(width: 8),
-                GroupTestButton(group: group, compact: true),
+                GroupTestButton(group: group, delay: delay, compact: true),
                 const SizedBox(width: 6),
                 // 箭头胶囊本身也能点：与点组卡同一个动作（展开 / 收起）
                 MeowChip(onTap: onTap, child: _GroupChevron(open: open)),
@@ -431,7 +460,6 @@ class GroupSummary extends ConsumerWidget {
     final current = (pending != null && pending.isNotEmpty)
         ? pending
         : (ref.watch(getSelectedProxyNameProvider(group.name)) ?? '');
-    final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final currentIcon = current.isEmpty ? '' : ref.watch(groupIconProvider(current));
     final delay = current.isEmpty
         ? null
@@ -500,13 +528,6 @@ class GroupSummary extends ConsumerWidget {
                           style: TextStyle(fontSize: 12, color: mm.t2),
                         ),
                       ),
-                      if (current.isNotEmpty)
-                        Text(
-                          ' · ${msStyle(mm, delay, mode).$1}',
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(fontSize: 12, color: mm.t2),
-                        ),
                       CurrentBadges(groupName: group.name),
                     ],
                   ),
@@ -515,7 +536,7 @@ class GroupSummary extends ConsumerWidget {
             ),
             if (computed) ...[const SizedBox(width: 10), AutoSelectToggle(group: group, pill: true)],
             const SizedBox(width: 10),
-            GroupTestButton(group: group, height: 40),
+            GroupTestButton(group: group, delay: delay, height: 40),
           ],
         ),
       );
@@ -551,12 +572,8 @@ class GroupSummary extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (current.isNotEmpty) ...[
-                const SizedBox(width: 10),
-                MsChip(delay, mode: mode, bg: mm.elev, size: 12),
-              ],
               const SizedBox(width: 10),
-              GroupTestButton(group: group),
+              GroupTestButton(group: group, delay: delay),
             ],
           ),
           if (computed) ...[const SizedBox(height: 10), AutoSelectToggle(group: group)],

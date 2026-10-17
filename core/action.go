@@ -259,6 +259,17 @@ func handleAction(action *Action, result ActionResult) {
 			result.success(value)
 		})
 		return
+	case meowSpeedTestStartMethod:
+		// 回空串 = 已开始，否则是没能开始的原因
+		result.success(handleMeowSpeedTestStart(action.Data.(string)))
+		return
+	case meowSpeedTestStatusMethod:
+		result.success(handleMeowSpeedTestStatus())
+		return
+	case meowSpeedTestStopMethod:
+		handleMeowSpeedTestStop()
+		result.success("")
+		return
 	case crashMethod:
 		result.success(true)
 		handleCrash()

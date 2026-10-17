@@ -210,7 +210,8 @@ void main() {
     expect(find.text('12 个成员 · 自动'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     expect(find.text('按延迟自动切换'), findsOneWidget);
-    expect(find.text('测速'), findsOneWidget);
+    // 测速钮与组延迟合成一个：测过就在钮上显示当前节点的延迟（没测过才是「⚡ 测速」）
+    expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38 ms')), findsOneWidget);
     // 摘要里的当前节点和节点格：名字连国旗原样显示（和代理组名一个画法），不画地区码标签
     expect(find.byType(RegionTag), findsNothing);
     expect(find.text(_longName), findsNWidgets(2));
@@ -218,7 +219,7 @@ void main() {
     expect(find.text('vless · reality · vision'), findsOneWidget);
     expect(find.text('hy2'), findsOneWidget);
     // 延迟四态：有值 / 测试中 / 没测过 / 超时
-    expect(find.text('38 ms'), findsNWidgets(2));   // 摘要 + 格子
+    expect(find.text('38 ms'), findsNWidgets(2));   // 摘要的测速钮 + 格子
     expect(find.text('12345 ms'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
     expect(find.text('— ms'), findsWidgets);
@@ -301,22 +302,28 @@ void main() {
     expect(find.byType(NodeSliverGrid), findsNothing);
   });
 
-  testWidgets('手机 · 列表布局：组卡头部的测速 / 箭头是 40×30 胶囊，点箭头胶囊同样展开 / 收起', (tester) async {
+  testWidgets('手机 · 列表布局：组卡头部的测速钮带组延迟（30 高、至少 40 宽），箭头是 40×30 胶囊，点箭头胶囊同样展开 / 收起', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
       overrides: _overrides(profile: _profile(), layout: ProxyLayout.list),
     );
-    Finder chips() => find.descendant(of: find.widgetWithText(GroupCard, 'url-test'), matching: find.byType(MeowChip));
-    expect(chips(), findsNWidgets(2));
-    expect(tester.getSize(chips().first), const Size(MeowChip.width, MeowChip.height));
-    expect(tester.getSize(chips().last), const Size(MeowChip.width, MeowChip.height));
-    expect(find.descendant(of: chips().first, matching: find.byIcon(Icons.bolt_rounded)), findsOneWidget);
+    final card = find.widgetWithText(GroupCard, 'url-test');
+    final test = find.descendant(of: card, matching: find.byType(GroupTestButton));
+    expect(test, findsOneWidget);
+    expect(tester.getSize(test).height, MeowChip.height);
+    expect(tester.getSize(test).width, greaterThanOrEqualTo(MeowChip.width));
+    // 延迟在测速钮上，组卡第二行不再重复
+    expect(find.descendant(of: test, matching: find.text('38 ms')), findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('38 ms')), findsOneWidget);
+    Finder chevron() => find.descendant(of: card, matching: find.byType(MeowChip));
+    expect(chevron(), findsOneWidget);
+    expect(tester.getSize(chevron()), const Size(MeowChip.width, MeowChip.height));
 
-    await tester.tap(chips().last);
+    await tester.tap(chevron());
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
-    await tester.tap(chips().last);
+    await tester.tap(chevron());
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNothing);
   });
@@ -479,7 +486,7 @@ void main() {
       await tester.pump();
       expect(find.text('12 个成员 · 自动'), findsOneWidget);
       expect(find.text('当前 $_longName'), findsOneWidget);
-      expect(find.text(' · 38 ms'), findsOneWidget);
+      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text('38 ms')), findsOneWidget);   // 在测速钮上
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       expect(_gridColumns(tester), size.width > 1000 ? 4 : 2);
     }

@@ -1,3 +1,4 @@
+import 'package:bett_box/common/navigator.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -10,6 +11,7 @@ import '../../state/speed_history.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
+import '../speedtest/speed_test_page.dart';
 
 /// 网速卡：上传 / 下载两列（速率大字 + 会话累计）+ 近 60 秒折线，折线贴着卡片左右和底边。
 /// [up] / [down] / [chart] 对应「首页卡片」里的三个开关，调用方保证至少开着一个。
@@ -96,9 +98,7 @@ class HomeSpeedCard extends ConsumerWidget {
       fill: dense,
     );
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(dense ? 22 : 24)),
+    final card = Container(
       padding: EdgeInsets.only(top: dense ? 12 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -140,6 +140,26 @@ class HomeSpeedCard extends ConsumerWidget {
           ] else
             SizedBox(height: dense ? 12 : 14),
         ],
+      ),
+    );
+    // 点卡片打开网络测速（右上角一个小仪表图标提示，与 iOS 同）
+    return Material(
+      color: mm.elev,
+      borderRadius: BorderRadius.circular(dense ? 22 : 24),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => BaseNavigator.push(context, const SpeedTestPage()),
+        child: Stack(
+          fit: StackFit.passthrough,   // 宽屏撑满模式下卡片要拿到外层的定高
+          children: [
+            card,
+            Positioned(
+              top: dense ? 10 : 12,
+              right: 14,
+              child: Tooltip(message: '网络测速', child: Icon(Icons.speed_rounded, size: 16, color: mm.t2)),
+            ),
+          ],
+        ),
       ),
     );
   }
