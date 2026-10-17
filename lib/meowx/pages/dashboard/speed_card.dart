@@ -46,7 +46,9 @@ class HomeSpeedCard extends ConsumerWidget {
     final hasRates = up || down;
     final caption = TextStyle(fontSize: 11, color: mm.t2);
 
-    // 两列各自居中（与 iOS / iPad 首页一致；之前照画板靠左）
+    // 两列各自居中，排法同 iOS：标题行只写「上传 / 下载」，大号速率，会话累计在速率下面；
+    // 宽屏（dense，格子矮）才把会话并进标题行（同 iPad 竖屏）。以前手机上也并在标题行，下载那一列的长标题伸到右上角，
+    // 和测速入口的小仪表图标叠在一起。
     Widget rate(MeowGlyph glyph, Color color, String label, int value, int session) => Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -55,12 +57,12 @@ class HomeSpeedCard extends ConsumerWidget {
           children: [
             MeowIcon(glyph, size: dense ? 12 : 13, color: color),
             const SizedBox(width: 4),
-            // 会话累计是这行的重点，窄屏 + 大字号放不下时整体缩小，不截掉数字
+            // 窄屏 + 大字号放不下时整体缩小，不截掉数字
             Flexible(
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  '$label · ${S.session} ${fmtSize(session)}',
+                  dense ? '$label · ${S.session} ${fmtSize(session)}' : label,
                   maxLines: 1,
                   style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2),
                 ),
@@ -84,6 +86,11 @@ class HomeSpeedCard extends ConsumerWidget {
             ),
           ),
         ),
+        if (!dense)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('${S.session} ${fmtSize(session)}', maxLines: 1, style: TextStyle(fontSize: 11, color: mm.t2)),
+          ),
       ],
     );
 
