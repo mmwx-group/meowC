@@ -230,7 +230,7 @@ class _BrandBar extends StatelessWidget {
   }
 }
 
-/// 标题行的圆钮（44，卡片底）：和 [RoundGlassButton] 同形，图标换成设计稿的线性图标。
+/// 标题行的圆钮（44，卡片底；液态玻璃下是玻璃圆钮）：就是 [RoundGlassButton]，图标用设计稿的线性图标。
 class _RoundButton extends StatelessWidget {
   const _RoundButton({required this.glyph, required this.tooltip, required this.onTap, this.busy = false});
   final MeowGlyph glyph;
@@ -239,29 +239,7 @@ class _RoundButton extends StatelessWidget {
   final bool busy;
 
   @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: mm.elev,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: busy ? null : onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Center(
-              child: busy
-                  ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: mm.t2))
-                  : MeowIcon(glyph, size: 20, color: mm.t1),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RoundGlassButton(glyph: glyph, tooltip: tooltip, busy: busy, onTap: onTap);
 }
 
 /// 「重新查询出口 IP」：立即重查两格（未连接时只查国内那格）。

@@ -120,3 +120,9 @@
 - `lib/main.dart`：去掉 liquid_glass_widgets 的初始化与全局包装（`LiquidGlassWidgets.initialize` / `wrap` / 自适应档位），`runApp` 回到 `ProviderScope(child: Application())`。
 - `pubspec.yaml`：去掉 `liquid_glass_widgets` 依赖；`flutter: shaders:` 登记 `shaders/liquid_glass.frag`。
 - 新底栏与玻璃都在 `lib/meowx/`：`glass/liquid_glass.dart`、`glass/liquid_glass_capture.dart`、`app/meow_dock.dart` 与 `shaders/liquid_glass.frag` 移植自 FlClash 0.9.1（chen08209/FlClash，GPL-3.0），文件头保留出处。原因：旧库每帧对底栏背后的全分辨率画面做一次大半径模糊再跑折射着色器，背后内容一动（切页、展开代理组、滚动）每帧都要重做，模拟器实测每帧光栅 60–140ms；FlClash 的做法是合成时把背后画面按模糊半径缩小（最多 1/8）重放到一张小图上、所有玻璃共用，画面不动就复用，同样的操作降到 3–5ms。
+
+## 2026-10-18 · 液态玻璃主题 + 卡片 / 启动卡片 / 强调色
+- `lib/application.dart`：两份主题按「我的 › 外观」的主题风格 / 玻璃样式 / 卡片颜色 / 启动卡片颜色 / 强调色推 token（`_themes.of(look: ref.watch(meowLookProvider))`，只这几项变才重建）；液态玻璃的宿主 `MeowGlassHost`（`lib/meowx/app/glass_host.dart`）包在 Navigator 外面，底栏与从根 Navigator 弹出的菜单 / 设置卡片共用一次截图（原来宿主在壳里，弹出层读不到背后的页面）。
+- `lib/models/meow.dart MeowSettings`：`themeStyle`（经典 / 液态玻璃，缺省经典）、`glassTint`（透明 / 着色）、`cardColor`、`heroColor`、`accentColor`（ARGB，缺省白 / 樱粉 / 玫红 = 改版前的样子）；旧数据缺字段取缺省。
+- `shaders/liquid_glass.frag`：Impeller 的 OpenGL ES 后端采样纹理时 y 轴是反的（dart:ui `ImageFilter.shader` 的说明），原着色器没处理，Android GLES 上每块玻璃读的是截图里上下颠倒的位置（同一层有两块以上时读到别人那块）；采样前在 `IMPELLER_TARGET_OPENGLES` 下翻转 y。底栏的底色 95% 不透明，以前看不出来。
+- 其余在 `lib/meowx/`：token 推导（`theme/tokens.dart`）、玻璃控件（`theme/glass.dart`）、移植自 FlClash 0.9.1 的 iOS 风格取色器（`theme/color_picker.dart`）、外观设置行（`pages/me/appearance_parts.dart`）。

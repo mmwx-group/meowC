@@ -1,5 +1,7 @@
+import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 
+import '../../theme/glass.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
@@ -18,28 +20,25 @@ class MeDense extends InheritedWidget {
 }
 
 /// 二级页骨架（设计稿 AApps 的标题行）：返回 + 标题 + 操作钮；正文限宽居中，左右留白由正文自己留。
+/// 放在手机「我的」页的设置卡片里时（[MeSheetScope]）不画整页的标题栏与底色，改用卡片的页头（见 me_sheet.dart）。
 class MeSubPage extends StatelessWidget {
-  const MeSubPage({super.key, required this.title, this.actions = const [], required this.body});
+  const MeSubPage({super.key, required this.title, this.actions = const [], required Widget this.body}) : children = null;
 
   /// 正文是一列卡片的二级页：整页可滚，卡片间距 12。
-  MeSubPage.list({super.key, required this.title, this.actions = const [], required List<Widget> children})
-    : body = Builder(
-        builder: (context) => ListView.separated(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
-          itemCount: children.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 12),
-          itemBuilder: (_, i) => children[i],
-        ),
-      );
+  const MeSubPage.list({super.key, required this.title, this.actions = const [], required List<Widget> this.children})
+    : body = null;
 
   final String title;
   final List<Widget> actions;
-  final Widget body;
+  final Widget? body;
+  final List<Widget>? children;
 
   static const maxWidth = 720.0;
 
   @override
   Widget build(BuildContext context) {
+    final sheet = MeSheetScope.maybeOf(context);
+    if (sheet != null) return _inSheet(context, sheet);
     final mm = context.mm;
     return Scaffold(
       backgroundColor: mm.bg,
@@ -77,7 +76,16 @@ class MeSubPage extends StatelessWidget {
                     ],
                   ),
                 ),
-                Expanded(child: body),
+                Expanded(
+                  child:
+                      body ??
+                      ListView.separated(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
+                        itemCount: children!.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) => children![i],
+                      ),
+                ),
               ],
             ),
           ),
@@ -85,6 +93,112 @@ class MeSubPage extends StatelessWidget {
       ),
     );
   }
+
+  /// 卡片里的样子：页头（第二层起带「‹」返回）+ 正文。正文是一列卡片时高度跟内容走（卡片据此贴合内容，超出在卡片里滚动）；
+  /// 页头右侧留出卡片右上角关闭钮的位置。
+  Widget _inSheet(BuildContext context, MeSheetScope sheet) {
+    final mm = context.mm;
+    final nested = sheet.depth > 1;
+    final header = SizedBox(
+      height: MeSheetScope.headerHeight,
+      child: Padding(
+        padding: EdgeInsets.only(left: nested ? 6 : 20, right: MeSheetScope.closeReserve),
+        child: Row(
+          children: [
+            if (nested)
+              IconButton(
+                tooltip: '返回',
+                visualDensity: VisualDensity.compact,
+                icon: Icon(Icons.chevron_left_rounded, size: 28, color: mm.accent),
+                onPressed: sheet.navigator.back,
+              ),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: MeowFont.headline,
+                  fontWeight: FontWeight.w700,
+                  fontFamilyFallback: meowRounded,
+                  color: mm.t1,
+                ),
+              ),
+            ),
+            // 操作钮（如「+」添加）缩到与关闭钮相近的大小，别把页头撑高
+            for (final a in actions) ...[const SizedBox(width: 8), SizedBox.square(dimension: 34, child: FittedBox(child: a))],
+          ],
+        ),
+      ),
+    );
+    final bottom = 24 + MediaQuery.paddingOf(context).bottom;
+    final content =
+        body ??
+        SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(16, 2, 16, bottom),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, c) in children!.indexed) ...[if (i > 0) const SizedBox(height: 12), c],
+            ],
+          ),
+        );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [header, Flexible(child: content)],
+    );
+  }
+}
+
+/// 手机「我的」页设置卡片里推入 / 返回 / 关闭的入口（实现见 me_sheet.dart 的卡片）。
+abstract interface class MeSheetNavigator {
+  /// 在卡片里进下一层。
+  void push(Widget page);
+
+  /// 回上一层（已在第一层时关掉卡片）。
+  void back();
+
+  /// 关掉整张卡片。
+  void close();
+}
+
+/// 标记「这一页在设置卡片里」：[MeSubPage] 据此改用卡片页头，[mePush] 据此把下一层推进卡片而不是整页推入。
+class MeSheetScope extends InheritedWidget {
+  const MeSheetScope({
+    super.key,
+    required this.depth,
+    required this.navigator,
+    this.glass = false,
+    required super.child,
+  });
+
+  /// 这一页在卡片里的层级：1 = 分组本身，2 = 从分组里进的下一层
+  final int depth;
+  final MeSheetNavigator navigator;
+
+  /// 卡片是玻璃（液态玻璃主题）：里面的白卡分组改成半透明（[MeowTokens.glassPanel]）
+  final bool glass;
+
+  /// 卡片页头的高度、右侧给关闭钮留的宽度（关闭钮由卡片自己画，位置与页头对齐）
+  static const headerHeight = 48.0;
+  static const closeReserve = 16.0 + 30 + 8;
+
+  static MeSheetScope? maybeOf(BuildContext context) => context.dependOnInheritedWidgetOfExactType<MeSheetScope>();
+
+  @override
+  bool updateShouldNotify(MeSheetScope oldWidget) =>
+      depth != oldWidget.depth || navigator != oldWidget.navigator || glass != oldWidget.glass;
+}
+
+/// 设置分组里进下一层页面（DNS 劫持、绕过、po0 服务器等）：在设置卡片里就推进卡片，否则照旧整页推入。
+Future<void> mePush(BuildContext context, Widget page) async {
+  final sheet = MeSheetScope.maybeOf(context);
+  if (sheet != null) {
+    sheet.navigator.push(page);
+    return;
+  }
+  await BaseNavigator.push(context, page);
 }
 
 /// 白卡分组：可选标题行（[accent] = 平台专属分组的粉色标题，[note] 是标题右侧的小字）+ 若干块，块之间 1px 分隔线。
@@ -101,7 +215,8 @@ class MeSection extends StatelessWidget {
     final mm = context.mm;
     final dense = MeDense.of(context);
     return Material(
-      color: mm.elev,
+      // 玻璃底部卡片里是半透明白，透出卡片的玻璃
+      color: (MeSheetScope.maybeOf(context)?.glass ?? false) ? mm.glassPanel : mm.elev,
       borderRadius: BorderRadius.circular(dense ? 20 : 24),
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -371,7 +486,7 @@ class MePickerRow<T> extends StatelessWidget {
   }
 }
 
-/// 胶囊钮：卡片底（[selected] = 墨色实底），用在主卡 / 页面底上。
+/// 胶囊钮：卡片底（[selected] = 墨色实底），用在主卡 / 页面底上。液态玻璃下非实底的换成玻璃胶囊（如标题行的「高级设置」）。
 class MePill extends StatelessWidget {
   const MePill({super.key, required this.label, required this.onTap, this.selected = false, this.height = 44});
 
@@ -383,6 +498,18 @@ class MePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    if (!selected && meowGlassOn(context)) {
+      return MeowGlassButton(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: height),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Center(widthFactor: 1, heightFactor: 1, child: _label(mm)),
+          ),
+        ),
+      );
+    }
     return Material(
       color: selected ? mm.t1 : mm.elev,
       shape: const StadiumBorder(),
@@ -394,25 +521,23 @@ class MePill extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             // 只包住文字，不撑满父级给的宽高
-            child: Center(
-              widthFactor: 1,
-              heightFactor: 1,
-              child: Text(
-                label,
-                maxLines: 1,
-                softWrap: false,
-                style: TextStyle(
-                  fontSize: MeowFont.footnote,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? mm.bg : mm.t1,
-                ),
-              ),
-            ),
+            child: Center(widthFactor: 1, heightFactor: 1, child: _label(mm)),
           ),
         ),
       ),
     );
   }
+
+  Widget _label(MeowTokens mm) => Text(
+    label,
+    maxLines: 1,
+    softWrap: false,
+    style: TextStyle(
+      fontSize: MeowFont.footnote,
+      fontWeight: FontWeight.w600,
+      color: selected ? mm.bg : mm.t1,
+    ),
+  );
 }
 
 /// 列表型二级页（DNS 劫持 / 绕过 / 排除域名）里的一张条目卡：每条右侧一个删除钮；没有条目时显示 [empty]。

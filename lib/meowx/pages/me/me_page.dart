@@ -1,4 +1,5 @@
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
@@ -17,12 +18,13 @@ import '../../update/update_state.dart';
 import '../settings/proxy_apps_page.dart';
 import 'account_card.dart';
 import 'me_kit.dart';
+import 'me_sheet.dart';
 import 'platform_rows.dart';
 import 'settings_rows.dart';
 import 'subscriptions_card.dart';
 
 /// 「我的」（原「配置」+「设置」两页）：账户 → 订阅 → 设置。
-/// 手机：一页可滚，设置收成入口行，每行进一张二级页（设计稿 AMe）。
+/// 手机：一页可滚，设置收成入口行，每行从底部升起一张设置卡片（设计稿 AMe；卡片见 me_sheet.dart）。
 /// 宽屏：三列铺开——账户 + 订阅 | 设置分组 | 设置分组（设计稿 WSettings）；平台专属分组用粉色标题。
 class MePage extends ConsumerStatefulWidget {
   const MePage({super.key});
@@ -196,7 +198,8 @@ enum _Glyph {
 @visibleForTesting
 List<String> get meEntryGlyphPaths => [for (final g in _Glyph.values) g.d];
 
-/// 手机上的设置入口：每行 = 图标方块 + 名字 + 当前值摘要 + 箭头，点进二级页（「记录日志」只有一个开关，直接是开关行）。
+/// 手机上的设置入口：每行 = 图标方块 + 名字 + 当前值摘要 + 箭头，点开设置卡片（「记录日志」只有一个开关，直接是开关行；
+/// 「代理应用」「高级」整页推入）。
 /// 平台专属的几行（Android：代理应用 / VPN 与系统；Windows：启动与窗口 / 接管方式 / 全局快捷键）用粉色图标方块。
 class _EntryList extends ConsumerWidget {
   const _EntryList();
@@ -229,9 +232,9 @@ class _EntryList extends ConsumerWidget {
       chevron: true,
       onTap: onTap,
     );
-    // 二级页：一张白卡装这一组的行
+    // 从底部升起的设置卡片：一张白卡装这一组的行（「代理应用」「高级」内容多，仍整页推入）
     VoidCallback page(String title, Widget rows, {String? caption}) =>
-        () => BaseNavigator.push(
+        () => showMeSheet(
           context,
           MeSubPage.list(
             title: title,
@@ -297,7 +300,12 @@ class _EntryList extends ConsumerWidget {
         ),
         // 只有一个开关，直接放在列表里，不进二级页
         LogSwitchRow(leading: icon(_Glyph.log)),
-        entry(_Glyph.appearance, '外观', themeModeLabel(themeMode), page('外观', const AppearanceRows())),
+        entry(
+          _Glyph.appearance,
+          '外观',
+          _join([themeModeLabel(themeMode), if (meow.themeStyle == MeowThemeStyle.glass) meow.themeStyle.label]),
+          page('外观', const AppearanceRows()),
+        ),
         entry(_Glyph.advanced, '高级', '内核配置 · 备份 · 脚本', () => openAdvanced(context)),
         entry(
           _Glyph.about,

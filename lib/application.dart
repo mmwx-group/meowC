@@ -12,7 +12,9 @@ import 'package:bett_box/manager/manager.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
+import 'package:bett_box/meowx/app/glass_host.dart';
 import 'package:bett_box/meowx/app/meow_root.dart';
+import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
@@ -210,9 +212,11 @@ class ApplicationState extends ConsumerState<Application>
             // MeowX：两份主题走缓存（MeowThemes）。每次重建都现建的话新旧 ThemeData 永不相等，
             // 切语言、改无关的主题设置都会让 MaterialApp 做一次 200ms 的主题插值，期间全树逐帧重建。
             // 上面仍然整体 watch themeSettingProvider：ThemeManager 的文字缩放是在 build 里 ref.read 的，靠这里重建带动。
+            // MeowX：「我的 › 外观」的主题风格 / 玻璃样式 / 卡片颜色改的是 token，两份主题跟着它换（只这三项变才重建）
             final themes = _themes.of(
               fontFamily: fontFamily,
               pageTransitionsTheme: _pageTransitionsTheme,
+              look: ref.watch(meowLookProvider),
             );
 
             return MaterialApp(
@@ -235,7 +239,8 @@ class ApplicationState extends ConsumerState<Application>
                         child: AppEnvManager(
                           child: _buildApp(
                             AppSidebarContainer(
-                              child: _buildPlatformApp(child!),
+                              // MeowX：液态玻璃的宿主包在 Navigator 外面，底栏与菜单 / 设置卡片这些弹出层共用一次截图
+                              child: _buildPlatformApp(MeowGlassHost(child: child!)),
                             ),
                           ),
                         ),

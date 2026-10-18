@@ -59,6 +59,32 @@ abstract final class MeowMotion {
   /// 旧页退开的距离（页宽的比例）
   static const tabParallax = 0.3;
 
+  // ── 「我的」页的设置卡片（底部升起，同 iOS sheet）──
+  /// iOS sheet 的减速曲线（cubic-bezier(.32,.72,0,1)）：升起、背后页面缩小、卡片高度变化都用它
+  static const sheetCurve = Cubic(.32, .72, 0, 1);
+  static const sheetRise = Duration(milliseconds: 480);
+  static const sheetFall = Duration(milliseconds: 380);
+
+  /// 「移除动画」时卡片只淡入淡出，用这个时长
+  static const sheetFade = Duration(milliseconds: 200);
+
+  /// 卡片随内容长高 / 变矮（开关带出的行、进出下一层）
+  static const sheetResize = Duration(milliseconds: 450);
+
+  /// 卡片里进出下一层：新页从右 30% 处滑进、旧页往左退 30%，淡入淡出在前六成走完
+  static const sheetPane = Duration(milliseconds: 420);
+  static const sheetPaneCurve = Cubic(.22, 1, .36, 1);
+  static const sheetPaneShift = 0.3;
+
+  /// 卡片最高占屏幕（扣掉顶部安全区）的比例
+  static const sheetMaxHeight = 0.88;
+
+  /// 背后页面：缩小、下移、加圆角
+  static const sheetBackdropScale = 0.93, sheetBackdropShift = 10.0, sheetBackdropRadius = 26.0;
+
+  /// 下拉超过这个距离或这个速度（逻辑像素 / 秒）松手就关掉
+  static const sheetDismissDistance = 90.0, sheetDismissVelocity = 700.0;
+
   // ── 两态颜色渐变（分段文字、图标颜色）──
   static const colorFade = Duration(milliseconds: 220);
 

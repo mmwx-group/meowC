@@ -17,6 +17,7 @@ import '../../update/update_state.dart';
 import '../settings/overrides_pages.dart';
 import '../settings/po0_servers_page.dart';
 import '../settings/proxy_apps_page.dart';
+import 'appearance_parts.dart';
 import 'me_kit.dart';
 
 /// 各平台通用的设置分组。每组是一个 [MeRows]：手机上各自进一张二级页，宽屏直接铺在分组卡里（见 me_page.dart）。
@@ -146,13 +147,13 @@ class TrafficRows extends ConsumerWidget {
           label: 'DNS 劫持',
           value: meow.dnsHijack.isEmpty ? null : '${meow.dnsHijack.length} 条',
           chevron: true,
-          onTap: () => BaseNavigator.push(context, const DnsHijackPage()),
+          onTap: () => mePush(context, const DnsHijackPage()),
         ),
         MeRow(
           label: '绕过代理',
           value: bypassCount == 0 ? null : '$bypassCount 条',
           chevron: true,
-          onTap: () => BaseNavigator.push(context, const BypassPage()),
+          onTap: () => mePush(context, const BypassPage()),
         ),
       ],
     );
@@ -273,7 +274,7 @@ class SyncRows extends ConsumerWidget {
           label: '自定义 po0 服务器',
           value: po0Custom == 0 ? null : '$po0Custom 条',
           chevron: true,
-          onTap: () => BaseNavigator.push(context, const Po0ServersPage()),
+          onTap: () => mePush(context, const Po0ServersPage()),
         ),
       ],
     );
@@ -299,13 +300,14 @@ class LogSwitchRow extends ConsumerWidget {
   }
 }
 
-/// 外观：主题。
+/// 外观：深浅色 / 主题风格（经典 · 液态玻璃）/ 玻璃样式（只在液态玻璃下）/ 卡片颜色 / 启动卡片颜色 / 强调色。后几项见 appearance_parts.dart。
 class AppearanceRows extends ConsumerWidget {
   const AppearanceRows({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeSettingProvider.select((s) => s.themeMode));
+    final glass = ref.watch(meowSettingProvider.select((s) => s.themeStyle == MeowThemeStyle.glass));
     return MeRows(
       children: [
         MePickerRow<ThemeMode>(
@@ -315,6 +317,11 @@ class AppearanceRows extends ConsumerWidget {
           text: themeModeLabel,
           onChanged: (v) => ref.read(themeSettingProvider.notifier).updateState((s) => s.copyWith(themeMode: v)),
         ),
+        const ThemeStyleRow(),
+        if (glass) const GlassTintRow(),
+        const ColorChoiceRow(MeowColorKind.card),
+        const ColorChoiceRow(MeowColorKind.hero),
+        const ColorChoiceRow(MeowColorKind.accent),
       ],
     );
   }

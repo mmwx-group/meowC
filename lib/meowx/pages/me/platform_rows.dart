@@ -87,7 +87,7 @@ class TakeoverRows extends ConsumerWidget {
           label: '系统代理排除域名',
           value: '$bypass 条',
           chevron: true,
-          onTap: () => BaseNavigator.push(context, const SysProxyBypassPage()),
+          onTap: () => mePush(context, const SysProxyBypassPage()),
         ),
       ],
     );

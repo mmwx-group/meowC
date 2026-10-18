@@ -1,6 +1,7 @@
 // 移植自 FlClash 0.9.1（chen08209/FlClash，GPL-3.0）的 lib/ui/liquid_glass.dart，与 meowC 同为 GPL-3.0。
 // 改动只有依赖：material_ui → flutter/material，AppRadius / AppShape → BorderRadius / RoundedSuperellipseBorder，
 // context.motionDuration → MediaQuery.disableAnimations；引用的架构说明见 FlClash 仓库的 .agents/architecture.md「Liquid Glass」。
+// MeowX 另加：LiquidGlassStyle.copyWith 多收 tint / contrast / refraction / bevel（液态玻璃主题的「透明 / 着色」两档与电源键用，见 ../theme/glass.dart）。
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -285,14 +286,15 @@ class LiquidGlassStyle {
     );
   }
 
-  LiquidGlassStyle copyWith({double? blur}) => LiquidGlassStyle(
-    tint: tint,
-    contrast: contrast,
+  LiquidGlassStyle copyWith({Color? tint, double? contrast, double? blur, double? refraction, double? bevel}) =>
+      LiquidGlassStyle(
+    tint: tint ?? this.tint,
+    contrast: contrast ?? this.contrast,
     blur: blur ?? this.blur,
     haze: haze,
     hazeBlur: hazeBlur,
-    refraction: refraction,
-    bevel: bevel,
+    refraction: refraction ?? this.refraction,
+    bevel: bevel ?? this.bevel,
     saturation: saturation,
     brightness: brightness,
     rim: rim,

@@ -321,7 +321,7 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
               value: frac,
               minHeight: 6,
               backgroundColor: mm.card2,
-              color: frac > 0.9 ? mm.slow : mm.pink,
+              color: frac > 0.9 ? mm.slow : mm.fill,
             ),
           ),
         ]);

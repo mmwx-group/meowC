@@ -98,6 +98,29 @@ enum ProxyLayout {
   };
 }
 
+/// 主题风格：经典（实色控件）/ 液态玻璃（浮在内容上面的控件层换成玻璃，内容卡片仍是实色，照 iOS 26 官方 App）。
+/// 缺省经典：老用户升级后样子不变。界面与取色在 `lib/meowx/theme/`。
+enum MeowThemeStyle {
+  classic,
+  glass;
+
+  String get label => switch (this) {
+    MeowThemeStyle.classic => '经典',
+    MeowThemeStyle.glass => '液态玻璃',
+  };
+}
+
+/// 液态玻璃的样式（照 iOS 26.1 系统设置的同名选项）：透明 = 高透；着色 = 更厚、更不透明、对比度更高。只在液态玻璃下生效。
+enum MeowGlassTint {
+  clear,
+  tinted;
+
+  String get label => switch (this) {
+    MeowGlassTint.clear => '透明',
+    MeowGlassTint.tinted => '着色',
+  };
+}
+
 /// 本地代理（HTTP/SOCKS5 混合端口）设置。
 @freezed
 abstract class MeowLocalProxy with _$MeowLocalProxy {
@@ -188,6 +211,23 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,
+
+    /// 主题风格（缺省经典）、液态玻璃样式（缺省透明）。存的是枚举名，认不出的值回到缺省
+    @JsonKey(unknownEnumValue: MeowThemeStyle.classic)
+    @Default(MeowThemeStyle.classic)
+    MeowThemeStyle themeStyle,
+    @JsonKey(unknownEnumValue: MeowGlassTint.clear)
+    @Default(MeowGlassTint.clear)
+    MeowGlassTint glassTint,
+
+    /// 内容卡片的颜色（ARGB，缺省白）：两种主题都生效；深色下不直接用，取它的色相压成深色卡（见 `lib/meowx/theme/tokens.dart`）
+    @Default(0xFFFFFFFF) int cardColor,
+
+    /// 启动卡片（首页连接主卡）的颜色（ARGB，缺省樱粉 #F7CDDB）：电源键的填充色跟着它的色相走；深色下取色相压成深色
+    @Default(0xFFF7CDDB) int heroColor,
+
+    /// 强调色（ARGB，缺省玫红 #B02E63）：强调文字 / 图标、选中态的描边与淡底、底栏选中项、进度条；对比度不够时自动压暗 / 提亮
+    @Default(0xFFB02E63) int accentColor,
 
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'glass.dart';
 import 'tokens.dart';
 import 'widgets.dart';
 
@@ -43,6 +44,7 @@ class PageTitle extends StatelessWidget {
 }
 
 /// 标题右侧的圆形按钮（44，卡片底；[filled] = 墨色实底，用于该页的主操作）。
+/// 液态玻璃主题下非实底的那种换成玻璃圆钮（[MeowGlassButton]）；实底的主操作仍是墨色实心块。
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
@@ -67,6 +69,13 @@ class RoundGlassButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    if (!filled && meowGlassOn(context)) {
+      return MeowGlassButton(
+        onTap: busy ? null : onTap,
+        tooltip: tooltip,
+        child: SizedBox(width: 44, height: 44, child: Center(child: _content(mm))),
+      );
+    }
     final btn = Material(
       color: filled ? mm.t1 : mm.elev,
       shape: const CircleBorder(),
@@ -76,20 +85,20 @@ class RoundGlassButton extends StatelessWidget {
         child: SizedBox(
           width: 44,
           height: 44,
-          child: Center(
-            child: busy
-                ? SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: filled ? mm.bg : mm.t2),
-                  )
-                : glyph != null
-                ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.bg : mm.t1))
-                : Icon(icon, size: 20, color: color ?? (filled ? mm.bg : mm.t1)),
-          ),
+          child: Center(child: _content(mm)),
         ),
       ),
     );
     return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
   }
+
+  Widget _content(MeowTokens mm) => busy
+      ? SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, color: filled ? mm.bg : mm.t2),
+        )
+      : glyph != null
+      ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.bg : mm.t1))
+      : Icon(icon, size: 20, color: color ?? (filled ? mm.bg : mm.t1));
 }

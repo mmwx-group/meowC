@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'tokens.dart';
 
 /// MeowX 主题：Material 3 骨架 + MM token（奶白 / 樱粉 / 墨色，与 iOS 改版一致），不用动态取色。
+/// [look] = 「我的 › 外观」里的主题风格 / 玻璃样式 / 卡片颜色（见 [MeowTokens.resolve]）。
 ThemeData meowThemeData({
   required Brightness brightness,
   String? fontFamily,
   PageTransitionsTheme? pageTransitionsTheme,
+  MeowLook look = MeowLook.classic,
 }) {
-  final tokens = brightness == Brightness.dark ? MeowTokens.dark : MeowTokens.light;
+  final tokens = MeowTokens.resolve(brightness, look);
   final scheme = ColorScheme.fromSeed(
     seedColor: tokens.accent,
     brightness: brightness,
@@ -131,18 +133,34 @@ ThemeData meowThemeData({
 /// [meowThemeData] 每次现建的主题彼此不相等（里面有 WidgetStateProperty.resolveWith 的闭包）。MaterialApp 一重建——
 /// 切语言、改任何一项主题设置——AnimatedTheme 就认为主题变了，在两份看起来一样的主题之间做 200ms 插值，
 /// 这期间每一帧所有用到主题的 widget（常驻的四个 Tab 页都是）全部重建。拿到的是同一份实例它就直接跳过。
-/// 切浅色 / 深色只是在这两份之间换，渐变照旧。
+/// 切浅色 / 深色只是在这两份之间换，渐变照旧。改外观（[MeowLook]）才换一对新的。
 class MeowThemes {
   String? _fontFamily;
   PageTransitionsTheme? _transitions;
+  MeowLook _look = MeowLook.classic;
   ThemeData? _light, _dark;
 
-  ({ThemeData light, ThemeData dark}) of({String? fontFamily, PageTransitionsTheme? pageTransitionsTheme}) {
-    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme) {
+  ({ThemeData light, ThemeData dark}) of({
+    String? fontFamily,
+    PageTransitionsTheme? pageTransitionsTheme,
+    MeowLook look = MeowLook.classic,
+  }) {
+    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme || _look != look) {
       _fontFamily = fontFamily;
       _transitions = pageTransitionsTheme;
-      _light = meowThemeData(brightness: Brightness.light, fontFamily: fontFamily, pageTransitionsTheme: pageTransitionsTheme);
-      _dark = meowThemeData(brightness: Brightness.dark, fontFamily: fontFamily, pageTransitionsTheme: pageTransitionsTheme);
+      _look = look;
+      _light = meowThemeData(
+        brightness: Brightness.light,
+        fontFamily: fontFamily,
+        pageTransitionsTheme: pageTransitionsTheme,
+        look: look,
+      );
+      _dark = meowThemeData(
+        brightness: Brightness.dark,
+        fontFamily: fontFamily,
+        pageTransitionsTheme: pageTransitionsTheme,
+        look: look,
+      );
     }
     return (light: _light!, dark: _dark!);
   }

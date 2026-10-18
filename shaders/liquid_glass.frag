@@ -99,10 +99,20 @@ const float kRimTail = 4.5;
 // A frost this wide in dp reads the backdrop's luma once, as a haze does.
 const float kSteadyFrost = 8.0;
 
+// MeowX: Impeller's OpenGL ES backend reverses the y axis of a sampled
+// texture (dart:ui ImageFilter.shader); without this every pane on Android
+// GLES reads the capture upside down, i.e. the slot of another pane.
+vec2 atlasUv(vec2 uv) {
+#ifdef IMPELLER_TARGET_OPENGLES
+  uv.y = 1.0 - uv.y;
+#endif
+  return uv;
+}
+
 vec4 texel(vec2 pixel) {
   return texture(
     uTexture,
-    clamp(pixel, uClamp.xy, min(uClamp.zw, uSize - 0.5)) / uSize
+    atlasUv(clamp(pixel, uClamp.xy, min(uClamp.zw, uSize - 0.5)) / uSize)
   );
 }
 
@@ -114,7 +124,7 @@ vec4 sampleHaze(vec2 point) {
   vec2 pixel = (point - uHazeSample.xy) / uHazeSample.zw;
   return texture(
     uTexture,
-    clamp(pixel, uHazeClamp.xy, min(uHazeClamp.zw, uSize - 0.5)) / uSize
+    atlasUv(clamp(pixel, uHazeClamp.xy, min(uHazeClamp.zw, uSize - 0.5)) / uSize)
   );
 }
 

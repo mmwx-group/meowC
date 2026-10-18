@@ -4,6 +4,8 @@ import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
 
+import '../glass/liquid_glass.dart';
+import 'glass.dart';
 import 'motion.dart';
 import 'tokens.dart';
 
@@ -74,6 +76,8 @@ Rect meowMenuRect({
 /// 位置、宽高、圆角从 [fromRadius]（缺省 = 按钮高的一半，胶囊）到 16、底色从 [fromColor]（缺省淡粉）到卡片白，soft 弹簧；
 /// 菜单项在变形后半段错峰淡入。关闭：菜单项 90ms 淡出，面板 260ms 缩回按钮矩形。点选一项：选中块 snap 弹簧滑过去，220ms 后自动关。
 /// [onClosing] 在开始关闭的那一刻调（按钮据此淡回）。返回选中的值，点外面 / 返回键关掉 = null。
+/// 液态玻璃主题下面板是一块玻璃（菜单那一档，比底栏厚：上面是成段的字），变形时从无到有「长」出来（玻璃是弯出来的，不是淡入的），
+/// 底色参数 [fromColor] 不用。
 Future<T?> showMeowMenu<T>(
   BuildContext context, {
   required List<MeowMenuEntry<T>> entries,
@@ -298,6 +302,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
   Widget build(BuildContext context) {
     final mm = context.mm;
     final route = _route;
+    final glass = meowGlassOn(context);
     final contentH = meowMenuContentHeight(_entries);
     final target = meowMenuRect(
       anchor: route.anchor,
@@ -327,7 +332,8 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
                   ),
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: Color.alphaBlend(mm.soft, mm.elev),
+                      // 玻璃上直接用淡粉（深色下它本身是半透明的），不垫卡片底
+                      color: glass ? mm.soft : Color.alphaBlend(mm.soft, mm.elev),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -351,6 +357,8 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
       child: Material(type: MaterialType.transparency, child: content),
     );
 
+    final menuStyle = glass ? MeowGlassStyles.menu(context) : null;
+    final menuRim = glass ? MeowGlassStyles.menuRim(context) : null;
     return Stack(
       children: [
         AnimatedBuilder(
@@ -360,6 +368,30 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
             final pc = p.clamp(0.0, 1.0);
             final r = Rect.lerp(route.anchor, target, p)!;
             final radius = BorderRadius.circular(lerpDouble(route.fromRadius, _radius, pc)!);
+            // 内容始终按菜单的最终尺寸排、钉在最终位置，面板只是裁出它的一部分
+            Widget clipped() => ClipRRect(
+              borderRadius: radius,
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: target.width,
+                maxWidth: target.width,
+                minHeight: target.height,
+                maxHeight: target.height,
+                child: Transform.translate(offset: target.topLeft - r.topLeft, child: child),
+              ),
+            );
+            if (glass) {
+              return Positioned.fromRect(
+                rect: r,
+                child: MeowGlassBox(
+                  style: menuStyle!.scale(pc),
+                  radius: radius,
+                  rim: menuRim!.scale(pc),
+                  shadows: MeowGlassStyles.menuShadows(context, pc),
+                  child: clipped(),
+                ),
+              );
+            }
             return Positioned.fromRect(
               rect: r,
               child: DecoratedBox(
@@ -375,18 +407,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
                     ),
                   ],
                 ),
-                child: ClipRRect(
-                  borderRadius: radius,
-                  // 内容始终按菜单的最终尺寸排、钉在最终位置，面板只是裁出它的一部分
-                  child: OverflowBox(
-                    alignment: Alignment.topLeft,
-                    minWidth: target.width,
-                    maxWidth: target.width,
-                    minHeight: target.height,
-                    maxHeight: target.height,
-                    child: Transform.translate(offset: target.topLeft - r.topLeft, child: child),
-                  ),
-                ),
+                child: clipped(),
               ),
             );
           },
@@ -544,6 +565,9 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with SingleTicker
     super.dispose();
   }
 
+  // 触发控件是玻璃时用 LiquidGlassFade：普通的半透明会把它变成离屏层，淡出的那一下玻璃读不到背后的画面
   @override
-  Widget build(BuildContext context) => FadeTransition(opacity: _fade, child: widget.builder(context, _openMenu));
+  Widget build(BuildContext context) => meowGlassOn(context)
+      ? LiquidGlassFade(opacity: _fade, child: widget.builder(context, _openMenu))
+      : FadeTransition(opacity: _fade, child: widget.builder(context, _openMenu));
 }

@@ -12,11 +12,14 @@ import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/glass.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 
 /// 连接主卡：状态（提示 / 大字 / 已运行）+ 电源键；「当前节点」行；「规则 | 全局 | 直连」分段。
 /// 已连接 = 樱粉底，其余 = 次级底。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
+/// 液态玻璃主题：已连接时是一道很淡的斜向渐变、圆角加大到与屏幕圆角同心；节点行与分段的槽是半透明白；
+/// 电源键与分段的滑块是控件，换成玻璃（见 [MeowPowerButton] / [MeowSegment]）。卡片本身仍是实色内容。
 class HomeHeroCard extends ConsumerWidget {
   const HomeHeroCard({super.key, this.dense = false});
   final bool dense;
@@ -36,12 +39,18 @@ class HomeHeroCard extends ConsumerWidget {
     };
     final gap = dense ? 10.0 : 12.0;
 
+    final on = phase == ConnPhase.on;
+    final gradient = on ? mm.heroGradient : null;
+    final radius = mm.glass
+        ? (dense ? MeowGlassMetrics.heroRadiusDense : MeowGlassMetrics.heroRadius)
+        : (dense ? 24.0 : 28.0);
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: EdgeInsets.all(dense ? 16 : 18),
       decoration: BoxDecoration(
-        color: phase == ConnPhase.on ? mm.hero : mm.card2,
-        borderRadius: BorderRadius.circular(dense ? 24 : 28),
+        color: gradient != null ? null : (on ? mm.hero : mm.card2),
+        gradient: gradient,
+        borderRadius: BorderRadius.circular(radius),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,6 +112,8 @@ class HomeHeroCard extends ConsumerWidget {
             value: mode,
             height: dense ? 40 : 44,
             fontSize: dense ? 13 : 14,
+            track: mm.heroTrack,
+            glass: true,
             onChanged: (m) {
               if (m != mode) setOutboundMode(ref, m);
             },
@@ -172,7 +183,7 @@ class _NodeRow extends ConsumerWidget {
     }
 
     return Material(
-      color: mm.elev,
+      color: mm.onHero,
       borderRadius: BorderRadius.circular(dense ? 16 : 18),
       child: InkWell(
         borderRadius: BorderRadius.circular(dense ? 16 : 18),

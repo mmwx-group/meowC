@@ -355,7 +355,7 @@ class _CurrentTile extends StatelessWidget {
                       value: frac,
                       minHeight: 6,
                       backgroundColor: mm.elev,
-                      color: frac > 0.9 ? mm.slow : mm.pink,
+                      color: frac > 0.9 ? mm.slow : mm.fill,
                     ),
                   ),
                   const SizedBox(height: 7),

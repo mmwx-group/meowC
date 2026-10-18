@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'glass.dart';
 import 'motion.dart';
 import 'svg_path.dart';
 import 'tokens.dart';
@@ -104,6 +105,7 @@ class _GlyphPainter extends CustomPainter {
 /// 分段选择：卡片底胶囊里放等宽分段，选中 = 墨色滑块配页面底色的字。
 /// [onCard] = 放在白卡片上时槽用次级底（放在主卡 / 页面底上时槽用卡片底）。
 /// 换段时滑块用弹跳弹簧滑过去（只平移、不拉伸，越过两端的部分被槽的圆角裁掉），段内文字颜色 220ms 交叉渐变。
+/// [track] 换槽的颜色（主卡上的半透明白）；[glass] = 液态玻璃主题下滑块换成一块玻璃透镜、选中的字用墨色（经典主题照旧是墨色实心块）。
 class MeowSegment<T> extends StatefulWidget {
   const MeowSegment({
     super.key,
@@ -113,6 +115,8 @@ class MeowSegment<T> extends StatefulWidget {
     this.height = 44,
     this.onCard = false,
     this.fontSize = 14,
+    this.track,
+    this.glass = false,
   });
 
   final List<(T, String)> items;
@@ -121,6 +125,8 @@ class MeowSegment<T> extends StatefulWidget {
   final double height;
   final bool onCard;
   final double fontSize;
+  final Color? track;
+  final bool glass;
 
   @override
   State<MeowSegment<T>> createState() => _MeowSegmentState<T>();
@@ -155,10 +161,59 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
     final height = widget.height;
     final outer = height >= 40 ? 14.0 : 11.0;
     final index = _index;
+    final glass = widget.glass && meowGlassOn(context);
+    final track = widget.track ?? (widget.onCard ? mm.card2 : mm.elev);
+    final row = Row(
+      children: [
+        for (final (i, it) in widget.items.indexed) ...[
+          if (i > 0) const SizedBox(width: _segGap),
+          Expanded(
+            child: Semantics(
+              button: true,
+              selected: i == index,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => widget.onChanged(it.$1),
+                child: Container(
+                  constraints: BoxConstraints(minHeight: height - _segGap * 2),
+                  alignment: Alignment.center,
+                  child: AnimatedDefaultTextStyle(
+                    duration: MeowMotion.of(context, MeowMotion.colorFade),
+                    style: TextStyle(
+                      fontSize: widget.fontSize,
+                      fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                      // 玻璃滑块是透明的，选中的字仍用墨色
+                      color: i == index ? (glass ? mm.t1 : mm.bg) : mm.t2,
+                    ),
+                    child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+    if (glass) {
+      // 玻璃滑块画在文字下面、读它背后的槽与主卡；越过两端的部分由槽的圆角裁掉（只裁不离屏）
+      return Container(
+        constraints: BoxConstraints(minHeight: height),
+        padding: const EdgeInsets.all(_segGap),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(outer)),
+        child: Stack(
+          children: [
+            if (index >= 0)
+              Positioned.fill(child: _GlassThumb(pos: _pos, count: widget.items.length, radius: outer - _segGap)),
+            row,
+          ],
+        ),
+      );
+    }
     return Container(
       constraints: BoxConstraints(minHeight: height),
       padding: const EdgeInsets.all(_segGap),
-      decoration: BoxDecoration(color: widget.onCard ? mm.card2 : mm.elev, borderRadius: BorderRadius.circular(outer)),
+      decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(outer)),
       // 滑块每帧重绘：自成一层，不连带整页重画
       child: RepaintBoundary(
         child: CustomPaint(
@@ -170,38 +225,40 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
             radius: outer - _segGap,
             slotRadius: outer,
           ),
-          child: Row(
-            children: [
-              for (final (i, it) in widget.items.indexed) ...[
-                if (i > 0) const SizedBox(width: _segGap),
-                Expanded(
-                  child: Semantics(
-                    button: true,
-                    selected: i == index,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => widget.onChanged(it.$1),
-                      child: Container(
-                        constraints: BoxConstraints(minHeight: height - _segGap * 2),
-                        alignment: Alignment.center,
-                        child: AnimatedDefaultTextStyle(
-                          duration: MeowMotion.of(context, MeowMotion.colorFade),
-                          style: TextStyle(
-                            fontSize: widget.fontSize,
-                            fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
-                            color: i == index ? mm.bg : mm.t2,
-                          ),
-                          child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
+          child: row,
         ),
       ),
+    );
+  }
+}
+
+/// 液态玻璃主题下分段的滑块：一块玻璃透镜，跟着 [pos] 平移（弹簧越过两端时伸进槽的内边距）。
+class _GlassThumb extends StatelessWidget {
+  const _GlassThumb({required this.pos, required this.count, required this.radius});
+
+  final Animation<double> pos;
+  final int count;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final glass = MeowGlassBox(
+      style: MeowGlassStyles.lens(context),
+      radius: BorderRadius.circular(radius),
+      shadows: MeowGlassMetrics.lensShadow,
+    );
+    return LayoutBuilder(
+      builder: (_, c) {
+        final w = (c.maxWidth - _segGap * (count - 1)) / count;
+        return AnimatedBuilder(
+          animation: pos,
+          child: glass,
+          builder: (_, child) => Stack(
+            clipBehavior: Clip.none,
+            children: [Positioned(left: pos.value * (w + _segGap), top: 0, bottom: 0, width: w, child: child!)],
+          ),
+        );
+      },
     );
   }
 }
@@ -253,6 +310,8 @@ class _SegmentThumb extends CustomPainter {
 /// - 连上（[on]）：弹簧补满，同时一圈樱粉描边外扩一次（涟漪），图标从 0.6 弹回 1、颜色渐变成墨色；
 /// - 断开 / 连接失败：350ms 排空。
 /// 初值按出现时的状态给：切回首页时已连接就是满的，不重放。不可用 = 半透明。
+/// 液态玻璃主题：墨色底与液面之上盖一块几乎不着色的玻璃（樱粉着色那一档的边缘折射与高光），液面照旧在里面涨；
+/// 形状仍是圆角方块、不加光晕（用户明确不要正圆和光晕），只留一层很淡的投影。
 class MeowPowerButton extends StatefulWidget {
   const MeowPowerButton({
     super.key,
@@ -338,6 +397,7 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
     final on = widget.on;
     final size = widget.size;
     final radius = BorderRadius.circular(size * 0.325);
+    final glass = meowGlassOn(context);
     return Semantics(
       button: true,
       enabled: widget.enabled,
@@ -351,22 +411,24 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // 底：阴影只换颜色、半径不变
+                // 底：阴影只换颜色、半径不变（玻璃下不要这圈光晕，投影由玻璃自己带）
                 Positioned.fill(
-                  child: AnimatedContainer(
-                    duration: MeowMotion.of(context, MeowMotion.colorFade),
-                    decoration: BoxDecoration(
-                      color: mm.t1,
-                      borderRadius: radius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: on ? mm.pink.withValues(alpha: 0.5) : const Color(0x382A2130),
-                          blurRadius: size * 0.25,
-                          offset: Offset(0, size * 0.1),
+                  child: glass
+                      ? DecoratedBox(decoration: BoxDecoration(color: mm.t1, borderRadius: radius))
+                      : AnimatedContainer(
+                          duration: MeowMotion.of(context, MeowMotion.colorFade),
+                          decoration: BoxDecoration(
+                            color: mm.t1,
+                            borderRadius: radius,
+                            boxShadow: [
+                              BoxShadow(
+                                color: on ? mm.pink.withValues(alpha: 0.5) : const Color(0x382A2130),
+                                blurRadius: size * 0.25,
+                                offset: Offset(0, size * 0.1),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
                 ),
                 // 液面：弹簧补满时会越过 1，越出的部分被圆角裁掉
                 Positioned.fill(
@@ -383,6 +445,15 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
                     ),
                   ),
                 ),
+                // 玻璃：画在底与液面之后，读的就是它们（边缘把液面弯进来）
+                if (glass)
+                  Positioned.fill(
+                    child: MeowGlassBox(
+                      style: MeowGlassStyles.power(context),
+                      radius: radius,
+                      shadows: MeowGlassMetrics.powerShadow,
+                    ),
+                  ),
                 // 涟漪：连上那一下外扩一圈，平时不画
                 Positioned.fill(
                   child: IgnorePointer(
