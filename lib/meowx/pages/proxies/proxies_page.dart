@@ -11,6 +11,7 @@ import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
 import '../../panel/account.dart';
 import '../../state/meow_settings.dart';
+import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/morph_menu.dart';
@@ -206,25 +207,39 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
             width: 200,
             alignEnd: true,
             fromColor: mm.elev,
-            onSelected: (v) => ref
-                .read(meowSettingProvider.notifier)
-                .updateState(
-                  (s) => switch (v) {
-                    ProxyLayout l => s.copyWith(proxyLayout: l),
-                    NodeCardSize c => s.copyWith(nodeCardSize: c),
-                    _ => s,
-                  },
-                ),
-            entries: () => [
-              // 两栏时布局是定的，布局切换只给单列（手机、平板竖屏）
-              if (!twoPane) ...[
-                const MeowMenuCaption(S.layout),
-                for (final v in ProxyLayout.values) MeowMenuItem<Object>(v, v.label, checked: v == layout),
+            onSelected: (v) {
+              // 排序存在 Bettbox 的 proxiesStyle 里（托盘节点菜单同一份），其余是 MeowX 自己的设置
+              if (v is ProxiesSortType) {
+                ref.read(proxiesStyleSettingProvider.notifier).updateState((s) => s.copyWith(sortType: v));
+                return;
+              }
+              ref
+                  .read(meowSettingProvider.notifier)
+                  .updateState(
+                    (s) => switch (v) {
+                      ProxyLayout l => s.copyWith(proxyLayout: l),
+                      NodeCardSize c => s.copyWith(nodeCardSize: c),
+                      _ => s,
+                    },
+                  );
+            },
+            entries: () {
+              // 本页不按排序重建（网格自己盯着），打开菜单时现读
+              final sort = ref.read(proxiesStyleSettingProvider).sortType;
+              return [
+                // 两栏时布局是定的，布局切换只给单列（手机、平板竖屏）
+                if (!twoPane) ...[
+                  const MeowMenuCaption(S.layout),
+                  for (final v in ProxyLayout.values) MeowMenuItem<Object>(v, v.label, checked: v == layout),
+                  const MeowMenuDivider(),
+                ],
+                const MeowMenuCaption(S.cardSize),
+                for (final v in NodeCardSize.values) MeowMenuItem<Object>(v, v.label, checked: v == size),
                 const MeowMenuDivider(),
-              ],
-              const MeowMenuCaption(S.cardSize),
-              for (final v in NodeCardSize.values) MeowMenuItem<Object>(v, v.label, checked: v == size),
-            ],
+                const MeowMenuCaption(S.sort),
+                for (final v in ProxiesSortType.values) MeowMenuItem<Object>(v, v.label, checked: v == sort),
+              ];
+            },
             builder: (_, open) => RoundGlassButton(icon: Icons.grid_view_rounded, tooltip: S.nodeView, onTap: open),
           ),
           const SizedBox(width: 8),
