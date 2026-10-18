@@ -243,7 +243,8 @@ class AccountActions {
       final controller = globalState.appController;
       final existing = ref.read(profilesProvider).where((p) => p.url == url).firstOrNull;
       if (existing != null) {
-        await controller.updateProfile(existing.copyWith(label: sub.name));
+        // 用户在订阅卡里改过的名字留着，没名字才用主控给的
+        await controller.updateProfile(existing.copyWith(label: existing.label ?? sub.name));
         _switchTo(existing.id);
         return;
       }

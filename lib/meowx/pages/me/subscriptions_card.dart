@@ -17,8 +17,9 @@ import '../../state/meow_settings.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
+import 'me_kit.dart';
 
-enum _ProfileAction { refresh, view, delete }
+enum _ProfileAction { refresh, rename, view, delete }
 
 /// 订阅卡：本机的配置档（当前档展开显示用量，点其它档 = 切换；内置直连档恒在末尾）
 /// + 账户下的订阅（单独一组、带刷新钮；点 = 已下载的直接切换，没下载的下载并切换）+ 导入入口。[compact] = 宽屏第 1 列里的小一号，导入钮在卡片底部。
@@ -68,17 +69,24 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
 
   List<MeowMenuEntry<_ProfileAction>> _menuItems(Profile p) => [
     if (p.url.isNotEmpty) const MeowMenuItem(_ProfileAction.refresh, '刷新'),
+    if (!isDirectProfile(p.id)) const MeowMenuItem(_ProfileAction.rename, '重命名'),
     const MeowMenuItem(_ProfileAction.view, '查看配置'),
     if (!isDirectProfile(p.id)) MeowMenuItem(_ProfileAction.delete, '删除', color: context.mm.slow),
   ];
 
   Future<void> _run(_ProfileAction action, Profile p) async {
-    final c = globalState.appController;
     try {
       switch (action) {
         case _ProfileAction.refresh:
           unawaited(ref.read(accountActionsProvider).refreshProfile());   // 昵称 / 头像跟着用户点的刷新走，不定时拉
-          await c.updateProfile(p);
+          await globalState.appController.updateProfile(p);
+        case _ProfileAction.rename:
+          final name = (await mePrompt(context, '重命名', p.label ?? ''))?.trim();
+          if (!mounted || name == null || name.isEmpty || name == p.label) return;
+          // 只改档名、不动配置文件，不用重载内核；之后刷新也留着这个名字（Profile.update 只在没名字时才取主控给的标题）。
+          // setProfile 与 appController.setProfile 同一句，重名会自动加后缀
+          final latest = ref.read(profilesProvider).getProfile(p.id);
+          if (latest != null) ref.read(profilesProvider.notifier).setProfile(latest.copyWith(label: name));
         case _ProfileAction.view:
           final content = await (await p.getFile()).readAsString();
           await ensureEditorRuntime();   // 编辑器的 Rust 库按需加载，进页面前等它就绪
@@ -89,7 +97,7 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
             maintainState: false,
           );
         case _ProfileAction.delete:
-          await c.deleteProfile(p.id);
+          await globalState.appController.deleteProfile(p.id);
       }
     } catch (e) {
       widget.onError(e);

@@ -325,6 +325,60 @@ void main() {
     expect(_container(tester, MePage).read(currentProfileIdProvider), 'p3');
   });
 
+  testWidgets('订阅菜单「重命名」：只改本机档名（留空不动、不切档）；内置直连档没有这一项', (tester) async {
+    await _pump(
+      tester,
+      const MePage(),
+      size: const Size(412, 1900),
+      overrides: _overrides(profiles: [_main, _backup, _direct], current: 'p1'),
+      textScale: 1,
+    );
+    final container = _container(tester, MePage);
+    String? label(String id) => container.read(profilesProvider).getProfile(id)?.label;
+    final input = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    // 点了菜单项先亮选中块，menuAutoClose 之后才关菜单、回传
+    Future<void> pick(String item) async {
+      await tester.tap(find.text(item));
+      await tester.pump(MeowMotion.menuAutoClose);
+      await tester.pumpAndSettle();
+    }
+    Future<void> submit(String text) async {
+      await tester.enterText(input, text);
+      await tester.tap(find.text('确定'));
+      await tester.pumpAndSettle();
+    }
+
+    // 当前档：「⋯」→「重命名」，输入框带着原名；前后空格去掉
+    await tester.tap(find.byTooltip('订阅管理'));
+    await tester.pumpAndSettle();
+    await pick('重命名');
+    expect(tester.widget<TextField>(input).controller!.text, _main.label);
+    await submit('  家里那份  ');
+    expect(label('p1'), '家里那份');
+    expect(find.text('家里那份'), findsOneWidget);
+
+    // 留空 = 不改
+    await tester.tap(find.byTooltip('订阅管理'));
+    await tester.pumpAndSettle();
+    await pick('重命名');
+    await submit('   ');
+    expect(label('p1'), '家里那份');
+
+    // 其它档长按弹同一份菜单；改名不切档
+    await tester.longPress(find.text('备用订阅'));
+    await tester.pumpAndSettle();
+    await pick('重命名');
+    await submit('备用 · 公司');
+    expect(label('p2'), '备用 · 公司');
+    expect(container.read(currentProfileIdProvider), 'p1');
+
+    // 内置直连档：菜单里没有「重命名」
+    await tester.longPress(find.text(_direct.label!));
+    await tester.pumpAndSettle();
+    expect(find.text('查看配置'), findsOneWidget);
+    expect(find.text('重命名'), findsNothing);
+  });
+
   testWidgets('账户卡头像：主控上传的站内路径接上主控地址再去加载', (tester) async {
     await _pump(
       tester,
