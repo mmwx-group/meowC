@@ -36,7 +36,7 @@ PictureLayer? _picture(WidgetTester tester, Finder finder) {
 Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
-  testWidgets('节点卡错峰出现：每帧只改透明度与位移，卡片内容只画一次', (tester) async {
+  testWidgets('节点卡错峰出现：每帧只改底色遮罩与位移（不开透明图层），卡片内容只画一次', (tester) async {
     final reveal = GroupReveal(vsync: const TestVSync(), count: 3, from: 0);
     addTearDown(reveal.dispose);
     final painters = [for (var i = 0; i < 3; i++) _PaintCounter()];
@@ -58,12 +58,13 @@ void main() {
     final total = Stagger.inTotal(3);
     for (var ms = 16; ms < total; ms += 16) {
       await tester.pump(const Duration(milliseconds: 16));
-      // 轨迹照旧：透明度与位移取自 Stagger
+      // 轨迹照旧：位移取自 Stagger；淡入是盖一层底色，不开透明图层（Opacity 每帧一次离屏合成）
       final expected = Stagger.itemIn(1, reveal.clock.value * total);
-      final opacity = tester.widget<Opacity>(
-        find.ancestor(of: find.byKey(const ValueKey('cell1')), matching: find.byType(Opacity)).first,
+      final shift = tester.widget<Transform>(
+        find.ancestor(of: find.byKey(const ValueKey('cell1')), matching: find.byType(Transform)).first,
       );
-      expect(opacity.opacity, closeTo(expected.opacity, 1e-9));
+      expect(shift.transform.getTranslation().y, closeTo(expected.dy, 1e-9));
+      expect(find.ancestor(of: find.byKey(const ValueKey('cell1')), matching: find.byType(Opacity)), findsNothing);
     }
     await tester.pumpAndSettle();
     // 每张卡从开始出现（透明度离开 0）到播完只画一次

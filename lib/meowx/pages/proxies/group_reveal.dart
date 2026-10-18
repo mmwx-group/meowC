@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../../theme/motion.dart';
+import '../../theme/tokens.dart';
 
 /// 列表布局里一个组正在展开 / 收起的那一段动画（只在用户点组卡时建，播完就扔；滚动回来、重建都不重播）。
 /// - [height]：容器露出的比例。展开 = soft 弹簧到 1（微回弹）；收起 = 延后 60ms、240ms 收到 0。
@@ -64,9 +66,12 @@ class GroupReveal {
 
 /// 节点卡（以及「自动选择」行）的错峰出现 / 淡出。[reveal] 为 null = 静止，原样画（结构不变，动画结束时不重建子树）。
 ///
-/// 卡片本身包在自己的 [RepaintBoundary] 里、放在位移的里面：动画每帧只改透明度图层与位移图层，卡片内容（文字、图标、徽标）
-/// 只画一次。以前位移在边界外面，每帧每张卡都要重画一遍。所以网格不要再给每格自动套一层 RepaintBoundary
-/// （[NodeSliverGrid] 里关掉了 addRepaintBoundaries），这里这层就是那一层。
+/// 淡入淡出不用 [Opacity]：不透明度在 0 和 1 之间时每张卡都是一个离屏层（saveLayer），一屏十几张卡同时淡入就是十几个，
+/// 低端机展开一组明显掉帧。这些卡直接铺在页面底色上，所以照 FlClash 0.9.1 页面转场的做法，在卡上盖一层页面底色、
+/// 按进度变淡（[_BgFade]），看起来和淡入一样，不开离屏层。
+///
+/// 卡片本身包在自己的 [RepaintBoundary] 里、放在位移的里面：动画每帧只改位移图层与盖的那层底色，卡片内容（文字、图标、徽标）
+/// 只画一次。所以网格不要再给每格自动套一层 RepaintBoundary（[NodeSliverGrid] 里关掉了 addRepaintBoundaries），这里这层就是那一层。
 class StaggeredItem extends StatelessWidget {
   const StaggeredItem({super.key, required this.reveal, required this.index, required this.child});
 
@@ -77,17 +82,64 @@ class StaggeredItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = reveal;
+    final bg = context.mm.bg;
     return AnimatedBuilder(
       animation: r?.items ?? kAlwaysCompleteAnimation,
       builder: (_, child) {
         // 静止时也套同样几层（不透明度 1 / 零位移），动画结束时子树不被换掉
         final (:opacity, :dy) = r == null ? (opacity: 1.0, dy: 0.0) : r.item(index);
-        return Opacity(
-          opacity: opacity,
-          child: Transform.translate(offset: Offset(0, dy), child: child),
+        return Transform.translate(
+          offset: Offset(0, dy),
+          child: _BgFade(opacity: opacity, color: bg, child: child),
         );
       },
       child: RepaintBoundary(child: child),
     );
+  }
+}
+
+/// 把子树往 [color]（页面底色）淡：先画子树，再在上面盖一层按 1 − [opacity] 透明度的底色；完全透明时不画子树。
+class _BgFade extends SingleChildRenderObjectWidget {
+  const _BgFade({required this.opacity, required this.color, super.child});
+
+  final double opacity;
+  final Color color;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) => _RenderBgFade(opacity, color);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderBgFade renderObject) {
+    renderObject
+      ..opacity = opacity
+      ..color = color;
+  }
+}
+
+class _RenderBgFade extends RenderProxyBox {
+  _RenderBgFade(this._opacity, this._color);
+
+  double _opacity;
+  Color _color;
+
+  set opacity(double value) {
+    if (value == _opacity) return;
+    _opacity = value;
+    markNeedsPaint();
+  }
+
+  set color(Color value) {
+    if (value == _color) return;
+    _color = value;
+    markNeedsPaint();
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null || _opacity <= 0) return;
+    super.paint(context, offset);
+    if (_opacity < 1) {
+      context.canvas.drawRect(offset & size, Paint()..color = _color.withValues(alpha: _color.a * (1 - _opacity)));
+    }
   }
 }

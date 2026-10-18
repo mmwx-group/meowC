@@ -4,6 +4,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/meowx/app/page_route.dart';
 import 'package:bett_box/common/external_control.dart';
 import 'package:bett_box/l10n/l10n.dart';
 import 'package:bett_box/manager/hotkey_manager.dart';
@@ -34,7 +35,8 @@ class ApplicationState extends ConsumerState<Application>
 
   final _pageTransitionsTheme = const PageTransitionsTheme(
     builders: <TargetPlatform, PageTransitionsBuilder>{
-      TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      // MeowX：安卓走 FlClash 0.9.1 的共享轴转场（lib/meowx/app/page_route.dart），与 BaseNavigator.push 一致
+      TargetPlatform.android: MeowPageTransitionsBuilder(),
       TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
       TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
       TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),

@@ -330,8 +330,8 @@ void main() {
     expect(fetches, 3);
   });
 
-  testWidgets('被别的 Tab 盖着：不取数，也不画「加载中」的转圈；切回来先转圈、拿到快照出列表', (tester) async {
-    final gate = Completer<List<TrackerInfo>>();
+  testWidgets('被别的 Tab 盖着：不取数、不转圈；切过来等平推播完（400ms）才拉，再切回来先显示上一份快照', (tester) async {
+    var gate = Completer<List<TrackerInfo>>();
     var fetches = 0;
     await _pump(
       tester,
@@ -349,10 +349,13 @@ void main() {
     expect(fetches, 0);
     expect(find.byType(CircularProgressIndicator), findsNothing);
 
+    // 第一次进来还没有快照：转圈；拉取等平推播完再发，不在动画中间建列表
     _container(tester).read(meowTabProvider.notifier).state = MeowTab.connections;
     await tester.pump();
-    expect(fetches, 1);
+    expect(fetches, 0);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(fetches, 1);
 
     gate.complete(_conns);
     await tester.pump();
@@ -365,6 +368,19 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1500));
     expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // 再切回来：直接是上一份快照（不转圈），等平推播完再拉新的
+    gate = Completer<List<TrackerInfo>>();
+    final before = fetches;
+    _container(tester).read(meowTabProvider.notifier).state = MeowTab.connections;
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('www.youtube.com:443'), findsOneWidget);
+    expect(fetches, before);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(fetches, before + 1);
+    gate.complete(_conns);
+    await tester.pump();
   });
 
   testWidgets('默认取数经壳：这份快照顺手更新连接计数，壳不再另拉', (tester) async {

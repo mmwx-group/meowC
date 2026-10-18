@@ -110,3 +110,8 @@
 ## 2026-10-17 · 网络测速
 - 新增 `core/Clash.Meta/component/speedtest`（内核包）：经选定**节点**直接拨号（`proxy.DialContext`，不经分流规则）连测速服务器，测延迟 → 下载 10 秒 → 上传 10 秒，单线程或 8 线程；四个测速源 Google / Apple / Speedtest / Cloudflare；字节记进 mihomo 流量统计。
 - `core/meow_speedtest.go`、`core/constant.go`、`core/action.go`：桥层加 `meowSpeedTestStart` / `meowSpeedTestStatus` / `meowSpeedTestStop` 三个方法；`lib/enum/enum.dart`、`lib/models/generated/core.g.dart` 加对应的 `ActionMethod`。
+
+## 2026-10-17 · 安卓页面切换动画换成 FlClash 0.9.1 的做法
+- `lib/common/navigator.dart`：移动端 push 用 `MeowPageRoute`（`lib/meowx/app/page_route.dart`），删掉 `_CleanCupertinoPageRoute`；桌面端 `CommonDesktopRoute` 不变。
+- `lib/application.dart`：安卓的 `PageTransitionsTheme` 换成 `MeowPageTransitionsBuilder`，其余平台仍是 Cupertino。
+- 路由动画移植自 FlClash 0.9.1（chen08209/FlClash，GPL-3.0）的 `lib/ui/page_transition.dart` 与 `deferred_push.dart`，文件头保留出处：共享 X 轴平移（450ms、滑 25%），淡入淡出用「在页面上盖一层底色」代替透明图层（Impeller 下 Opacity 每帧一次离屏合成）；push 晚一帧开始，新页面第一帧的构建不挤进动画第一帧。原来的 Cupertino 路由每帧给下层页面画阴影与视差。

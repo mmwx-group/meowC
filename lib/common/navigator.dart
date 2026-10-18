@@ -1,7 +1,8 @@
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/app.dart';
 import 'package:bett_box/state.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:bett_box/meowx/app/page_route.dart';
+import 'package:flutter/material.dart';
 
 class BaseNavigator {
   static Future<T?> push<T>(
@@ -19,28 +20,17 @@ class BaseNavigator {
         ),
       );
     }
+    // MeowX：手机上进二级页用 FlClash 0.9.1 的共享轴转场（见 lib/meowx/app/page_route.dart），
+    // 以前是 CupertinoPageRoute（500ms、旧页视差 + 边缘阴影），转场时要多合成一层阴影、首帧慢时开头被吞掉
     return await Navigator.of(
       context,
     ).push<T>(
-      _CleanCupertinoPageRoute(
+      MeowPageRoute(
         builder: (context) => child,
         maintainState: maintainState,
       ),
     );
   }
-}
-
-class _CleanCupertinoPageRoute<T> extends CupertinoPageRoute<T> {
-  _CleanCupertinoPageRoute({
-    required super.builder,
-    super.title,
-    super.settings,
-    super.fullscreenDialog,
-    super.maintainState,
-  }) : super(allowSnapshotting: false);
-
-  @override
-  Color? get barrierColor => null;
 }
 
 class CommonDesktopRoute<T> extends PageRoute<T> {

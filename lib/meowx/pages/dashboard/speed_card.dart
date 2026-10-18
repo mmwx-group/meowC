@@ -1,7 +1,8 @@
+import 'dart:async';
+
 import 'package:bett_box/common/navigator.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/meow_tab.dart';
@@ -203,67 +204,67 @@ class _SpeedChart extends StatefulWidget {
   State<_SpeedChart> createState() => _SpeedChartState();
 }
 
-class _SpeedChartState extends State<_SpeedChart> with SingleTickerProviderStateMixin {
-  late final Ticker _ticker = createTicker(_onTick);
+class _SpeedChartState extends State<_SpeedChart> {
+  Timer? _timer;
   final _repaint = _Repaint();
   final _motion = _ChartMotion();
-  Duration _lastFrame = Duration.zero;
 
-  /// 约 24 帧：折线每秒只移几个像素，跟着屏幕刷新率（120Hz）画是白费电
+  /// 约 24 帧：折线每秒只移几个像素。用定时器而不是 Ticker：Ticker 每个 vsync 都排一帧（高刷屏 120 次/秒），
+  /// 哪怕回调里跳过重画，那一帧照样整屏合成、液态玻璃底栏跟着重跑一遍着色器；定时器只在要画时才排帧。
   static const _frameGap = Duration(milliseconds: 41);
 
+  /// 首页不是当前页（外层 TickerMode 关着）、系统关了动画、没在跑：都不动
   bool get _animate =>
-      widget.active && widget.running && widget.history.up.length > 1 && !MediaQuery.disableAnimationsOf(context);
+      widget.active &&
+      widget.running &&
+      widget.history.up.length > 1 &&
+      TickerMode.valuesOf(context).enabled &&
+      !MediaQuery.disableAnimationsOf(context);
 
-  void _onTick(Duration elapsed) {
-    if (elapsed - _lastFrame < _frameGap) return;
-    _lastFrame = elapsed;
-    _repaint.tick();
-  }
-
-  void _syncTicker() {
+  void _syncTimer() {
     if (_animate) {
-      if (!_ticker.isActive) {
-        _lastFrame = Duration.zero;
-        _ticker.start();
-      }
-    } else if (_ticker.isActive) {
-      _ticker.stop();
+      _timer ??= Timer.periodic(_frameGap, (_) => _repaint.tick());
+    } else {
+      _timer?.cancel();
+      _timer = null;
     }
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncTicker();
+    _syncTimer();
   }
 
   @override
   void didUpdateWidget(covariant _SpeedChart old) {
     super.didUpdateWidget(old);
-    _syncTicker();
+    _syncTimer();
   }
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _timer?.cancel();
     _repaint.dispose();
     super.dispose();
   }
 
+  // 折线每 41ms 重画一次，单独一层：不带着网速卡的文字一起重画
   @override
-  Widget build(BuildContext context) => CustomPaint(
-    size: Size.infinite,
-    painter: _SpeedPainter(
-      history: widget.history,
-      motion: _motion,
-      animate: _animate,
-      repaint: _repaint,
-      upColor: widget.upColor,
-      downColor: widget.downColor,
-      idleColor: widget.idleColor,
-      running: widget.running,
-      fill: widget.fill,
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: CustomPaint(
+      size: Size.infinite,
+      painter: _SpeedPainter(
+        history: widget.history,
+        motion: _motion,
+        animate: _animate,
+        repaint: _repaint,
+        upColor: widget.upColor,
+        downColor: widget.downColor,
+        idleColor: widget.idleColor,
+        running: widget.running,
+        fill: widget.fill,
+      ),
     ),
   );
 }

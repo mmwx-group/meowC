@@ -383,7 +383,7 @@ void main() {
     await expectNoFrameRequested(tester, reason: '同一秒的第二次写入');
   });
 
-  testWidgets('网速折线：在首页且已连接时逐帧重画（连续滚动），切到别的页就停、不再要帧', (tester) async {
+  testWidgets('网速折线：在首页且已连接时按节拍重画（连续滚动），切到别的页就停、不再要帧', (tester) async {
     await _pump(tester, _page(), size: const Size(412, 1400), overrides: _overrides(running: true, profile: _profile), textScale: 1);
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
     useReleaseProviderFrames();
@@ -391,13 +391,16 @@ void main() {
       container.read(trafficsProvider.notifier).addTraffic(Traffic(up: 1024 * second, down: 1024 * 1024 * second));
       await tester.pump(const Duration(milliseconds: 500));
     }
-    // 两次推送之间没有数据变化，折线照样在动
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(tester.binding.hasScheduledFrame, isTrue, reason: '在首页：折线逐帧重画');
+    // 两次推送之间没有数据变化，折线照样在动：按 24 帧/秒的节拍要帧（不跟着屏幕刷新率每个 vsync 要，120Hz 屏上省掉八成的帧）
+    await tester.pump();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+    await tester.binding.delayed(const Duration(milliseconds: 50));
+    expect(tester.binding.hasScheduledFrame, isTrue, reason: '在首页：折线按节拍重画');
 
     container.read(meowTabProvider.notifier).state = MeowTab.proxies;
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    await tester.binding.delayed(const Duration(milliseconds: 100));
     await expectNoFrameRequested(tester, reason: '离开首页：折线停下');
   });
 

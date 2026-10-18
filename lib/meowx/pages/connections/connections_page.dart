@@ -84,12 +84,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     _timer = Timer.periodic(const Duration(milliseconds: 1500), (_) => unawaited(_poll()));
     // 退到后台期间不拉（见 _poll）：回到前台立即补一次，不等定时器
     globalState.backgroundMode.addListener(_onBackgroundChanged);
-    // 切到本页立即拉一次，不等定时器
+    // 切到本页：先显示上一份快照（不转圈），等切页平推（380ms）播完再拉——以前离开时把快照作废、切回来先转圈，
+    // 数据一到整张列表正好在平推中间建出来，切到动态页那一下明显顿一下
     ref.listenManual(meowTabProvider, (prev, next) {
       if (next == MeowTab.connections) {
-        unawaited(_poll());
-      } else {
-        _loaded = false;
+        Future<void>.delayed(const Duration(milliseconds: 400), () => unawaited(_poll()));
       }
     });
     ref.listenManual(isRunningProvider, (prev, next) {
@@ -128,7 +127,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       return;
     }
     if (!_visible) {
-      _clearConns();   // 离屏清空
+      // 被别的 Tab 盖着：不拉，旧快照留着——切回来那一帧不重建列表（平推动画中间不建几十行），播完再拉新的。
+      // 隔了很久的字节差不是「每秒」，回来的第一拍速率记 0
+      _polledAt = null;
       return;
     }
     // App 退到后台 / 窗口收进托盘（见 connPollingPaused）：没有画面在用，不拉。
@@ -775,12 +776,14 @@ class _ConnRow extends StatelessWidget {
     final policy = c.chains.lastOrNull ?? '—';
     final leaf = c.chains.firstOrNull ?? '';
     final viaColor = leaf == 'DIRECT' ? mm.good : (leaf.startsWith('REJECT') ? mm.slow : mm.accent);
+    const shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18)));
+    // 不用 clipBehavior 裁剪（每张卡一个圆角裁剪层，列表每 1.5s 重建）：水波纹由 InkWell 的 customBorder 限在圆角里
     return Material(
       color: mm.elev,
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
+      shape: shape,
       child: InkWell(
         onTap: onTap,
+        customBorder: shape,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(12, 10, 2, 10),
           child: Row(
@@ -1222,6 +1225,9 @@ class _LogList extends ConsumerStatefulWidget {
 }
 
 class _LogListState extends ConsumerState<_LogList> {
+  static final _lower = Expando<String>();
+  static final _kinds = Expando<Set<ActivityKind>>();
+
   /// 最多这么久刷新一次列表。日志密的时候（内核日志等级调到 info / debug，每条连接一行）逐条刷新等于每帧把整屏文字重排一遍。
   static const _refreshEvery = Duration(milliseconds: 250);
 
@@ -1323,12 +1329,13 @@ class _LogListState extends ConsumerState<_LogList> {
     final all = _all;
     final q = widget.query.toLowerCase();
     final kind = widget.kind;
+    // 列表每 250ms 重建一次：小写 payload 与类型按日志对象缓存，每行只算一次（以前每次重建对全部日志跑一遍正则）
     final logs = q.isEmpty && kind == ActivityKind.all
         ? all
         : all
               .where((l) =>
-                  (q.isEmpty || l.payload.toLowerCase().contains(q)) &&
-                  (kind == ActivityKind.all || logKinds(l.payload).contains(kind)))
+                  (q.isEmpty || (_lower[l] ??= l.payload.toLowerCase()).contains(q)) &&
+                  (kind == ActivityKind.all || (_kinds[l] ??= logKinds(l.payload)).contains(kind)))
               .toList();
     final filtering = q.isNotEmpty || kind != ActivityKind.all;
     if (!open) {
