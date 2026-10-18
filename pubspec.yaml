@@ -10,8 +10,6 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  # MeowX：液态玻璃底栏（MIT；锁精确版本——包迭代很快，升级前要回归）
-  liquid_glass_widgets: 1.7.2
   cupertino_icons: ^1.0.8
   intl: ^0.20.0
   path_provider: ^2.1.6
@@ -97,6 +95,9 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  # MeowX：底栏液态玻璃的着色器（移植自 FlClash，lib/meowx/glass/）
+  shaders:
+    - shaders/liquid_glass.frag
   assets:
     - assets/data/
     - assets/fonts/

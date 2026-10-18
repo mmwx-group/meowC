@@ -115,3 +115,8 @@
 - `lib/common/navigator.dart`：移动端 push 用 `MeowPageRoute`（`lib/meowx/app/page_route.dart`），删掉 `_CleanCupertinoPageRoute`；桌面端 `CommonDesktopRoute` 不变。
 - `lib/application.dart`：安卓的 `PageTransitionsTheme` 换成 `MeowPageTransitionsBuilder`，其余平台仍是 Cupertino。
 - 路由动画移植自 FlClash 0.9.1（chen08209/FlClash，GPL-3.0）的 `lib/ui/page_transition.dart` 与 `deferred_push.dart`，文件头保留出处：共享 X 轴平移（450ms、滑 25%），淡入淡出用「在页面上盖一层底色」代替透明图层（Impeller 下 Opacity 每帧一次离屏合成）；push 晚一帧开始，新页面第一帧的构建不挤进动画第一帧。原来的 Cupertino 路由每帧给下层页面画阴影与视差。
+
+## 2026-10-17 · 底栏液态玻璃换成 FlClash 0.9.1 的实现
+- `lib/main.dart`：去掉 liquid_glass_widgets 的初始化与全局包装（`LiquidGlassWidgets.initialize` / `wrap` / 自适应档位），`runApp` 回到 `ProviderScope(child: Application())`。
+- `pubspec.yaml`：去掉 `liquid_glass_widgets` 依赖；`flutter: shaders:` 登记 `shaders/liquid_glass.frag`。
+- 新底栏与玻璃都在 `lib/meowx/`：`glass/liquid_glass.dart`、`glass/liquid_glass_capture.dart`、`app/meow_dock.dart` 与 `shaders/liquid_glass.frag` 移植自 FlClash 0.9.1（chen08209/FlClash，GPL-3.0），文件头保留出处。原因：旧库每帧对底栏背后的全分辨率画面做一次大半径模糊再跑折射着色器，背后内容一动（切页、展开代理组、滚动）每帧都要重做，模拟器实测每帧光栅 60–140ms；FlClash 的做法是合成时把背后画面按模糊半径缩小（最多 1/8）重放到一张小图上、所有玻璃共用，画面不动就复用，同样的操作降到 3–5ms。

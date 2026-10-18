@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
@@ -11,9 +9,9 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 
 import '../config/direct_profile.dart';
+import '../glass/liquid_glass.dart';
 import '../pages/connections/connections_page.dart';
 import '../pages/dashboard/dashboard_page.dart';
 import '../pages/me/me_page.dart';
@@ -27,8 +25,8 @@ import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
 import '../theme/tokens.dart';
-import '../theme/widgets.dart';
 import 'frame_log.dart';
+import 'meow_dock.dart';
 import 'meow_sidebar.dart';
 import 'meow_tab.dart';
 import 'tab_stack.dart';
@@ -243,72 +241,38 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     }
 
     return MeowBackScope(
-      child: Scaffold(
-        backgroundColor: mm.bg,
-        // 手机：底栏是悬浮的液态玻璃胶囊，内容从它下面滚过去（extendBody），各页自己把 MediaQuery.padding.bottom 加进底部留白
-        extendBody: !wide,
-        // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
-        resizeToAvoidBottomInset: false,
-        body: SafeArea(bottom: wide, child: body),   // 状态栏下留白
-        // liquid_glass_widgets：Impeller（Android 10+）上高亮胶囊是真折射 + 高光，按住放大、拖动带果冻形变；
-        // Skia（Android 8–9、Windows 3.44）自动降级为模糊 + 双高光，仍可拖动。底轨也用 premium：边缘亮线 + 暗带只有它画得出来。
-        // （改版时换过一版自绘的纯色胶囊，用户要求保留液态玻璃，所以只换了配色和图标。）
-        // 这里写的 premium 是上限：main.dart 给 Android 挂了库的自适应档位（GlassAdaptiveScope），目前只采数据、
-        // 不降档（minQuality 也是 premium），所以下面的 degraded 恒为 false；以后放开到 standard 时，
-        // 被压下来的底轨参数跟着换一组，见 barGlass。
-        bottomNavigationBar: wide
-            ? null
-            : lg.GlassTabBar.bottom(
-                selectedIndex: tab.index,
-                onTabSelected: (i) {
-                  HapticFeedback.selectionClick();
-                  _select(MeowTab.values[i]);
-                },
-                quality: lg.GlassQuality.premium,
-                backgroundQuality: lg.GlassQuality.premium,
-                settings: barGlass(
-                  context.isDarkMode,
-                  degraded: lg.GlassAdaptiveScopeData.maybeOf(context)?.effectiveQuality == lg.GlassQuality.standard,
-                ),
-                selectedIconColor: mm.accent,
-                selectedLabelColor: mm.accent,
-                unselectedIconColor: mm.t2,
-                unselectedLabelColor: mm.t2,
-                iconSize: 23,
-                tabs: [
-                  for (final t in MeowTab.values) lg.GlassTab(icon: MeowIcon.themed(t.glyph), label: t.label),
-                ],
-              ),
+      // 底栏玻璃的取景范围：整页（内容 + 底栏）。宽屏没有底栏，不开（开着每帧都要多一层合成）
+      child: LiquidGlassScope(
+        enabled: !wide,
+        quality: LiquidGlassQuality.standard,
+        child: LiquidGlassHost(
+          enabled: !wide,
+          child: Scaffold(
+            backgroundColor: mm.bg,
+            // 手机：底栏是悬浮的液态玻璃胶囊，内容从它下面滚过去（extendBody），各页自己把 MediaQuery.padding.bottom 加进底部留白
+            extendBody: !wide,
+            // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
+            resizeToAvoidBottomInset: false,
+            body: SafeArea(bottom: wide, child: body), // 状态栏下留白
+            // 悬浮胶囊底栏（移植自 FlClash 0.9.1，见 meow_dock.dart）：选中项是一块透镜，按住鼓起、拖动跟手带果冻形变。
+            // 玻璃由外层的 LiquidGlassHost 统一取背景：每帧把底栏背后的画面缩小后截一次、在小图上模糊，
+            // 不再像原来的 liquid_glass_widgets 那样每帧对全分辨率背景做一次大半径模糊（切页、展开代理组时整屏掉帧的原因）。
+            bottomNavigationBar: wide
+                ? null
+                : NavigationDock(
+                    destinations: [for (final t in MeowTab.values) NavigationDockDestination(glyph: t.glyph, label: t.label)],
+                    selectedIndex: tab.index,
+                    onSelected: (i) {
+                      HapticFeedback.selectionClick();
+                      _select(MeowTab.values[i]);
+                    },
+                  ),
+          ),
+        ),
       ),
     );
   }
 }
-
-/// 底栏胶囊的玻璃：对齐 Surfing 底栏（Kyant backdrop 的 LiquidBottomTabs）——
-/// 95% 不透明的暖白 / 深紫灰底（新主题的卡片色）+ 边缘亮线与内侧暗带 + 24dp 柔和投影，内容滚到下面时不再透出一片灰；选中块仍是 10% 灰药丸。
-/// 暗带（edgeAbsorption）只在 Impeller 的 premium 着色器上好看；Skia（Android 8–9、Windows 窄窗口）降级成 standard 时
-/// 它会变成一圈很重的灰色斜面，所以只在真的用 premium 着色器画时才加。
-///
-/// [degraded]：自适应档位把这台机器压到了 standard（Impeller 机型跑不动 premium；main.dart 目前没放开降档，
-/// 这条分支是为放开备着的）。这时库认为参数已经是按
-/// standard 调好的，不再做它在 Skia 上对 premium 参数自动做的归一化（厚度 ×0.4、高光 ×0.6），
-/// 所以这里自己乘上、并去掉暗带——降档后的底轨就是 Android 8–9 上现在的样子，而不是一圈更重的斜面。
-@visibleForTesting
-lg.LiquidGlassSettings barGlass(bool dark, {bool degraded = false}) => lg.LiquidGlassSettings(
-      glassColor: dark ? const Color(0xF226202D) : const Color(0xF2FFFCFA),
-      bodyMode: lg.GlassBodyMode.clear,
-      thickness: degraded ? 30 * 0.4 : 30,
-      blur: 20,
-      chromaticAberration: 0,
-      lightIntensity: degraded ? 1.0 * 0.6 : 1.0,
-      ambientStrength: 1,
-      ambientRim: 0.6,
-      edgeAbsorption: !degraded && ui.ImageFilter.isShaderFilterSupported ? 0.18 : 0,
-      refractiveIndex: 1.59,
-      saturation: 1.5,
-      lightAngle: 0.75 * math.pi,
-      shadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 24, offset: Offset(0, 4))],
-    );
 
 /// Android 返回键：先弹子页 → 再回首页 → 最后交给 Bettbox 的退出 / 后台逻辑。
 class MeowBackScope extends ConsumerWidget {
