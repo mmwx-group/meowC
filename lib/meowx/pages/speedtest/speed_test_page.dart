@@ -1,3 +1,4 @@
+import 'package:bett_box/common/navigator.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -10,13 +11,15 @@ import '../../state/format.dart';
 import '../../state/speed_test.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
+import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
 import '../proxies/proxies_page.dart' show allLeafProxies;
+import 'speed_test_history_page.dart';
 
-/// 网络测速（点首页网速卡打开；与 iOS / macOS 同一套）：选测速源、单 / 多线程、测速节点（只能选节点，不能选代理组），
-/// 测延迟 → 下载 → 上传。测在 Go 核心里跑、经所选节点直连测速服务器（不经分流规则），见 core/meow_speedtest.go。
+/// 网络测速（点首页网速卡打开；与 iOS / macOS 同一套）：选测速源、单 / 多线程、测速节点（节点或直连，不能选代理组），
+/// 测延迟 → 下载 → 上传。测完 / 失败记一条测速记录（右上角「记录」）。测在 Go 核心里跑、经所选节点直连测速服务器（不经分流规则），见 core/meow_speedtest.go。
 /// 离开页面即停止。
 class SpeedTestPage extends ConsumerStatefulWidget {
   const SpeedTestPage({super.key, this.controller});
@@ -52,16 +55,24 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     final nodes = [for (final p in allLeafProxies(groups)) if (builtinSubtitle(p.name) == null) p.name];
     final exitLeaf = ref.watch(currentNodeProvider)?.leaf ?? '';
     return ListenableBuilder(
-      listenable: c,
+      listenable: Listenable.merge([c, c.history]),
       builder: (context, _) {
-        // 选过的节点换订阅后不在了就回到缺省：首页当前出口实际在用的节点
-        final node = (c.node != null && nodes.contains(c.node))
+        // 选过的节点换订阅后不在了就回到缺省：首页当前出口实际在用的节点；直连总有效
+        final node = (c.node != null && (c.node == kSpeedTestDirect || nodes.contains(c.node)))
             ? c.node
             : (nodes.contains(exitLeaf) ? exitLeaf : nodes.firstOrNull);
         final running = c.isRunning;
         final canStart = connected && node != null;
+        final last = c.history.records.firstOrNull;
         return MeSubPage.list(
           title: '网络测速',
+          actions: [
+            RoundGlassButton(
+              icon: Icons.history_rounded,
+              tooltip: '测速记录',
+              onTap: () => BaseNavigator.push(context, SpeedTestHistoryPage(controller: c)),
+            ),
+          ],
           children: [
             Container(
               padding: const EdgeInsets.all(18),
@@ -87,6 +98,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                 ],
               ],
             ),
+            if (!running && last != null) _LastResult(controller: c, record: last),
             IgnorePointer(
               ignoring: running,
               child: AnimatedOpacity(
@@ -145,7 +157,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               ),
             ),
             const MeCaption(
-              '测速经所选节点直接连测速服务器，不经分流规则（只能选节点，不能选代理组）。先测延迟，再下载、上传各 10 秒'
+              '测速经所选节点直接连测速服务器，不经分流规则（只能选节点或直连，不能选代理组；直连测的是本机网络）。先测延迟，再下载、上传各 10 秒'
               '（Google 只测下载）；多线程同时开 ${SpeedTestController.multiConnections} 条连接。数据边收边丢，但会照实消耗流量。',
             ),
           ],
@@ -168,7 +180,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     }
     final parts = [
       if (p.server != null) '服务器 ${p.server}',
-      if (p.via != null) '经由 ${p.via}',
+      if (p.via != null) '经由 ${speedTestDisplayName(p.via!)}',
       if (p.bytesUsed > 0) '已用 ${fmtSize(p.bytesUsed)}',
     ];
     if (parts.isEmpty) return const SizedBox.shrink();
@@ -230,7 +242,7 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-/// 测速节点：点开底部面板选（只列节点）。
+/// 测速节点：点开底部面板选（最上面固定一行「直连」，下面是节点）。
 class _NodePicker extends StatelessWidget {
   const _NodePicker({required this.node, required this.nodes, required this.onPicked});
   final String? node;
@@ -245,7 +257,7 @@ class _NodePicker extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: nodes.isEmpty ? null : () => _pick(context),
+        onTap: () => _pick(context),
         child: Container(
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -253,7 +265,7 @@ class _NodePicker extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  node ?? '没有节点',
+                  node == null ? '没有节点' : speedTestDisplayName(node!),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 15, color: node == null ? mm.t2 : mm.t1),
@@ -281,15 +293,40 @@ class _NodePicker extends StatelessWidget {
           child: ListView.builder(
             shrinkWrap: true,
             padding: EdgeInsets.fromLTRB(12, 0, 12, 16 + MediaQuery.paddingOf(ctx).bottom),
-            itemCount: nodes.length,
+            // 0 = 直连，1 = 「节点」小标题，之后是节点
+            itemCount: nodes.length + 2,
             itemBuilder: (_, i) {
-              final selected = nodes[i] == node;
+              if (i == 0) {
+                final selected = node == kSpeedTestDirect;
+                return ListTile(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  tileColor: selected ? mm.soft : null,
+                  leading: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(color: mm.soft, borderRadius: BorderRadius.circular(9)),
+                    child: Icon(Icons.north_east_rounded, size: 16, color: mm.accent),
+                  ),
+                  title: Text('直连',
+                      style: TextStyle(color: selected ? mm.accent : mm.t1, fontWeight: selected ? FontWeight.w600 : null)),
+                  subtitle: Text('不经节点，测本机网络（DIRECT）', style: TextStyle(fontSize: 12, color: mm.t2)),
+                  onTap: () => Navigator.of(ctx).pop(kSpeedTestDirect),
+                );
+              }
+              if (i == 1) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Text('节点', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
+                );
+              }
+              final name = nodes[i - 2];
+              final selected = name == node;
               return ListTile(
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 tileColor: selected ? mm.soft : null,
-                title: Text(nodes[i], maxLines: 1, overflow: TextOverflow.ellipsis,
+                title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: selected ? mm.accent : mm.t1, fontWeight: selected ? FontWeight.w600 : null)),
-                onTap: () => Navigator.of(ctx).pop(nodes[i]),
+                onTap: () => Navigator.of(ctx).pop(name),
               );
             },
           ),
@@ -297,6 +334,68 @@ class _NodePicker extends StatelessWidget {
       },
     );
     if (picked != null) onPicked(picked);
+  }
+}
+
+/// 「上次结果」：最近一条记录的摘要，点了直接进这条的详情。
+class _LastResult extends StatelessWidget {
+  const _LastResult({required this.controller, required this.record});
+  final SpeedTestController controller;
+  final SpeedTestRecord record;
+
+  String get _summary {
+    final r = record;
+    if (r.error != null) return '失败：${r.error}';
+    return [
+      if (r.downloadMbps != null) '↓ ${fmtRecordMbps(r.downloadMbps)} Mbps',
+      if (r.uploadMbps != null) '↑ ${fmtRecordMbps(r.uploadMbps)}',
+      if (r.latencyMs != null) '${r.latencyMs} ms',
+      r.timeTitle,
+    ].join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    return Material(
+      color: mm.elev,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => BaseNavigator.push(context, SpeedTestRecordPage(controller: controller, id: record.id)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              const IconTile(icon: Icons.history_rounded, size: 32),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '上次结果 · ${record.displayName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.t1),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _summary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: mm.t2),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              MeowChipChevron(color: mm.t2),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
