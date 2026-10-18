@@ -113,8 +113,10 @@ void main() {
       ),
     ));
     expect(find.text('测速完成'), findsOneWidget);
-    expect(find.text('38'), findsOneWidget);
-    expect(find.text('257'), findsNWidgets(2));   // 大数字 + 下载格
+    // 三格的数字与单位是同一段富文本（固定字号、不再套 FittedBox）
+    expect(find.text('38 ms', findRichText: true), findsOneWidget);
+    expect(find.text('257'), findsOneWidget);   // 大数字
+    expect(find.text('257 Mbps', findRichText: true), findsOneWidget);   // 下载格
     expect(find.text('峰值 286'), findsOneWidget);
     expect(find.text('不支持'), findsOneWidget);
   });

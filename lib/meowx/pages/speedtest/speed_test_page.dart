@@ -505,27 +505,24 @@ class SpeedTestGauge extends StatelessWidget {
           child: Column(
             children: [
               Text(title, style: TextStyle(fontSize: 11, color: mm.t2)),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      value ?? '—',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w700,
-                        color: value == null ? mm.t2 : tint,
-                        fontFamilyFallback: meowRounded,
-                      ),
+              // 固定字号 + 等宽数字：测速时每 300ms 一跳，以前套 FittedBox，位数一变整格就重新缩放一次，看着一直在抖、发糊
+              Text.rich(
+                TextSpan(children: [
+                  TextSpan(
+                    text: value ?? '—',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: value == null ? mm.t2 : tint,
+                      fontFamilyFallback: meowRounded,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
-                    if (value != null) ...[
-                      const SizedBox(width: 2),
-                      Text(unit, style: TextStyle(fontSize: 10, color: mm.t2)),
-                    ],
-                  ],
-                ),
+                  ),
+                  if (value != null) TextSpan(text: ' $unit', style: TextStyle(fontSize: 10, color: mm.t2)),
+                ]),
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.clip,
               ),
               Text(
                 note ?? (peak == null ? ' ' : '峰值 ${fmtMbps(peak)}'),
