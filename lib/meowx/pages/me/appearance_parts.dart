@@ -2,6 +2,7 @@ import 'package:bett_box/models/models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/color_picker.dart';
 import '../../theme/page_title.dart';
@@ -9,7 +10,7 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import 'me_kit.dart';
 
-/// 「我的 › 外观」里主题风格 / 玻璃样式 / 卡片颜色 / 启动卡片颜色 / 强调色几行（[AppearanceRows] 用；手机在底部卡片里，宽屏铺在「外观 · 关于」分组里）。
+/// 「我的 › 外观」里主题风格 / 玻璃样式 / 卡片颜色 / 启动卡片颜色 / 强调色 / App 图标几行（[AppearanceRows] 用；手机在底部卡片里，宽屏铺在「外观 · 关于」分组里）。
 
 void _update(WidgetRef ref, MeowSettings Function(MeowSettings s) f) =>
     ref.read(meowSettingProvider.notifier).updateState(f);
@@ -198,6 +199,96 @@ class _StyleThumb extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// App 图标（只 Android）：默认（猫娘）/ M · 深色 / M · 浅色三张圆角缩略图，选中样式同主题风格。
+class AppIconRow extends ConsumerWidget {
+  const AppIconRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(appIconProvider).valueOrNull;
+    return _StackedRow(
+      label: 'App 图标',
+      caption: _appIconCaption,
+      child: Row(
+        children: [
+          for (final (i, v) in MeowAppIcon.values.indexed) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: _AppIconChoice(
+                icon: v,
+                selected: v == current,
+                onTap: () => ref.read(appIconProvider.notifier).select(v),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// 实测（Android 15 模拟器 + Pixel Launcher）：每次切换系统都会立刻收起 App 界面（启动它的那个入口被停用），进程与连接不受影响，
+// 重新打开回到原来的页面；主屏幕上的图标原地换新。别的桌面可能把旧图标移走
+const _appIconCaption = '切换时系统会收起 App 界面（连接不受影响），从桌面重新打开即可；有的桌面会把主屏幕上的旧图标移走，从应用列表重新拖出来。';
+
+class _AppIconChoice extends StatelessWidget {
+  const _AppIconChoice({required this.icon, required this.selected, required this.onTap});
+
+  final MeowAppIcon icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final dense = MeDense.of(context);
+    final side = dense ? 44.0 : 56.0;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: icon.label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? mm.soft : mm.card2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                // 圆角画在图里；256px 的图按显示尺寸解码
+                Image.asset(
+                  icon.preview,
+                  width: side,
+                  height: side,
+                  cacheWidth: (side * MediaQuery.devicePixelRatioOf(context)).round(),
+                  filterQuality: FilterQuality.medium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  icon.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: MeowFont.caption,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? mm.accent : mm.t1,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

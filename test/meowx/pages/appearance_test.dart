@@ -4,6 +4,7 @@ import 'package:bett_box/meowx/pages/me/appearance_parts.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
 import 'package:bett_box/meowx/pages/me/me_sheet.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
+import 'package:bett_box/meowx/state/app_icon.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/glass.dart';
@@ -29,8 +30,11 @@ class _Meow extends MeowSetting {
 }
 
 class _Theme extends ThemeSetting {
+  _Theme([this.initial = const ThemeProps()]);
+  final ThemeProps initial;
+
   @override
-  ThemeProps build() => const ThemeProps();
+  ThemeProps build() => initial;
 
   @override
   void onUpdate(ThemeProps value) {}
@@ -38,8 +42,32 @@ class _Theme extends ThemeSetting {
 
 const _phone = Size(412, 892);
 
+/// 原生图标切换的替身：记下每次调用，[ok] = false 时原生说没切成。
+class _Bridge implements AppIconBridge {
+  _Bridge(this.name, {this.ok = true});
+  String? name;
+  final bool ok;
+  final calls = <String>[];
+
+  @override
+  Future<String?> current() async => name;
+
+  @override
+  Future<bool> set(String value) async {
+    calls.add(value);
+    if (ok) name = value;
+    return ok;
+  }
+}
+
 /// 「我的 › 外观」底部卡片的入口：一个按钮点开卡片。[glass] = 液态玻璃主题、外层有玻璃宿主（同 App 里包在 Navigator 外面）。
-Future<void> _pump(WidgetTester tester, {MeowSettings meow = const MeowSettings(), bool glass = false}) async {
+Future<void> _pump(
+  WidgetTester tester, {
+  MeowSettings meow = const MeowSettings(),
+  bool glass = false,
+  ThemeProps theme = const ThemeProps(),
+  List<Override> overrides = const [],
+}) async {
   tester.view.physicalSize = _phone;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -47,7 +75,8 @@ Future<void> _pump(WidgetTester tester, {MeowSettings meow = const MeowSettings(
     ProviderScope(
       overrides: [
         meowSettingProvider.overrideWith(() => _Meow(meow)),
-        themeSettingProvider.overrideWith(_Theme.new),
+        themeSettingProvider.overrideWith(() => _Theme(theme)),
+        ...overrides,
       ],
       // 同 application.dart：主题按外观推 token（顺带让设置一直有人听着，不被自动回收）
       child: Consumer(
@@ -186,6 +215,83 @@ void main() {
     final sheet = tester.getRect(find.ancestor(of: find.byType(MeSheetScope).first, matching: find.byType(GestureDetector)).last);
     expect(sheet.left, 0);
     expect(sheet.bottom, _phone.height);
+  });
+
+  group('App 图标', () {
+    Finder choice(String label, {bool? selected}) => find.byWidgetPredicate(
+      (w) => w is Semantics && w.properties.label == label && (selected == null || w.properties.selected == selected),
+    );
+
+    Future<_Bridge> pumpIcons(WidgetTester tester, {String? native = 'default', bool ok = true, bool legacyDark = false}) async {
+      final bridge = _Bridge(native, ok: ok);
+      await _pump(
+        tester,
+        theme: ThemeProps(useDarkIcon: legacyDark),
+        overrides: [appIconSupportedProvider.overrideWithValue(true), appIconBridgeProvider.overrideWithValue(bridge)],
+      );
+      await tester.ensureVisible(find.text('App 图标'));
+      await tester.pumpAndSettle();
+      return bridge;
+    }
+
+    testWidgets('非 Android 不出现', (tester) async {
+      await _pump(tester);
+      expect(find.text('App 图标'), findsNothing);
+    });
+
+    testWidgets('三个选项并排；当前值按原生查到的选中，点了交给原生、选中态跟过去', (tester) async {
+      final bridge = await pumpIcons(tester, native: 'm_dark');
+      for (final label in ['默认', 'M · 深色', 'M · 浅色']) {
+        expect(choice(label), findsOneWidget);
+      }
+      expect(choice('M · 深色', selected: true), findsOneWidget);
+      final rows = {for (final l in ['默认', 'M · 深色', 'M · 浅色']) tester.getRect(choice(l)).top};
+      expect(rows, hasLength(1), reason: '一行并排');
+
+      await tester.tap(choice('M · 浅色'));
+      await tester.pumpAndSettle();
+      expect(bridge.calls, ['m_light']);
+      expect(choice('M · 浅色', selected: true), findsOneWidget);
+      expect(choice('M · 深色', selected: false), findsOneWidget);
+
+      await tester.tap(choice('M · 浅色'));
+      await tester.pumpAndSettle();
+      expect(bridge.calls, ['m_light'], reason: '点当前那个不再调原生');
+
+      await tester.tap(choice('默认'));
+      await tester.pumpAndSettle();
+      expect(bridge.calls.last, 'default');
+      expect(choice('默认', selected: true), findsOneWidget);
+    });
+
+    testWidgets('Bettbox 的「深色图标」开着：猫娘算「默认」，切回默认时开深色那个', (tester) async {
+      final bridge = await pumpIcons(tester, native: 'dark', legacyDark: true);
+      expect(choice('默认', selected: true), findsOneWidget);
+      await tester.tap(choice('M · 深色'));
+      await tester.pumpAndSettle();
+      await tester.tap(choice('默认'));
+      await tester.pumpAndSettle();
+      expect(bridge.calls, ['m_dark', 'dark']);
+    });
+
+    testWidgets('原生没切成功：选中态退回', (tester) async {
+      final bridge = await pumpIcons(tester, ok: false);
+      await tester.tap(choice('M · 深色'));
+      await tester.pumpAndSettle();
+      expect(bridge.calls, ['m_dark']);
+      expect(choice('默认', selected: true), findsOneWidget);
+      expect(choice('M · 深色', selected: false), findsOneWidget);
+    });
+
+    test('原生组件名对照', () {
+      expect(MeowAppIcon.fromNative('default'), MeowAppIcon.catgirl);
+      expect(MeowAppIcon.fromNative('light'), MeowAppIcon.catgirl);
+      expect(MeowAppIcon.fromNative('dark'), MeowAppIcon.catgirl);
+      expect(MeowAppIcon.fromNative(null), MeowAppIcon.catgirl);
+      expect(MeowAppIcon.fromNative('m_dark'), MeowAppIcon.mDark);
+      expect(MeowAppIcon.fromNative('m_light'), MeowAppIcon.mLight);
+      expect(MeowAppIcon.mLight.nativeName(legacyDark: true), 'm_light');
+    });
   });
 
   group('玻璃宿主', () {

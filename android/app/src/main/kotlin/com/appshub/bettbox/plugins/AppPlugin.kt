@@ -246,6 +246,13 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
                 setLauncherIcon(call.argument<Boolean>("useDarkIcon") ?: false)
                 result.success(true)
             }
+            // MeowX：我的 › 外观 › App 图标
+            "getAppIcon" -> {
+                result.success(getAppIcon())
+            }
+            "setAppIcon" -> {
+                result.success(setAppIcon(call.argument<String>("name") ?: "default"))
+            }
             "hasPackageListPermission" -> {
                 result.success(hasPackageListPermission())
             }
@@ -547,25 +554,46 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
             }
     }
 
+    // MeowX：每个桌面图标一个 LAUNCHER 组件，同一时间只开一个。default 是 MainActivity 本身（升级不换启动入口），
+    // dark / light 是 Bettbox 原有的「深色图标」alias，m_dark / m_light 是 MeowX 加的 M 猫脸（我的 › 外观 › App 图标）
+    private val launcherComponents = linkedMapOf(
+        "default" to "com.appshub.bettbox.MainActivity",
+        "light" to "com.appshub.bettbox.MainActivityLight",
+        "dark" to "com.appshub.bettbox.MainActivityDark",
+        "m_dark" to "com.appshub.bettbox.MainActivityMDark",
+        "m_light" to "com.appshub.bettbox.MainActivityMLight",
+    )
+
     private fun setLauncherIcon(useDarkIcon: Boolean) {
+        setAppIcon(if (useDarkIcon) "dark" else "default")
+    }
+
+    // 当前开着的是哪个（以 PackageManager 为准，不另存）；alias 没被显式打开过时是清单里的默认值 disabled
+    private fun getAppIcon(): String {
+        val context = BettboxApplication.getAppContext()
+        val pm = context.packageManager
+        return launcherComponents.entries.firstOrNull { (name, cls) ->
+            name != "default" && runCatching {
+                pm.getComponentEnabledSetting(android.content.ComponentName(context.packageName, cls))
+            }.getOrNull() == PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        }?.key ?: "default"
+    }
+
+    private fun setAppIcon(name: String): Boolean {
+        val target = launcherComponents[name] ?: return false
         val context = BettboxApplication.getAppContext()
         val pm = context.packageManager
         val packageName = context.packageName
-        val defaultComponent = android.content.ComponentName(packageName, "com.appshub.bettbox.MainActivity")
-        val lightComponent = android.content.ComponentName(packageName, "com.appshub.bettbox.MainActivityLight")
-        val darkComponent = android.content.ComponentName(packageName, "com.appshub.bettbox.MainActivityDark")
-
-        if (useDarkIcon) {
-            pm.setComponentEnabledSetting(darkComponent, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(defaultComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(lightComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-        } else {
-            pm.setComponentEnabledSetting(defaultComponent, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(darkComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(lightComponent, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        // 先开新的再关其余：中间不出现一个启动入口都没有的状态
+        pm.setComponentEnabledSetting(android.content.ComponentName(packageName, target), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+        for (cls in launcherComponents.values) {
+            if (cls != target) {
+                pm.setComponentEnabledSetting(android.content.ComponentName(packageName, cls), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+            }
         }
         com.appshub.bettbox.services.NotificationComponentCache.invalidate()
         VpnPlugin.updateNotificationIcon()
+        return true
     }
 
     private fun hasPackageListPermission(): Boolean {

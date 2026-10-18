@@ -126,3 +126,10 @@
 - `lib/models/meow.dart MeowSettings`：`themeStyle`（经典 / 液态玻璃，缺省经典）、`glassTint`（透明 / 着色）、`cardColor`、`heroColor`、`accentColor`（ARGB，缺省白 / 樱粉 / 玫红 = 改版前的样子）；旧数据缺字段取缺省。
 - `shaders/liquid_glass.frag`：Impeller 的 OpenGL ES 后端采样纹理时 y 轴是反的（dart:ui `ImageFilter.shader` 的说明），原着色器没处理，Android GLES 上每块玻璃读的是截图里上下颠倒的位置（同一层有两块以上时读到别人那块）；采样前在 `IMPELLER_TARGET_OPENGLES` 下翻转 y。底栏的底色 95% 不透明，以前看不出来。
 - 其余在 `lib/meowx/`：token 推导（`theme/tokens.dart`）、玻璃控件（`theme/glass.dart`）、移植自 FlClash 0.9.1 的 iOS 风格取色器（`theme/color_picker.dart`）、外观设置行（`pages/me/appearance_parts.dart`）。
+
+## 2026-10-18 · 可选 App 图标（只 Android）
+- `AndroidManifest.xml`：加两个默认停用的 `activity-alias`（`MainActivityMDark` / `MainActivityMLight`，M 猫脸深 / 浅，intent-filter 照抄 MainActivity：LAUNCHER / 磁贴长按 / 深链）。默认图标仍是 MainActivity 自己的 LAUNCHER，升级不换启动入口。
+- `plugins/AppPlugin.kt`：`app` 通道加 `getAppIcon` / `setAppIcon`（五个 LAUNCHER 组件开一个关其余，`DONT_KILL_APP`，当前值以 PackageManager 为准）；Bettbox 原有的 `setLauncherIcon`（高级 › 主题 › 深色图标）改走同一个函数，切回猫娘时会顺带关掉 M 图标的 alias。
+- `services/NotificationComponentCache.kt`：M 图标开着时通知点开那个 alias（MainActivity 此时是停用的）。
+- 资源：`scripts/make-brand-assets.py` 由 `design/brand/icon-m-{dark,light}.png` 生成自适应图标（底色背景层 + 缩进 66dp 安全圆的前景层 + 单色层）与设置页缩略图 `assets/images/app_icon_m_*_256.png`。
+- 界面在 `lib/meowx/`：`state/app_icon.dart`、外观里的「App 图标」行（`pages/me/appearance_parts.dart`）。

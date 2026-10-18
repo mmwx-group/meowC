@@ -2,4 +2,6 @@
 <resources>
     <color name="ic_launcher_bg_light">#17181F</color>
     <color name="ic_launcher_bg_dark">#17181F</color>
+    <color name="ic_launcher_bg_m_dark">#08090F</color>
+    <color name="ic_launcher_bg_m_light">#FDF7EF</color>
 </resources>

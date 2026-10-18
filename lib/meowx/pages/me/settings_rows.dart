@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../config/meow_patch.dart';
+import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
@@ -300,7 +301,7 @@ class LogSwitchRow extends ConsumerWidget {
   }
 }
 
-/// 外观：深浅色 / 主题风格（经典 · 液态玻璃）/ 玻璃样式（只在液态玻璃下）/ 卡片颜色 / 启动卡片颜色 / 强调色。后几项见 appearance_parts.dart。
+/// 外观：深浅色 / 主题风格（经典 · 液态玻璃）/ 玻璃样式（只在液态玻璃下）/ 卡片颜色 / 启动卡片颜色 / 强调色 / App 图标（只 Android）。后几项见 appearance_parts.dart。
 class AppearanceRows extends ConsumerWidget {
   const AppearanceRows({super.key});
 
@@ -322,6 +323,7 @@ class AppearanceRows extends ConsumerWidget {
         const ColorChoiceRow(MeowColorKind.card),
         const ColorChoiceRow(MeowColorKind.hero),
         const ColorChoiceRow(MeowColorKind.accent),
+        if (ref.watch(appIconSupportedProvider)) const AppIconRow(),
       ],
     );
   }

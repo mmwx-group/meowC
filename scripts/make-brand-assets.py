@@ -5,6 +5,7 @@
 #   glyph-solid.png     实心头像剪影成品（左半浅底黑图、右半深底白图，同一个形；取左半的黑色部分）
 #                       → Android 通知 / 磁贴 / 快捷方式 / 主题图标单色层、Windows 托盘运行态。与 iOS 控制中心、macOS 菜单栏同一张
 #   glyph-mono.png      早先的半身剪影，不再用，留作参考
+#   icon-m-dark.png / icon-m-light.png  可选 App 图标：黑底白 M 猫脸 / 奶白底黑 M 猫脸（平涂底色的满幅正方形）→ 只 Android
 # 用法：python3 scripts/make-brand-assets.py
 import os
 from PIL import Image, ImageDraw
@@ -97,8 +98,77 @@ for name, fg in (("light", "ic_launcher_fg_light"), ("dark", "ic_launcher_fg_dar
                     f'    <background android:drawable="@color/ic_launcher_bg_{name}" />\n'
                     f'    <foreground android:drawable="@mipmap/{fg}" />\n'
                     '    <monochrome android:drawable="@mipmap/ic_launcher_mono" />\n</adaptive-icon>\n')
+
+# ---- 可选 App 图标（「我的 › 外观 › App 图标」，只 Android；Manifest 里 MainActivityMDark / MainActivityMLight 两个 alias 用）：
+#      背景层 = 底色（四条边的中位数）；前景层 = 原图对底色做「颜色转透明」（叠回底色与原图逐像素相同，光晕保留成半透明），
+#      按内容离中心最远的点缩进 108dp 画布中间 66dp 的安全圆——胡须在最外侧，圆形遮罩下不能被切；
+#      单色层（Android 13 主题图标）= 与底色的差异（三个通道里最大的那个）：光晕 / 暗角那层淡色截掉、内容拉满，白色 ----
+M_SAFE_DP = 33        # 安全圆半径（直径 66dp）
+
+def edge_bg(im):
+    w, h = im.size
+    edge = [im.getpixel((x, y)) for x in range(w) for y in (0, h - 1)] + [im.getpixel((x, y)) for y in range(h) for x in (0, w - 1)]
+    return tuple(sorted(p[i] for p in edge)[len(edge) // 2] for i in range(3))
+
+def color_to_alpha(im, bg):
+    # 每个像素取最小的 α 使 P = α·F + (1−α)·B 成立（GIMP 的 Color to Alpha），F 由此反推
+    px_out = []
+    for p in im.getdata():
+        a = 0.0
+        for c, b in zip(p, bg):
+            if c != b:
+                a = max(a, (c - b) / (255 - b) if c > b else (b - c) / b)
+        if a <= 1 / 255:
+            px_out.append(bg + (0,)); continue
+        px_out.append(tuple(max(0, min(255, round((c - b) / a + b))) for c, b in zip(p, bg)) + (round(a * 255),))
+    res = Image.new("RGBA", im.size); res.putdata(px_out); return res
+
+def m_mono(im, bg):
+    # 不用前景的 α：底色贴近 0 / 255 时一点点偏差就会被「颜色转透明」算成很高的 α（奶白底中间那圈更白的光晕 α≈0.75）。
+    # 差异 < 64 的（光晕、暗角、压缩噪点）截掉，≥ 128 的（M / 耳朵 / 胡须）不透明
+    a = Image.new("L", im.size)
+    a.putdata([max(0, min(255, (max(abs(c - b) for c, b in zip(p, bg)) - 64) * 4)) for p in im.getdata()])
+    return a
+
+def placed(im, side, fill):
+    # 同 centered()，但半透明图要用 alpha_composite 放上透明画布：centered() 的 paste(im, mask=im) 会把颜色和 α 都再乘一遍 α
+    scale = side * fill / max(im.size)
+    im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.LANCZOS)
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.alpha_composite(im, ((side - im.width) // 2, (side - im.height) // 2))
+    return canvas
+
+def m_icon(name):
+    im = Image.open(os.path.join(BRAND, f"icon-m-{name}.png")).convert("RGB").resize((1024, 1024), Image.LANCZOS)
+    bg = edge_bg(im)
+    fg = color_to_alpha(im, bg)
+    mono = m_mono(im, bg)
+    # 内容离画面中心最远的点：只算单色层里实的部分，光晕不算
+    w, h = mono.size; mpx = mono.load(); r = 0.0
+    for y in range(h):
+        for x in range(w):
+            if mpx[x, y] > 128:
+                r = max(r, ((x + 0.5 - w / 2) ** 2 + (y + 0.5 - h / 2) ** 2) ** 0.5)
+    fill = M_SAFE_DP / 108 * w / r     # placed() 按整幅图的边长缩放
+    white = Image.new("RGBA", mono.size, (255, 255, 255, 255)); white.putalpha(mono)
+    save_densities(lambda px: placed(fg, px, fill), f"ic_launcher_fg_m_{name}", "mipmap", 108)
+    save_densities(lambda px: placed(white, px, fill), f"ic_launcher_mono_m_{name}", "mipmap", 108)
+    with open(out(os.path.join(RES, "mipmap-anydpi-v26", f"ic_launcher_m_{name}.xml")), "w") as f:
+        f.write('<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
+                f'    <background android:drawable="@color/ic_launcher_bg_m_{name}" />\n'
+                f'    <foreground android:drawable="@mipmap/ic_launcher_fg_m_{name}" />\n'
+                f'    <monochrome android:drawable="@mipmap/ic_launcher_mono_m_{name}" />\n</adaptive-icon>\n')
+    # 设置页的预览缩略图（与 icon_light_256.png 同圆角同尺寸；「默认」那格直接用 icon_light_256.png）
+    rounded(im, 0.22).resize((256, 256), Image.LANCZOS).save(out(os.path.join(IMAGES, f"app_icon_m_{name}_256.png")), optimize=True)
+    print(f"m_{name}: bg #%02X%02X%02X, content r={r:.0f}px, fill {fill:.3f}" % bg)
+    return bg
+
+M_DARK_BG = m_icon("dark")
+M_LIGHT_BG = m_icon("light")
 with open(out(os.path.join(RES, "values", "ic_launcher_colors.xml")), "w") as f:
-    f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_bg_light">#%02X%02X%02X</color>\n    <color name="ic_launcher_bg_dark">#%02X%02X%02X</color>\n</resources>\n' % (LIGHT_BG + DARK_BG))
+    f.write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_bg_light">#%02X%02X%02X</color>\n    <color name="ic_launcher_bg_dark">#%02X%02X%02X</color>\n'
+            '    <color name="ic_launcher_bg_m_dark">#%02X%02X%02X</color>\n    <color name="ic_launcher_bg_m_light">#%02X%02X%02X</color>\n</resources>\n'
+            % (LIGHT_BG + DARK_BG + M_DARK_BG + M_LIGHT_BG))
 
 # ---- Android 启动画面：288dp 画布、圆形遮罩内 192dp → 整幅画裁成圆 ----
 def splash(art):
