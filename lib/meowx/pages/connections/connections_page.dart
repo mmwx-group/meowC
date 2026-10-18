@@ -51,7 +51,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   final _search = TextEditingController();
   String _query = '';
 
-  /// 类型筛选（全部 / APNs / DNS / 直连 / 代理），连接与日志共用（同 iOS）
+  /// 类型筛选（全部 / 推送 / DNS / 直连 / 代理），连接与日志共用（对应 iOS，APNs 换成 Google 推送）
   ActivityKind _kind = ActivityKind.all;
   List<TrackerInfo> _conns = const [];
   String? _selectedId;
@@ -850,7 +850,7 @@ class _ConnRow extends StatelessWidget {
   }
 }
 
-/// 类型筛选胶囊（全部 / APNs / DNS / 直连 / 代理）：选中 = 柔粉底玫红字，其余白底（同 iOS 的 MeowPill .soft / .card）。
+/// 类型筛选胶囊（全部 / 推送 / DNS / 直连 / 代理）：选中 = 柔粉底玫红字，其余白底（同 iOS 的 MeowPill .soft / .card）。
 class _KindFilter extends StatelessWidget {
   const _KindFilter({required this.value, required this.onChanged, this.compact = false});
   final ActivityKind value;

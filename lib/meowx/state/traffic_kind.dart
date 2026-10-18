@@ -1,12 +1,10 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:bett_box/models/models.dart';
 
-/// 动态页的类型筛选（同 iOS 的 ActivityKindFilter）：全部 / APNs / DNS / 直连 / 代理，连接与日志共用一个选择。
+/// 动态页的类型筛选（对应 iOS 的 ActivityKindFilter）：全部 / 推送 / DNS / 直连 / 代理，连接与日志共用一个选择。
+/// iOS 的「APNs」在安卓 / Windows 上换成「推送」：Google 推送（GMS / FCM）。
 enum ActivityKind {
   all('全部'),
-  apns('APNs'),
+  push('推送'),
   dns('DNS'),
   direct('直连'),
   proxy('代理');
@@ -15,13 +13,18 @@ enum ActivityKind {
   final String label;
 }
 
-/// Apple 推送服务（APNs）：`*.push.apple.com` + 推送服务器 IP 段（DNS 被污染时 iOS 直接按 IP 连）+ TCP 5223。
-/// 与 iOS / macOS 引擎的 APNsTarget 同一份。
-const apnsDomainSuffixes = ['push.apple.com', 'push-apple.com.akadns.net'];
-const apnsCidrs = [
-  '17.249.0.0/16', '17.252.0.0/16', '17.57.144.0/22', '17.188.128.0/18', '17.188.20.0/23',
-  '2620:149:a44::/48', '2403:300:a42::/48', '2403:300:a51::/48', '2a01:b740:a42::/48',
+/// Google 推送（GMS / FCM）：FCM 长连接 `mtalk.google.com`（含 `alt1-mtalk.google.com` 这类）、
+/// FCM / 旧 GCM 的接口域名，以及 FCM 专用的 TCP 5228–5230。
+const pushDomainSuffixes = [
+  'mtalk.google.com',
+  'fcm.googleapis.com',
+  'fcmtoken.googleapis.com',
+  'fcmregistrations.googleapis.com',
+  'android.googleapis.com',
+  'gcm.googleapis.com',
+  'android.apis.google.com',
 ];
+const pushPorts = {5228, 5229, 5230};
 
 /// 常见 DoH 服务（443 端口上的 DNS），同 iOS 的 DNSTarget。
 const dohHosts = [
@@ -30,13 +33,14 @@ const dohHosts = [
 ];
 const dohSuffixes = ['.cloudflare-dns.com', '.dns.nextdns.io', '.dns.adguard-dns.com'];
 
-bool _domainMatches(String host, String suffix) => host == suffix || host.endsWith('.$suffix');
+/// 后缀匹配：本身或子域名；`alt1-mtalk.google.com` 这种前缀带编号的也算 mtalk。
+bool _domainMatches(String host, String suffix) =>
+    host == suffix || host.endsWith('.$suffix') || (suffix == 'mtalk.google.com' && RegExp(r'^alt\d+-mtalk\.google\.com$').hasMatch(host));
 
-bool isApnsTarget({required String host, required String ip, required int port, required bool tcp}) {
+bool isPushTarget({required String host, required int port, required bool tcp}) {
   final h = host.toLowerCase();
-  if (h.isNotEmpty && apnsDomainSuffixes.any((s) => _domainMatches(h, s))) return true;
-  if (tcp && port == 5223) return true;
-  return ip.isNotEmpty && apnsCidrs.any((c) => cidrContains(c, ip));
+  if (h.isNotEmpty && pushDomainSuffixes.any((s) => _domainMatches(h, s))) return true;
+  return tcp && pushPorts.contains(port);
 }
 
 bool isDnsTarget({required String host, required int port}) {
@@ -45,26 +49,7 @@ bool isDnsTarget({required String host, required int port}) {
   return port == 443 && (dohHosts.contains(h) || dohSuffixes.any(h.endsWith));
 }
 
-/// [cidr] 是否包含 [ip]（v4 / v6 都认；格式不对返回 false）。
-bool cidrContains(String cidr, String ip) {
-  final slash = cidr.indexOf('/');
-  if (slash < 0) return false;
-  final net = InternetAddress.tryParse(cidr.substring(0, slash));
-  final addr = InternetAddress.tryParse(ip);
-  final bits = int.tryParse(cidr.substring(slash + 1));
-  if (net == null || addr == null || bits == null || net.type != addr.type) return false;
-  final Uint8List a = net.rawAddress, b = addr.rawAddress;
-  var left = bits;
-  for (var i = 0; i < a.length && left > 0; i++) {
-    final take = left >= 8 ? 8 : left;
-    final mask = (0xFF << (8 - take)) & 0xFF;
-    if ((a[i] & mask) != (b[i] & mask)) return false;
-    left -= take;
-  }
-  return true;
-}
-
-/// 一条连接属于哪些类：用途（APNs / DNS，可能都不是）+ 去向（直连 / 代理，二选一；拒绝的两样都不算）。
+/// 一条连接属于哪些类：用途（推送 / DNS，可能都不是）+ 去向（直连 / 代理，二选一；拒绝的两样都不算）。
 /// 去向看最终出站（mihomo 的 chains 第一个是叶子节点）。
 Set<ActivityKind> connectionKinds(TrackerInfo c) {
   final m = c.metadata;
@@ -72,7 +57,7 @@ Set<ActivityKind> connectionKinds(TrackerInfo c) {
   final tcp = m.network.toLowerCase() == 'tcp';
   final leaf = c.chains.firstOrNull ?? '';
   return {
-    if (isApnsTarget(host: m.host, ip: m.destinationIP, port: port, tcp: tcp)) ActivityKind.apns,
+    if (isPushTarget(host: m.host, port: port, tcp: tcp)) ActivityKind.push,
     if (isDnsTarget(host: m.host, port: port)) ActivityKind.dns,
     if (leaf == 'DIRECT') ActivityKind.direct,
     if (leaf.isNotEmpty && leaf != 'DIRECT' && !leaf.startsWith('REJECT')) ActivityKind.proxy,
@@ -84,7 +69,7 @@ final _logUsing = RegExp(r'\busing\s+(\S+)');
 
 /// 一行内核日志属于哪些类。mihomo 的连接日志形如
 /// `[TCP] 10.0.0.2:51234 --> example.com:443 match DomainSuffix(example.com) using 节点选择[香港 01]`：
-/// 目标地址认 APNs / DNS，`using` 后面认直连 / 代理；DNS 模块自己的日志（`[DNS] …`）也算 DNS 类。
+/// 目标地址认推送 / DNS，`using` 后面认直连 / 代理；DNS 模块自己的日志（`[DNS] …`）也算 DNS 类。
 Set<ActivityKind> logKinds(String payload) {
   final kinds = <ActivityKind>{};
   final target = _logTarget.firstMatch(payload);
@@ -92,10 +77,7 @@ Set<ActivityKind> logKinds(String payload) {
     var host = target.group(1)!;
     if (host.startsWith('[') && host.endsWith(']')) host = host.substring(1, host.length - 1);
     final port = int.tryParse(target.group(2)!) ?? 0;
-    final isIp = InternetAddress.tryParse(host) != null;
-    if (isApnsTarget(host: isIp ? '' : host, ip: isIp ? host : '', port: port, tcp: payload.contains('[TCP]'))) {
-      kinds.add(ActivityKind.apns);
-    }
+    if (isPushTarget(host: host, port: port, tcp: payload.contains('[TCP]'))) kinds.add(ActivityKind.push);
     if (isDnsTarget(host: host, port: port)) kinds.add(ActivityKind.dns);
   }
   if (payload.contains('[DNS]')) kinds.add(ActivityKind.dns);

@@ -141,7 +141,7 @@ void main() {
     expect(find.text('动态'), findsOneWidget);
     expect(find.text('连接 · 3'), findsOneWidget);
     // 同 iOS：搜索框右边「全部关闭」，下面一排类型筛选；没有「N 条 · 代理 · 直连」那一行了
-    for (final k in ['全部', 'APNs', 'DNS', '直连', '代理']) {
+    for (final k in ['全部', '推送', 'DNS', '直连', '代理']) {
       expect(find.text(k), findsOneWidget);
     }
     expect(find.textContaining('条 · 代理'), findsNothing);
@@ -182,7 +182,7 @@ void main() {
     expect(find.textContaining('NXDOMAIN'), findsOneWidget);
   });
 
-  testWidgets('类型筛选（同 iOS）：直连 / 代理按最终出站，连接与日志共用一个选择', (tester) async {
+  testWidgets('类型筛选（同 iOS，APNs 换成安卓的推送）：直连 / 代理按最终出站，连接与日志共用一个选择', (tester) async {
     await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1);
 
     await tester.tap(find.text('直连'));
@@ -196,11 +196,11 @@ void main() {
     expect(find.text('api.telegram.org:443'), findsOneWidget);
     expect(find.textContaining('bilibili.com'), findsNothing);
 
-    await tester.tap(find.text('APNs'));
+    await tester.tap(find.text('推送'));
     await tester.pump();
     expect(find.text('无匹配连接'), findsOneWidget);
 
-    // 换到日志段，选择留着：测试日志里没有 APNs 的行
+    // 换到日志段，选择留着：测试日志里没有推送的行
     await tester.tap(find.text('日志'));
     await tester.pump();
     expect(find.text('无匹配日志'), findsOneWidget);
