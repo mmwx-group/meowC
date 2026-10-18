@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/strings.dart';
 import '../../panel/account.dart';
 import '../../state/meow_settings.dart';
+import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
@@ -185,27 +186,43 @@ class NodeSliverGrid extends ConsumerWidget {
     final pinned = watchFixedMember(ref, group);
     final pendingPick = computed ? ref.watch(pendingPickProvider.select((m) => m[group.name])) : null;
     final shownSelected = (pendingPick != null && pendingPick.isNotEmpty) ? pendingPick : selectedName;
+    // 按延迟排要盯住每个成员的延迟：测出一个就重排一次（同一帧里到的结果合成一次重建）
+    final sort = ref.watch(proxiesStyleSettingProvider.select((s) => s.sortType));
+    final nodes = sortNodes(
+      group.all,
+      sort,
+      delayOf: sort == ProxiesSortType.delay
+          ? (p) => ref.watch(getDelayProvider(proxyName: p.name, testUrl: group.testUrl))
+          : null,
+    );
+    // 重排时已建出的格子跟着自己的名字挪位置，不在原位拆掉重建
+    final indexOf = sort == ProxiesSortType.none ? null : {for (final (i, p) in nodes.indexed) p.name: i};
     return SliverGrid(
       gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense)),
-      delegate: SliverChildBuilderDelegate((context, i) {
-        final p = group.all[i];
-        return StaggeredItem(
-          key: ValueKey(p.name),
-          reveal: reveal,
-          index: i,
-          child: _NodeCell(
-            proxy: p,
-            group: group,
-            meta: metas[p.name],
-            selected: p.name == shownSelected,
-            pinned: pinned.isNotEmpty && p.name == pinned,
-            busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
-            mode: mode,
-            dense: dense,
-            onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
-          ),
-        );
-      }, childCount: group.all.length, addRepaintBoundaries: false),
+      delegate: SliverChildBuilderDelegate(
+        (context, i) {
+          final p = nodes[i];
+          return StaggeredItem(
+            key: ValueKey(p.name),
+            reveal: reveal,
+            index: i,
+            child: _NodeCell(
+              proxy: p,
+              group: group,
+              meta: metas[p.name],
+              selected: p.name == shownSelected,
+              pinned: pinned.isNotEmpty && p.name == pinned,
+              busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
+              mode: mode,
+              dense: dense,
+              onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
+            ),
+          );
+        },
+        childCount: nodes.length,
+        addRepaintBoundaries: false,
+        findChildIndexCallback: indexOf == null ? null : (key) => key is ValueKey<String> ? indexOf[key.value] : null,
+      ),
     );
   }
 }

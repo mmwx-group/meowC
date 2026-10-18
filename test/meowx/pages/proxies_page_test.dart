@@ -7,6 +7,7 @@ import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/badges.dart';
+import 'package:bett_box/meowx/theme/motion.dart';
 import 'package:bett_box/meowx/theme/unlock_badge.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
@@ -38,6 +39,14 @@ class _Groups extends Groups {
 
   @override
   void onUpdate(List<Group> value) {}
+}
+
+class _Style extends ProxiesStyleSetting {
+  @override
+  ProxiesStyle build() => const ProxiesStyle();
+
+  @override
+  void onUpdate(ProxiesStyle value) {}
 }
 
 class _PageLabel extends CurrentPageLabel {
@@ -138,6 +147,7 @@ List<Override> _overrides({
     currentGroupsStateProvider.overrideWithValue(GroupsState(value: gs)),
     groupsProvider.overrideWith(() => _Groups(gs)),
     currentPageLabelProvider.overrideWith(_PageLabel.new),
+    proxiesStyleSettingProvider.overrideWith(_Style.new),
     meowSettingProvider.overrideWith(() => _Meow(MeowSettings(proxyLayout: layout, nodeCardSize: size))),
     proxyMetaProvider.overrideWithValue(const {_longName: ProxyMeta(type: 'vless', reality: true, flow: 'xtls-rprx-vision')}),
     medalsProvider.overrideWith((ref) => {_longName: _medal(_longName, 'gold'), '东京 01 · IIJ': _medal('东京 01 · IIJ', 'silver')}),
@@ -234,6 +244,55 @@ void main() {
       find.ancestor(of: find.byType(NodeSliverGrid), matching: find.byType(SliverPadding)).first,
     );
     expect(gridPad.padding, const EdgeInsets.fromLTRB(16, 12, 16, 12 + 96));
+  });
+
+  testWidgets('排序：「节点视图」菜单里选延迟 / 名称，节点格跟着重排并记下；选默认回到订阅顺序', (tester) async {
+    await _pump(tester, size: const Size(412, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
+    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
+    final names = {for (final p in _nodes) p.name};
+    final subscription = [for (final p in _nodes) p.name];
+    // 节点格里的名字，按网格顺序（摘要里的当前节点不算）
+    List<String> order() => [
+      for (final t in tester.widgetList<Text>(find.descendant(of: find.byType(NodeSliverGrid), matching: find.byType(Text))))
+        if (names.contains(t.data)) t.data!,
+    ];
+    // 点了菜单项先亮选中块，menuAutoClose 之后才关菜单、回传
+    Future<void> pick(String item) async {
+      await tester.tap(find.byTooltip('节点视图'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item));
+      await tester.pump(MeowMotion.menuAutoClose);
+      await tester.pumpAndSettle();
+    }
+
+    expect(order(), subscription);
+
+    // 延迟：有读数的从低到高（12345 也是读数），测试中 / 没测过的按原顺序接后面，超时垫底
+    await pick('延迟');
+    expect(container.read(proxiesStyleSettingProvider).sortType, ProxiesSortType.delay);
+    expect(order(), [
+      _longName,
+      '东京 01 · IIJ',
+      '洛杉矶 01 · 9929',
+      '香港 02 · BGP',
+      '大阪 02',
+      '新加坡 01',
+      '台北 01 · HiNet',
+      '圣何塞 02',
+      '首尔 01',
+      '法兰克福 01',
+      'Premium-Node-Without-Region-12345',
+      '伦敦 01',
+    ]);
+
+    // 名称：中文按拼音（大阪 daban、东京 dongjing、法兰克福 falankefu …），国旗开头的排在最后
+    await pick('名称');
+    expect(container.read(proxiesStyleSettingProvider).sortType, ProxiesSortType.name);
+    expect(order().take(3), ['大阪 02', '东京 01 · IIJ', '法兰克福 01']);
+    expect(order().last, _longName);
+
+    await pick('默认');
+    expect(order(), subscription);
   });
 
   testWidgets('手机 · 单组布局：已固定的 url-test 组 / 大卡片单列 / 深色', (tester) async {
