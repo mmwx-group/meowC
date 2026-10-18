@@ -135,14 +135,22 @@ ScrollPosition _logScroll(WidgetTester tester) =>
     tester.state<ScrollableState>(find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable))).position;
 
 void main() {
-  testWidgets('手机：标题 / 分段 / 汇总 / 连接行，1.4 倍字号不溢出；点行弹出详情', (tester) async {
+  testWidgets('手机：标题 / 分段 / 搜索行 + 类型筛选 / 连接卡片，1.4 倍字号不溢出；点行弹出详情', (tester) async {
     await _pump(tester, size: const Size(360, 780), wide: false, twoPane: false, bottomInset: 96);
 
     expect(find.text('动态'), findsOneWidget);
     expect(find.text('连接 · 3'), findsOneWidget);
-    expect(find.text('3 条 · 代理 2 · 直连 1'), findsOneWidget);
+    // 同 iOS：搜索框右边「全部关闭」，下面一排类型筛选；没有「N 条 · 代理 · 直连」那一行了
+    for (final k in ['全部', 'APNs', 'DNS', '直连', '代理']) {
+      expect(find.text(k), findsOneWidget);
+    }
+    expect(find.textContaining('条 · 代理'), findsNothing);
     expect(find.text('www.youtube.com:443'), findsOneWidget);
     expect(find.text('全部关闭'), findsOneWidget);
+    // 第二行写规则选中的策略（组名），第三行累计上下行 + 时长
+    expect(find.text('节点选择'), findsNWidgets(2));
+    expect(find.text('GEOSITE,youtube'), findsOneWidget);
+    expect(find.textContaining('↑ 1.7 MB  ↓ 44.1 MB · 00:4'), findsNWidgets(3));
     // 悬浮底栏的高度让进了列表底部留白
     final list = tester.widget<ListView>(find.byType(ListView));
     expect(list.padding, const EdgeInsets.only(bottom: 16 + 96));
@@ -151,17 +159,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('出站链路'), findsOneWidget);
     expect(find.text('节点选择 › 自动选择 › 香港 01 · IEPL'), findsOneWidget);
-    expect(find.text('GEOSITE(youtube)'), findsWidgets);
+    expect(find.text('GEOSITE,youtube'), findsWidgets);
     expect(find.text('TUN · DEFAULT-TUN'), findsOneWidget);
     expect(find.text('关闭这条连接'), findsOneWidget);
   });
 
-  testWidgets('搜索按主机 / 出站 / 规则筛选，汇总跟着变；切分段清空搜索', (tester) async {
+  testWidgets('搜索按主机 / 出站 / 规则筛选；切分段清空搜索', (tester) async {
     await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1);
 
     await tester.enterText(find.byType(TextField), 'telegram');
     await tester.pump();
-    expect(find.text('1 条 · 代理 1 · 直连 0'), findsOneWidget);
+    expect(find.text('api.telegram.org:443'), findsOneWidget);
     expect(find.text('www.youtube.com:443'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'no-such-host');
@@ -174,17 +182,43 @@ void main() {
     expect(find.textContaining('NXDOMAIN'), findsOneWidget);
   });
 
+  testWidgets('类型筛选（同 iOS）：直连 / 代理按最终出站，连接与日志共用一个选择', (tester) async {
+    await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1);
+
+    await tester.tap(find.text('直连'));
+    await tester.pump();
+    expect(find.textContaining('bilibili.com'), findsOneWidget);
+    expect(find.text('www.youtube.com:443'), findsNothing);
+
+    await tester.tap(find.text('代理'));
+    await tester.pump();
+    expect(find.text('www.youtube.com:443'), findsOneWidget);
+    expect(find.text('api.telegram.org:443'), findsOneWidget);
+    expect(find.textContaining('bilibili.com'), findsNothing);
+
+    await tester.tap(find.text('APNs'));
+    await tester.pump();
+    expect(find.text('无匹配连接'), findsOneWidget);
+
+    // 换到日志段，选择留着：测试日志里没有 APNs 的行
+    await tester.tap(find.text('日志'));
+    await tester.pump();
+    expect(find.text('无匹配日志'), findsOneWidget);
+    await tester.tap(find.text('全部'));
+    await tester.pump();
+    expect(find.textContaining('NXDOMAIN'), findsOneWidget);
+  });
+
   testWidgets('日志：级别 / 时间 / 消息，搜索与清空', (tester) async {
     await _pump(tester, size: const Size(360, 780), wide: false, twoPane: false);
 
     await tester.tap(find.text('日志'));
     await tester.pump();
-    expect(find.text('记录日志已开启 · 自动滚动到底'), findsOneWidget);
     expect(find.textContaining('14:02:36', findRichText: true), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), '伦敦');
     await tester.pump();
-    expect(find.text('1 条匹配'), findsOneWidget);
+    expect(find.textContaining('伦敦 01'), findsOneWidget);
     expect(find.textContaining('NXDOMAIN'), findsNothing);
 
     await tester.enterText(find.byType(TextField), '');
@@ -222,7 +256,7 @@ void main() {
 
   testWidgets('平板竖屏（有侧栏、单列）与未连接', (tester) async {
     await _pump(tester, size: const Size(580, 900), wide: true, twoPane: false);
-    expect(find.text('3 条 · 代理 2 · 直连 1'), findsOneWidget);
+    expect(find.text('www.youtube.com:443'), findsOneWidget);
 
     await _pump(tester, size: const Size(360, 780), wide: false, twoPane: false, running: false);
     expect(find.text('隧道未连接'), findsOneWidget);
@@ -253,7 +287,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump();
     expect(find.text('github.com:443'), findsOneWidget);
-    expect(find.text('3 条 · 代理 2 · 直连 1'), findsOneWidget);
+    expect(find.textContaining('bilibili.com'), findsNothing);   // 换掉的是这条
     expect(tester.widget(find.byType(PageTitle)), same(title));
     expect(tester.widget(find.byType(TextField)), same(field));
     expect(tester.widget(find.byWidgetPredicate((w) => w is MeowSegment)), same(segment));
@@ -262,7 +296,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump();
     expect(find.text('连接 · 1'), findsOneWidget);
-    expect(find.text('1 条 · 代理 1 · 直连 0'), findsOneWidget);
+    expect(find.text('github.com:443'), findsNothing);
     expect(tester.widget(find.byType(PageTitle)), same(title));
     expect(tester.widget(find.byType(TextField)), same(field));
   });
@@ -289,7 +323,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump(const Duration(milliseconds: 1500));
     expect(fetches, 2);
-    expect(find.text('3 条 · 代理 2 · 直连 1'), findsOneWidget);
+    expect(find.text('www.youtube.com:443'), findsOneWidget);
 
     globalState.backgroundMode.value = false;
     await tester.pump();
@@ -498,7 +532,7 @@ void main() {
     expect(pos.pixels, lessThan(pos.maxScrollExtent - 100));
     await tester.enterText(find.byType(TextField), 'host-1');
     await tester.pumpAndSettle();
-    expect(find.text('11 条匹配'), findsOneWidget);
+    expect(find.textContaining('host-1'), findsWidgets);
     await tester.enterText(find.byType(TextField), '');
     await tester.pumpAndSettle();
     final back = _logScroll(tester);

@@ -25,9 +25,10 @@ LatencyState latencyStateOf(int? v) {
 
 /// 延迟文案 + 颜色。沿用 Bettbox 的 delayMap 语义：null = 没测过，0 = 测试中，<0（或 ≥100000）= 超时；
 /// 有值时按测速方式的三档上色（HTTPS 延迟 / 真连接 / TCPing 的阈值不同）。节点格、组摘要、首页当前节点共用。
-(String, Color) msStyle(MeowTokens mm, int? ms, LatencyMode mode) {
-  if (ms == null) return ('— ms', mm.t2);
+/// [unit] = 带「ms」：首页当前出口那种单独一行的读数带（同 iOS 首页）；节点格、组测速钮只写数字（同 iOS 的延迟胶囊）。
+(String, Color) msStyle(MeowTokens mm, int? ms, LatencyMode mode, {bool unit = true}) {
+  if (ms == null) return (unit ? '— ms' : '—', mm.t2);
   if (ms == 0) return ('…', mm.t2);
   if (ms < 0 || ms >= 100000) return ('超时', mm.slow);
-  return ('$ms ms', latencyColor(ms, mode, mm));
+  return (unit ? '$ms ms' : '$ms', latencyColor(ms, mode, mm));
 }

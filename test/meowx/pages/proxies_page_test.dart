@@ -211,7 +211,7 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     expect(find.text('按延迟自动切换'), findsOneWidget);
     // 测速钮与组延迟合成一个：测过就在钮上显示当前节点的延迟（没测过才是「⚡ 测速」）
-    expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38 ms')), findsOneWidget);
+    expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38')), findsOneWidget);
     // 摘要里的当前节点和节点格：名字连国旗原样显示（和代理组名一个画法），不画地区码标签
     expect(find.byType(RegionTag), findsNothing);
     expect(find.text(_longName), findsNWidgets(2));
@@ -219,10 +219,10 @@ void main() {
     expect(find.text('vless · reality · vision'), findsOneWidget);
     expect(find.text('hy2'), findsOneWidget);
     // 延迟四态：有值 / 测试中 / 没测过 / 超时
-    expect(find.text('38 ms'), findsNWidgets(2));   // 摘要的测速钮 + 格子
-    expect(find.text('12345 ms'), findsOneWidget);
+    expect(find.text('38'), findsNWidgets(2));   // 摘要的测速钮 + 格子（延迟只写数字，同 iOS）
+    expect(find.text('12345'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
-    expect(find.text('— ms'), findsWidgets);
+    expect(find.text('—'), findsWidgets);
     expect(find.text('超时'), findsOneWidget);
     // 奖牌 / 解锁：摘要里当前节点的一份 + 格子里的
     expect(find.byType(MedalBadge), findsNWidgets(3));
@@ -284,8 +284,8 @@ void main() {
     expect(find.byType(NodeSliverGrid), findsNothing);
     expect(find.text('fallback'), findsOneWidget);
     expect(find.text('load-balance'), findsOneWidget);
-    // 负载均衡组没有「当前选中」
-    expect(find.text('—'), findsOneWidget);
+    // 负载均衡组没有「当前选中」：不画第二行（同 iOS）
+    expect(find.text('—'), findsNothing);
 
     // 展开动画从高度 0 开始（这一帧网格还不在屏上），播完才整段露出
     await tester.tap(find.text('url-test'));
@@ -314,8 +314,8 @@ void main() {
     expect(tester.getSize(test).height, MeowChip.height);
     expect(tester.getSize(test).width, greaterThanOrEqualTo(MeowChip.width));
     // 延迟在测速钮上，组卡第二行不再重复
-    expect(find.descendant(of: test, matching: find.text('38 ms')), findsOneWidget);
-    expect(find.descendant(of: card, matching: find.text('38 ms')), findsOneWidget);
+    expect(find.descendant(of: test, matching: find.text('38')), findsOneWidget);
+    expect(find.descendant(of: card, matching: find.text('38')), findsOneWidget);
     Finder chevron() => find.descendant(of: card, matching: find.byType(MeowChip));
     expect(chevron(), findsOneWidget);
     expect(tester.getSize(chevron()), const Size(MeowChip.width, MeowChip.height));
@@ -486,7 +486,7 @@ void main() {
       await tester.pump();
       expect(find.text('12 个成员 · 自动'), findsOneWidget);
       expect(find.text('当前 $_longName'), findsOneWidget);
-      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text('38 ms')), findsOneWidget);   // 在测速钮上
+      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text('38')), findsOneWidget);   // 在测速钮上
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       expect(_gridColumns(tester), size.width > 1000 ? 4 : 2);
     }

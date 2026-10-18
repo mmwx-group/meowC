@@ -80,7 +80,7 @@ class AccountCard extends ConsumerWidget {
                         if (loggedIn) ...[StatusDot(color: mm.good, size: 7), const SizedBox(width: 5)],
                         Expanded(
                           child: Text(
-                            loggedIn ? '实时同步已启用 · ${Uri.parse(account.host).host}' : '登录以启用实时同步与账户功能',
+                            loggedIn ? '实时同步已启用' : '登录以启用实时同步与账户功能',   // 不带主控域名（同 iOS）
                             maxLines: loggedIn ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(fontSize: compact ? MeowFont.caption2 : MeowFont.caption, color: mm.t2),

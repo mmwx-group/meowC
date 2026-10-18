@@ -244,7 +244,7 @@ void main() {
     expect(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(MeowChip)), findsNothing);
   });
 
-  testWidgets('手机 · 已登录：当前档展开显示用量，已导入的账户订阅不重复列，没导入的带下载入口', (tester) async {
+  testWidgets('手机 · 已登录：当前档展开显示用量；账户下的订阅单独一组、全部列出（同 iOS）', (tester) async {
     await _pump(
       tester,
       const MePage(),
@@ -258,7 +258,7 @@ void main() {
       bottomInset: 96,
     );
     expect(find.text('一个昵称特别特别特别长的用户'), findsOneWidget);
-    expect(find.text('实时同步已启用 · panel.example.com'), findsOneWidget);
+    expect(find.text('实时同步已启用'), findsOneWidget);   // 不带主控域名（同 iOS）
     expect(find.text('退出'), findsOneWidget);
     expect(find.text('当前'), findsOneWidget);
     expect(find.text('128.0 / 500 GB'), findsOneWidget);
@@ -266,7 +266,8 @@ void main() {
     expect(find.text('12.0 / 100 GB'), findsOneWidget);
     expect(find.text('内置'), findsOneWidget);
     expect(find.text(_main.label!), findsOneWidget);
-    expect(find.text('主力订阅（主控上的名字）'), findsNothing);   // 已下载的账户订阅没再列
+    expect(find.text('账户下的订阅'), findsOneWidget);
+    expect(find.text('主力订阅（主控上的名字）'), findsOneWidget);   // 已下载的也列（点了直接切过去）
     expect(find.text('还没导入的订阅'), findsOneWidget);
     expect(find.text('每天 · po0 加白'), findsOneWidget);
 
@@ -276,7 +277,7 @@ void main() {
     expect(_container(tester, MePage).read(currentProfileIdProvider), 'p2');
   });
 
-  testWidgets('账户订阅去重按地址认：开了订阅域名（主机名不同、短链路径相同）算已下载；同名但地址不同的照列', (tester) async {
+  testWidgets('账户订阅认「已下载」按地址：开了订阅域名（主机名不同、短链路径相同）也认得出，点了直接切到那一档', (tester) async {
     final viaSubDomain = _main.copyWith(id: 'p3', label: '本机改过名的那份', url: 'https://sub.example.net/x/aaa?t=meowx');
     final sameName = _main.copyWith(id: 'p4', label: '同名套餐', url: 'https://panel.example.com/x/old');
     await _pump(
@@ -286,7 +287,7 @@ void main() {
       overrides: _overrides(
         meow: const MeowSettings(account: _account),
         profiles: [viaSubDomain, sameName, _direct],
-        current: 'p3',
+        current: 'p4',
         remote: const [
           RemoteSubscription(name: '主力（订阅域名）', filename: 'a.yaml', subscriptionPath: 'x/aaa'),
           RemoteSubscription(name: '同名套餐', filename: 'n.yaml', subscriptionPath: '/x/new'),
@@ -294,9 +295,12 @@ void main() {
       ),
       textScale: 1,
     );
-    expect(find.text('主力（订阅域名）'), findsNothing);
-    // 旧判断按「档名 + 主控主机名」会把它当成已导入；地址不同就是没下载
-    expect(find.text('同名套餐'), findsNWidgets(2));
+    expect(find.text('主力（订阅域名）'), findsOneWidget);
+    expect(find.text('同名套餐'), findsNWidgets(2));   // 本机一份 + 账户下一份（地址不同，是两份）
+    // 主机名不同、短链路径相同：认出是本机的 p3，点了切过去（不重复下载）
+    await tester.tap(find.text('主力（订阅域名）'));
+    await tester.pump();
+    expect(_container(tester, MePage).read(currentProfileIdProvider), 'p3');
   });
 
   testWidgets('账户卡头像：主控上传的站内路径接上主控地址再去加载', (tester) async {

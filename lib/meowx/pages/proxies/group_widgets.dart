@@ -198,7 +198,7 @@ class GroupTestButton extends ConsumerWidget {
                   ],
                 );
         } else {
-          final (text, color) = msStyle(mm, delay, mode);
+          final (text, color) = msStyle(mm, delay, mode, unit: false);
           content = Text(
             text,
             maxLines: 1,
@@ -324,11 +324,12 @@ class GroupCard extends ConsumerWidget {
     final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
+    if (list) return _listCard(context, mm, current, delay, open);
     return Material(
       // 深色主题的 soft 是半透明的，先叠到卡片底上
-      color: selected ? Color.alphaBlend(mm.soft, mm.elev) : (open ? mm.hero : mm.elev),
+      color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(list ? 22 : 16),
+        borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
       ),
       clipBehavior: Clip.antiAlias,
@@ -336,7 +337,7 @@ class GroupCard extends ConsumerWidget {
         onTap: onTap,
         child: Container(
           constraints: const BoxConstraints(minHeight: 58),
-          padding: list ? const EdgeInsets.fromLTRB(14, 10, 12, 10) : const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
               if (group.icon.isNotEmpty) ...[
@@ -353,17 +354,17 @@ class GroupCard extends ConsumerWidget {
                         group.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: list ? 16 : 14, fontWeight: FontWeight.w600, color: mm.t1),
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
                       ),
                       tail: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const SizedBox(width: 6),
-                          if (list || showCount) ...[
+                          if (showCount) ...[
                             Text('${group.all.length}', style: MeowFont.mono(size: 11, color: mm.t2)),
                             const SizedBox(width: 6),
                           ],
-                          GroupTypeTag(group.type, bg: selected || open ? mm.elev : mm.card2, small: !list),
+                          GroupTypeTag(group.type, bg: selected ? mm.elev : mm.card2, small: true),
                         ],
                       ),
                     ),
@@ -380,8 +381,8 @@ class GroupCard extends ConsumerWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           CurrentBadges(groupName: group.name),
-                          // 列表布局里延迟在组头的测速钮上；选组面板的组卡没有测速钮，延迟留在这一行
-                          if (current.isNotEmpty && !list) ...[
+                          // 选组面板的组卡没有测速钮，延迟留在这一行（列表布局见 _listCard）
+                          if (current.isNotEmpty) ...[
                             const SizedBox(width: 6),
                             MsChip(delay, mode: mode),
                           ],
@@ -391,12 +392,94 @@ class GroupCard extends ConsumerWidget {
                   ],
                 ),
               ),
-              if (list) ...[
-                const SizedBox(width: 8),
-                GroupTestButton(group: group, delay: delay, compact: true),
-                const SizedBox(width: 6),
-                // 箭头胶囊本身也能点：与点组卡同一个动作（展开 / 收起）
-                MeowChip(onTap: onTap, child: _GroupChevron(open: open)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 列表布局的组卡（同 iOS 节点页）：第一行 图标 · 组名 · 类型标签 ……… 成员数 · 延迟测速钮 · 展开钮；
+  /// 第二行 当前选中 ……… 奖牌 / 解锁（贴卡片右边，按钮只占第一行）。延迟在测速钮上，第二行不再重复。
+  Widget _listCard(BuildContext context, MeowTokens mm, String current, int? delay, bool open) {
+    return Material(
+      color: open ? mm.hero : mm.elev,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22))),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 左块 图标 · 组名 · 类型标签（组名先省略，标签放不下就等比缩小）；右块 成员数 · 测速钮 · 展开钮
+              // （最多占六成，放不下也等比缩小）。窄屏 + 大字号时任何宽度都不溢出
+              LayoutBuilder(
+                builder: (context, box) => Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (group.icon.isNotEmpty) ...[
+                            CommonTargetIcon(src: group.icon, size: 20),
+                            const SizedBox(width: 8),
+                          ],
+                          Flexible(
+                            flex: 3,
+                            child: Text(
+                              group.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            flex: 2,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: GroupTypeTag(group.type, bg: open ? mm.elev : mm.card2),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: box.maxWidth * 0.6),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${group.all.length}', style: MeowFont.mono(size: 12, color: mm.t2)),
+                            const SizedBox(width: 8),
+                            GroupTestButton(group: group, delay: delay, compact: true),
+                            const SizedBox(width: 6),
+                            // 箭头胶囊本身也能点：与点组卡同一个动作（展开 / 收起）
+                            MeowChip(onTap: onTap, child: _GroupChevron(open: open)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (current.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                FitRow(
+                  head: NestedGroupIcon(current, size: 16, gap: 6),   // 当前选中的是代理组时带上它的 icon
+                  text: Text(
+                    current,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: mm.t2),
+                  ),
+                  tail: Padding(padding: const EdgeInsets.only(left: 6), child: CurrentBadges(groupName: group.name)),
+                ),
               ],
             ],
           ),

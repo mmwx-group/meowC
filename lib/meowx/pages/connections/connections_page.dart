@@ -16,6 +16,7 @@ import '../../app/strings.dart';
 import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
+import '../../state/traffic_kind.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
@@ -49,6 +50,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   _Seg _seg = _Seg.connections;
   final _search = TextEditingController();
   String _query = '';
+
+  /// 类型筛选（全部 / APNs / DNS / 直连 / 代理），连接与日志共用（同 iOS）
+  ActivityKind _kind = ActivityKind.all;
   List<TrackerInfo> _conns = const [];
   String? _selectedId;
   Timer? _timer;
@@ -70,6 +74,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   // 当前显示的那份列表（按搜索词筛过）与它的汇总：快照或搜索词变了才重算（见 _view）
   List<TrackerInfo>? _viewOf;
   String? _viewQuery;
+  ActivityKind? _viewKind;
   List<TrackerInfo> _viewItems = const [];
   _Sum _viewSum = const _Sum(0, 0, 0, 0);
 
@@ -184,10 +189,13 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   /// 每条连接要做五六次 toLowerCase，快照或搜索词变了才重算；选中一行、布局变化之类的重建直接用上一份。
   ({List<TrackerInfo> items, _Sum sum}) _view(bool filtered) {
     final query = filtered ? _query : '';
-    if (!identical(_viewOf, _conns) || _viewQuery != query) {
+    final kind = filtered ? _kind : ActivityKind.all;
+    if (!identical(_viewOf, _conns) || _viewQuery != query || _viewKind != kind) {
       _viewOf = _conns;
       _viewQuery = query;
-      _viewItems = query.isEmpty ? _conns : _filter(_conns, query);
+      _viewKind = kind;
+      final byQuery = query.isEmpty ? _conns : _filter(_conns, query);
+      _viewItems = kind == ActivityKind.all ? byQuery : byQuery.where((c) => connectionKinds(c).contains(kind)).toList();
       _viewSum = _Sum.of(_viewItems);
     }
     return (items: _viewItems, sum: _viewSum);
@@ -281,7 +289,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       height: twoPane ? 40 : 44,
       fontSize: twoPane ? 13 : 14,
     );
-    final emptyText = _query.isEmpty ? '暂无活动连接' : '无匹配连接';
+    final Widget rowAction = onConns
+        ? _Selected<bool>(
+            listenable: _polled,
+            select: () => _conns.isEmpty,
+            builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
+          )
+        : _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs());
+    final kindFilter = _KindFilter(value: _kind, compact: twoPane, onChanged: (k) => setState(() => _kind = k));
+    final emptyText = _query.isEmpty && _kind == ActivityKind.all ? '暂无活动连接' : '无匹配连接';
     // 等第一份快照。本页被别的 Tab 盖着时（IndexedStack 里还挂着）不画转圈：隐藏页里的动画照样逼着整个 App 每个 vsync 出一帧
     final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
@@ -290,7 +306,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       final bottom = (wide ? 0.0 : 16.0) + MediaQuery.paddingOf(context).bottom;
       final Widget body;
       if (!onConns) {
-        body = _LogList(query: _query, bottomPadding: bottom);
+        body = _LogList(query: _query, kind: _kind, bottomPadding: bottom);
       } else if (!running) {
         body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
       } else {
@@ -299,34 +315,20 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           listenable: _polled,
           builder: (context, _) {
             if (!_loaded) return loading;
-            final (:items, :sum) = _view(true);
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _SummaryRow(
-                  text: '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}',
-                  action: '全部关闭',
-                  color: mm.slow,
-                  onAction: _conns.isEmpty ? null : _closeAll,
+            final (:items, sum: _) = _view(true);
+            if (items.isEmpty) return _Empty(icon: Icons.inbox_rounded, text: emptyText);
+            // 每条连接一张小卡（同 iOS）
+            return ListView.builder(
+              padding: EdgeInsets.only(bottom: bottom),
+              itemCount: items.length,
+              itemBuilder: (_, i) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _ConnRow(
+                  c: items[i],
+                  onTap: () => unawaited(_openSheet(items[i])),
+                  onClose: () => _close(items[i].id),
                 ),
-                Expanded(
-                  child: items.isEmpty
-                      ? _Empty(icon: Icons.inbox_rounded, text: emptyText)
-                      : ListView.builder(
-                          padding: EdgeInsets.only(bottom: bottom),
-                          itemCount: items.length,
-                          itemBuilder: (_, i) => _CardSlice(
-                            first: i == 0,
-                            last: i == items.length - 1,
-                            child: _ConnRow(
-                              c: items[i],
-                              onTap: () => unawaited(_openSheet(items[i])),
-                              onClose: () => _close(items[i].id),
-                            ),
-                          ),
-                        ),
-                ),
-              ],
+              ),
             );
           },
         );
@@ -351,8 +353,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             const SizedBox(height: 12),
             segment,
             const SizedBox(height: 12),
-            search,
-            const SizedBox(height: 4),
+            // 搜索框 + 本段操作同一行，下面一排类型筛选（同 iOS）
+            Row(children: [Expanded(child: search), const SizedBox(width: 8), rowAction]),
+            const SizedBox(height: 10),
+            kindFilter,
+            const SizedBox(height: 12),
             Expanded(child: body),
           ],
         ),
@@ -361,7 +366,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
     final Widget body;
     if (!onConns) {
-      body = _LogList(query: _query, bottomPadding: 0);
+      body = _LogList(query: _query, kind: _kind, bottomPadding: 0);
     } else if (!running) {
       body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
     } else {
@@ -422,17 +427,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
               SizedBox(width: 190 * MediaQuery.textScalerOf(context).scale(13) / 13, child: segment),
               const SizedBox(width: 8),
               Expanded(child: search),
-              if (onConns) ...[
-                const SizedBox(width: 8),
-                // 可不可点只看有没有连接：从没有到有（或反过来）才重建
-                _Selected<bool>(
-                  listenable: _polled,
-                  select: () => _conns.isEmpty,
-                  builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
-                ),
-              ],
+              const SizedBox(width: 8),
+              rowAction,
             ],
           ),
+          const SizedBox(height: 8),
+          kindFilter,
           const SizedBox(height: 4),
           Expanded(child: body),
         ],
@@ -501,7 +501,7 @@ double _auxWidth(BuildContext context, double width, {double font = 11}) =>
 
 String _hostOf(TrackerInfo c) => c.metadata.host.isNotEmpty ? c.metadata.host : c.metadata.destinationIP;
 String _targetOf(TrackerInfo c) => c.chains.isEmpty ? '—' : c.chains.first;
-String _ruleOf(TrackerInfo c) => c.rulePayload.isEmpty ? c.rule : '${c.rule}(${c.rulePayload})';
+String _ruleOf(TrackerInfo c) => ruleDisplay(c.rule, c.rulePayload);   // `GEOSITE,apple`（同 iOS / 配置文件的写法）
 bool _isUdp(TrackerInfo c) => c.metadata.network.toLowerCase() == 'udp';
 
 /// 入站：TUN / HTTP（系统代理、本地代理）/ SOCKS，来自核心的 metadata.type。
@@ -621,42 +621,7 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-/// 汇总行：左边一段说明（放不下省略），右边一个文字操作；操作不可用时变淡。
-class _SummaryRow extends StatelessWidget {
-  const _SummaryRow({required this.text, required this.action, required this.color, required this.onAction});
-  final String text, action;
-  final Color color;
-  final VoidCallback? onAction;
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return Row(
-      children: [
-        Expanded(
-          child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: MeowFont.caption, color: mm.t2)),
-        ),
-        Semantics(
-          button: true,
-          enabled: onAction != null,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onAction,
-            child: Opacity(
-              opacity: onAction == null ? 0.4 : 1,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(14, 10, 0, 10),
-                child: Text(action, style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: color)),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// 两栏标题行里的胶囊按钮（卡片底 + 彩色字）。
+/// 搜索行右侧的胶囊按钮（卡片底 + 彩色字）：全部关闭 / 清空。
 class _PillButton extends StatelessWidget {
   const _PillButton({required this.label, required this.color, required this.onTap});
   final String label;
@@ -794,7 +759,8 @@ Widget _leadTag(TrackerInfo c) {
 /// 行首标了入站时，TCP / UDP 挪到规则前面。
 String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase()} · ${_ruleOf(c)}' : _ruleOf(c);
 
-/// 窄屏连接行：标签 + 主机（下面一行：出站 + 规则）+ 右侧下载速率 / 时长 + 关闭。点行看详情。
+/// 窄屏连接行（同 iOS）：每条一张小卡。第一行 协议标签 + 主机；第二行 规则选中的出站（DIRECT 绿、拒绝红、其余玫红）+ 规则；
+/// 第三行 ↑ 上传 ↓ 下载 · 时长；右侧关闭。点卡片看详情。
 class _ConnRow extends StatelessWidget {
   const _ConnRow({required this.c, required this.onTap, required this.onClose});
   final TrackerInfo c;
@@ -803,75 +769,126 @@ class _ConnRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final num = MeowFont.mono(size: MeowFont.caption2, color: mm.t2);
     final aux = _auxScaler(context);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        child: Row(
-          children: [
-            _leadTag(c),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_hostOf(c)}:${c.metadata.destinationPort}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
-                  ),
-                  const SizedBox(height: 2),
-                  // 出站名比规则要紧：放不下时出站最多占六成，其余给规则
-                  Row(
-                    children: [
-                      Flexible(
-                        flex: 3,
-                        child: Text(
-                          _targetOf(c),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: MeowFont.caption2, fontWeight: FontWeight.w600, color: _isProxied(c) ? mm.accent : mm.t2),
+    final num = MeowFont.mono(size: MeowFont.caption2, color: mm.t2);
+    // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：第二行写规则选中的那个（组名或 DIRECT），颜色按最终去向
+    final policy = c.chains.lastOrNull ?? '—';
+    final leaf = c.chains.firstOrNull ?? '';
+    final viaColor = leaf == 'DIRECT' ? mm.good : (leaf.startsWith('REJECT') ? mm.slow : mm.accent);
+    return Material(
+      color: mm.elev,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 2, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _leadTag(c),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${_hostOf(c)}:${c.metadata.destinationPort}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        flex: 2,
-                        child: Text(_subOf(c), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // 出站名比规则要紧：放不下时出站最多占六成，其余给规则
+                    Row(
+                      children: [
+                        Flexible(
+                          flex: 3,
+                          child: Text(
+                            policy,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w600, color: viaColor),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          flex: 2,
+                          child: Text(_subOf(c), maxLines: 1, overflow: TextOverflow.ellipsis, style: num),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '↑ ${fmtSize(c.upload)}  ↓ ${fmtSize(c.download)} · ${_age(c.start)}',
+                      maxLines: 1,
+                      textScaler: aux,
+                      style: num,
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text('↓ ${fmtRate(c.downloadSpeed ?? 0)}', textScaler: aux, style: num),
-                const SizedBox(height: 2),
-                Text(_age(c.start), textScaler: aux, style: num),
-              ],
-            ),
-            // 关闭：图标贴着卡片内容右缘，左边 10 的间距也算进点按范围
-            Semantics(
-              button: true,
-              label: '关闭这条连接',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onClose,
+              Semantics(
+                button: true,
+                label: '关闭这条连接',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onClose,
+                  child: SizedBox(width: 44, height: 44, child: Icon(Icons.close_rounded, size: 18, color: mm.t2)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 类型筛选胶囊（全部 / APNs / DNS / 直连 / 代理）：选中 = 柔粉底玫红字，其余白底（同 iOS 的 MeowPill .soft / .card）。
+class _KindFilter extends StatelessWidget {
+  const _KindFilter({required this.value, required this.onChanged, this.compact = false});
+  final ActivityKind value;
+  final ValueChanged<ActivityKind> onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          for (final k in ActivityKind.values) ...[
+            Material(
+              color: k == value ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
+              shape: const StadiumBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: () => onChanged(k),
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 34, minHeight: 44),
-                  alignment: Alignment.centerRight,
-                  child: Icon(Icons.close_rounded, size: 17, color: mm.t2),
+                  constraints: BoxConstraints(minHeight: compact ? 32 : 40),
+                  padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16),
+                  alignment: Alignment.center,
+                  child: Text(
+                    k.label,
+                    style: TextStyle(
+                      fontSize: compact ? MeowFont.caption : MeowFont.footnote,
+                      fontWeight: FontWeight.w600,
+                      color: k == value ? mm.accent : mm.t1,
+                    ),
+                  ),
                 ),
               ),
             ),
+            SizedBox(width: compact ? 6 : 8),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -1195,8 +1212,9 @@ class _SummaryPane extends StatelessWidget {
 
 /// 日志：汇总行（状态 + 清空）+ 一张卡片里的日志行（级别点 + 时间 HH:mm:ss + 消息，等宽）；默认关；没被用户翻上去就自动跟到底。
 class _LogList extends ConsumerStatefulWidget {
-  const _LogList({required this.query, required this.bottomPadding});
+  const _LogList({required this.query, required this.kind, required this.bottomPadding});
   final String query;
+  final ActivityKind kind;
   final double bottomPadding;
 
   @override
@@ -1304,26 +1322,28 @@ class _LogListState extends ConsumerState<_LogList> {
     final open = ref.watch(appSettingProvider.select((s) => s.openLogs));
     final all = _all;
     final q = widget.query.toLowerCase();
-    final logs = q.isEmpty ? all : all.where((l) => l.payload.toLowerCase().contains(q)).toList();
+    final kind = widget.kind;
+    final logs = q.isEmpty && kind == ActivityKind.all
+        ? all
+        : all
+              .where((l) =>
+                  (q.isEmpty || l.payload.toLowerCase().contains(q)) &&
+                  (kind == ActivityKind.all || logKinds(l.payload).contains(kind)))
+              .toList();
+    final filtering = q.isNotEmpty || kind != ActivityKind.all;
     if (!open) {
       return const _Empty(icon: Icons.notes_rounded, text: '日志已关闭 · 在「我的 → 设置」打开「记录日志」');
     }
     // 列表不在（刚进来、清空了、搜不到）：回到跟随
     if (!_scroll.hasClients) _follow = true;
     // 还在跟才跟到底：往上翻着看旧日志时，不被新来的日志拽回去
-    if (q.isEmpty && _follow) WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
+    if (!filtering && _follow) WidgetsBinding.instance.addPostFrameCallback((_) => _toBottom());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _SummaryRow(
-          text: q.isEmpty ? '记录日志已开启 · 自动滚动到底' : '${logs.length} 条匹配',
-          action: '清空',
-          color: mm.accent,
-          onAction: all.isEmpty ? null : () => ref.read(logsProvider.notifier).clearLogs(),
-        ),
         Expanded(
           child: logs.isEmpty
-              ? _Empty(icon: Icons.notes_rounded, text: q.isEmpty ? '暂无日志' : '无匹配日志')
+              ? _Empty(icon: Icons.notes_rounded, text: filtering ? '无匹配日志' : '暂无日志')
               : NotificationListener<ScrollMetricsNotification>(
                   onNotification: _onMetrics,
                   child: NotificationListener<ScrollNotification>(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:collection/collection.dart';
 
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
@@ -20,7 +21,7 @@ import '../../theme/widgets.dart';
 enum _ProfileAction { refresh, view, delete }
 
 /// 订阅卡：本机的配置档（当前档展开显示用量，点其它档 = 切换；内置直连档恒在末尾）
-/// + 账户下还没导入的订阅（点 = 下载并切换）+ 导入入口。[compact] = 宽屏第 1 列里的小一号，导入钮在卡片底部。
+/// + 账户下的订阅（单独一组、带刷新钮；点 = 已下载的直接切换，没下载的下载并切换）+ 导入入口。[compact] = 宽屏第 1 列里的小一号，导入钮在卡片底部。
 class SubscriptionsCard extends ConsumerStatefulWidget {
   const SubscriptionsCard({super.key, required this.onError, this.compact = false});
 
@@ -128,11 +129,11 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     final subs = ref.watch(remoteSubsProvider);
     if (subs.hasValue) _lastSubs = subs.value!;
     final importing = ref.watch(importingSubProvider);
-    // 已经下载到本机的账户订阅就是上面的某一档，不再重复列：按地址认（与首页切换菜单、iOS 同一套规则，
-    // 见 notDownloadedSubscriptions），不看档名——用户可能改过名，开了「订阅域名」后主机名也可能不同
-    final pending = loggedIn
-        ? notDownloadedSubscriptions(remote: _lastSubs, host: host, localUrls: profiles.map((p) => p.url))
-        : const <RemoteSubscription>[];
+    // 账户下的订阅单独一组、全部列出（同 iOS）：已经下载到本机的点了直接切到那一档，没下载的先下载再切。
+    // 认「已下载」按地址（与首页切换菜单、iOS 同一套规则，见 notDownloadedSubscriptions），不看档名
+    Profile? localOf(RemoteSubscription sub) => profiles.firstWhereOrNull(
+      (p) => p.url.isNotEmpty && notDownloadedSubscriptions(remote: [sub], host: host, localUrls: [p.url]).isEmpty,
+    );
     final note = TextStyle(fontSize: MeowFont.caption, color: mm.t2);
     final gap = SizedBox(height: compact ? 8 : 10);
 
@@ -160,16 +161,55 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
             onTap: () => ref.read(currentProfileIdProvider.notifier).value = p.id,
             onMenu: (pos) => _menuAt(pos, p),
           ),
-      for (final s in pending)
-        _RemoteTile(sub: s, busy: importing == s.name, onTap: importing != null ? null : () => _download(s)),
-      if (profiles.every((p) => isDirectProfile(p.id)) && pending.isEmpty)
+      if (profiles.every((p) => isDirectProfile(p.id)) && (!loggedIn || _lastSubs.isEmpty))
         Text('还没有订阅：点「导入订阅」粘贴订阅链接，一键导入全部节点', style: note),
-      if (loggedIn)
+      if (loggedIn) ...[
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '账户下的订阅',
+                style: TextStyle(fontSize: compact ? MeowFont.caption : MeowFont.footnote, fontWeight: FontWeight.w600, color: mm.t2),
+              ),
+            ),
+            IconButton(
+              tooltip: '刷新我的订阅',
+              visualDensity: VisualDensity.compact,
+              onPressed: subs.isLoading
+                  ? null
+                  : () {
+                      final actions = ref.read(accountActionsProvider);
+                      unawaited(actions.refreshProfile());
+                      actions.refreshSubscriptions();
+                    },
+              icon: subs.isLoading
+                  ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent))
+                  : MeowIcon(MeowGlyph.refresh, size: 16, color: mm.accent),
+            ),
+          ],
+        ),
+        for (final sub in _lastSubs)
+          _RemoteTile(
+            sub: sub,
+            busy: importing == sub.name,
+            onTap: importing != null
+                ? null
+                : () {
+                    final local = localOf(sub);
+                    if (local != null) {
+                      ref.read(currentProfileIdProvider.notifier).value = local.id;
+                    } else {
+                      _download(sub);
+                    }
+                  },
+          ),
         switch (subs) {
           AsyncError(:final error) => Text('拉取失败：$error', style: note.copyWith(color: mm.slow)),
           AsyncData(:final value) when value.isEmpty => Text('账户下暂无订阅（或主控未放行 /api/subscriptions）', style: note),
           _ => null,
         },
+      ],
     ].nonNulls.toList();
 
     return Container(
@@ -192,25 +232,6 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
                     ),
                   ),
                 ),
-                if (loggedIn)
-                  IconButton(
-                    tooltip: '刷新我的订阅',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: subs.isLoading
-                        ? null
-                        : () {
-                            final actions = ref.read(accountActionsProvider);
-                            unawaited(actions.refreshProfile());
-                            actions.refreshSubscriptions();
-                          },
-                    icon: subs.isLoading
-                        ? SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: mm.t2),
-                          )
-                        : MeowIcon(MeowGlyph.refresh, size: 16, color: mm.t2),
-                  ),
                 if (!compact)
                   TextButton.icon(
                     style: TextButton.styleFrom(

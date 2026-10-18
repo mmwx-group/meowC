@@ -43,7 +43,7 @@ class NestedGroupIcon extends ConsumerWidget {
   }
 }
 
-/// 延迟胶囊：等宽粗体的彩色字，底用所在卡片的次级色（白卡上 = card2，樱粉主卡上 = 卡片底）；[bg] 为 null 只画字。
+/// 延迟胶囊：等宽粗体的彩色字（只写数字，不带 ms，同 iOS），底用所在卡片的次级色（白卡上 = card2，樱粉主卡上 = 卡片底）；[bg] 为 null 只画字。
 class MsChip extends StatelessWidget {
   const MsChip(this.ms, {super.key, required this.mode, this.bg, this.size = 11});
 
@@ -54,7 +54,7 @@ class MsChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (text, color) = msStyle(context.mm, ms, mode);
+    final (text, color) = msStyle(context.mm, ms, mode, unit: false);   // 只写数字（同 iOS）
     final label = Text(
       text,
       maxLines: 1,
