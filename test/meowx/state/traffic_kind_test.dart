@@ -27,6 +27,11 @@ void main() {
     expect(connectionKinds(_conn('dns.google', ['香港 01'])), {ActivityKind.dns, ActivityKind.proxy});
     expect(connectionKinds(_conn('', ['DIRECT'], port: '53', network: 'udp')), {ActivityKind.dns, ActivityKind.direct});
     expect(connectionKinds(_conn('www.google.com', ['香港 01'])), {ActivityKind.proxy});
+    // 按 IP 直连 443 的 DoH（系统私人 DNS / 浏览器安全 DNS）：连接上没有域名
+    expect(connectionKinds(_conn('', ['香港 01'], ip: '8.8.8.8')), {ActivityKind.dns, ActivityKind.proxy});
+    expect(connectionKinds(_conn('', ['DIRECT'], ip: '2606:4700:4700::1111')), {ActivityKind.dns, ActivityKind.direct});
+    expect(connectionKinds(_conn('', ['香港 01'], ip: '8.8.8.8', port: '80')), {ActivityKind.proxy});
+    expect(connectionKinds(_conn('a.com', ['香港 01'], ip: '1.1.1.1')), {ActivityKind.proxy});
     expect(connectionKinds(_conn('ads.example', ['REJECT', '广告'])), <ActivityKind>{});   // 拒绝的不算直连也不算代理
   });
 
@@ -36,6 +41,7 @@ void main() {
     expect(logKinds('[TCP] 10.0.0.2:51234 --> mtalk.google.com:5228 match Match using DIRECT'), {ActivityKind.push, ActivityKind.direct});
     expect(logKinds('[UDP] 10.0.0.2:5353 --> 8.8.8.8:53 match Match using 节点选择[香港 01]'), {ActivityKind.dns, ActivityKind.proxy});
     expect(logKinds('[DNS] resolve example.com failed'), {ActivityKind.dns});
+    expect(logKinds('[TCP] 10.0.0.2:51234 --> 1.1.1.1:443 match Match using 节点选择[香港 01]'), {ActivityKind.dns, ActivityKind.proxy});
     expect(logKinds('[TCP] 10.0.0.2:1 --> ads.example:443 match RuleSet(ads) using REJECT'), <ActivityKind>{});
     expect(logKinds('节点 伦敦 01 测速超时'), <ActivityKind>{});
   });

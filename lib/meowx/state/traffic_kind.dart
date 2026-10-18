@@ -33,6 +33,15 @@ const dohHosts = [
 ];
 const dohSuffixes = ['.cloudflare-dns.com', '.dns.nextdns.io', '.dns.adguard-dns.com'];
 
+/// 公共 DNS 的 IP（同 iOS 的 DNSTarget.dohAddresses）：系统「私人 DNS」、浏览器安全 DNS 常直接按 IP 连 443 做 DoH，
+/// 连接上没有域名，只认域名的话 8.8.8.8:443 这种进不了 DNS 类。
+const dohAddresses = {
+  '8.8.8.8', '8.8.4.4', '1.1.1.1', '1.0.0.1', '9.9.9.9', '149.112.112.112', '208.67.222.222', '208.67.220.220',
+  '94.140.14.14', '94.140.15.15', '223.5.5.5', '223.6.6.6', '1.12.12.12', '120.53.53.53',
+  '2001:4860:4860::8888', '2001:4860:4860::8844', '2606:4700:4700::1111', '2606:4700:4700::1001',
+  '2620:fe::fe', '2620:fe::9', '2400:3200::1', '2400:3200:baba::1',
+};
+
 /// 后缀匹配：本身或子域名；`alt1-mtalk.google.com` 这种前缀带编号的也算 mtalk。
 bool _domainMatches(String host, String suffix) =>
     host == suffix || host.endsWith('.$suffix') || (suffix == 'mtalk.google.com' && RegExp(r'^alt\d+-mtalk\.google\.com$').hasMatch(host));
@@ -43,10 +52,13 @@ bool isPushTarget({required String host, required int port, required bool tcp}) 
   return tcp && pushPorts.contains(port);
 }
 
-bool isDnsTarget({required String host, required int port}) {
+bool isDnsTarget({required String host, required int port, String ip = ''}) {
   if (port == 53 || port == 853) return true;
+  if (port != 443) return false;
   final h = host.toLowerCase();
-  return port == 443 && (dohHosts.contains(h) || dohSuffixes.any(h.endsWith));
+  // 有域名按域名认，没有域名再按目标 IP 认（同 iOS）
+  if (h.isNotEmpty) return dohHosts.contains(h) || dohSuffixes.any(h.endsWith) || dohAddresses.contains(h);
+  return dohAddresses.contains(ip.toLowerCase());
 }
 
 /// 一条连接属于哪些类：用途（推送 / DNS，可能都不是）+ 去向（直连 / 代理，二选一；拒绝的两样都不算）。
@@ -58,7 +70,7 @@ Set<ActivityKind> connectionKinds(TrackerInfo c) {
   final leaf = c.chains.firstOrNull ?? '';
   return {
     if (isPushTarget(host: m.host, port: port, tcp: tcp)) ActivityKind.push,
-    if (isDnsTarget(host: m.host, port: port)) ActivityKind.dns,
+    if (isDnsTarget(host: m.host, port: port, ip: m.destinationIP)) ActivityKind.dns,
     if (leaf == 'DIRECT') ActivityKind.direct,
     if (leaf.isNotEmpty && leaf != 'DIRECT' && !leaf.startsWith('REJECT')) ActivityKind.proxy,
   };
