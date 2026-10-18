@@ -197,7 +197,11 @@ extension ProfileExtension on Profile {
   }
 
   Future<Profile> update({bool validate = true}) async {
-    final response = await request.getFileResponseForUrl(url);
+    // MeowX：回的是通用订阅（分享链接）就换 clash.meta 的 UA 再要一次，见 fetchClashSubscription
+    final response = await fetchClashSubscription(
+      (ua) => request.getFileResponseForUrl(url, userAgent: ua),
+      (r) => r.data as List<int>,
+    );
     final disposition = response.headers['content-disposition']?.firstOrNull;
     final userinfo = response.headers['subscription-userinfo']?.firstOrNull;
     // MeowX：妙妙屋X 主控还会给 profile-title（可 base64:）与 profile-update-interval（小时）

@@ -198,8 +198,9 @@ class Request {
 
   Future<Response> _getResponseForUrl(
     String url,
-    ResponseType responseType,
-  ) async {
+    ResponseType responseType, {
+    String? userAgent,
+  }) async {
     if (url.isFileUrl) {
       return _getFileResponseForUrl(url, responseType);
     }
@@ -228,6 +229,8 @@ class Request {
     }
 
     final headers = <String, dynamic>{'Connection': 'close'};
+    // MeowX：不给就是 globalState.ua（在 findProxy 里设到 HttpClient 上）；给了就用请求头盖掉它
+    if (userAgent != null) headers['User-Agent'] = userAgent;
     if (userInfo != null && userInfo.isNotEmpty) {
       final auth = base64Encode(utf8.encode(userInfo));
       headers['Authorization'] = 'Basic $auth';
@@ -275,8 +278,8 @@ class Request {
     }
   }
 
-  Future<Response> getFileResponseForUrl(String url) async {
-    return _getResponseForUrl(url, ResponseType.bytes);
+  Future<Response> getFileResponseForUrl(String url, {String? userAgent}) async {
+    return _getResponseForUrl(url, ResponseType.bytes, userAgent: userAgent);
   }
 
   Future<Response> getTextResponseForUrl(String url) async {
