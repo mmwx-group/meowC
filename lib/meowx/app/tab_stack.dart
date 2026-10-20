@@ -24,10 +24,27 @@ import 'meow_tab.dart';
 /// 只有这 380ms 里新旧两页同时画，结束后回到只画当前页。平推中又点了别的 Tab：画面上的各页从当时的位置接着走，
 /// 新目标压在最上面推入（目标本来就在画面上 = 往回点：它从当时的位置回正，压在它上面的页朝来的那一侧退出）。
 /// 系统「移除动画」时直接换页。
+///
+/// 首次平推不卡（2026-10，安卓用户反馈「第一次点底栏切页卡、第二次不卡」）。第一次切到某页时光栅线程多出来的活几乎都在字形图集上：
+/// Impeller 按「字 × 字号 × 字在屏幕上横向小数像素的四档位置」各栅格化一份（引擎 impeller/typographer/text_frame.cc），
+/// 页里大多是中文、字多字形大，没上过台的页一个字都没有；平推时页面横坐标逐帧带小数，连旧页的字也要把另外三档补齐；
+/// 底栏玻璃截背后画面时缩小重画的那一份字也一样。两处对应：
+/// - 平推的位移取整：页的位移取整到物理像素，字的横向小数位置一直和静止时相同，平推不再生出新的字形（每次都是，不只第一次）。
+/// - 预热（[prewarm]）：启动后空闲时，把还没上过台的页逐个垫在当前页底下画几帧（每页都垫着不透明的底色，看不见），
+///   页面的图层录好、字形进图集，第一次平推就和第二次一样。垫画时不开 Ticker、不接手势、不进无障碍树。
 class MeowTabStack extends StatefulWidget {
-  const MeowTabStack({super.key, required this.current, required this.pageBuilder});
+  const MeowTabStack({super.key, required this.current, required this.pageBuilder, this.prewarm = false});
 
   final MeowTab current;
+
+  /// 启动后空闲时把还没上过台的页预先画一遍（见类注释）。
+  final bool prewarm;
+
+  /// 首次构建后等这么久才开始预热：让开启动时的加载与首页的入场动画。
+  static const prewarmDelay = Duration(seconds: 2);
+
+  /// 预热的两页之间隔这么久，到点时正在切页也过这么久再试。
+  static const prewarmGap = Duration(milliseconds: 250);
 
   /// 每次都要返回同一个（const）实例：壳重建时页面才不会跟着重建。
   final Widget Function(MeowTab tab) pageBuilder;
@@ -64,7 +81,56 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
   final Set<MeowTab> _leaving = {};
   Timer? _muteTimer;
 
+  /// 上过台（画过）的页，预热垫画过的也算。
+  late final Set<MeowTab> _painted = {_shown};
+
+  /// 这一帧垫在底下预热的页，以及垫到它的第几帧（见 [_warmShifts]）。
+  MeowTab? _warming;
+  int _warmStep = 0;
+  Timer? _warmTimer;
+
+  /// 每页垫画几帧、各往右挪几个物理像素。底栏玻璃的磨砂层按 8 个物理像素一格截背后的画面（liquid_glass_capture.dart 的
+  /// _maxDivisor；底栏 hazeBlur 15.6 在手机的像素密度上都落到这一档），截图里的字是缩小后另栅格化的一份，
+  /// 页面平推时它在截图里的横坐标带小数，同样分四档：挪 0 / 2 / 4 / 6 像素正好是截图里的 0 / ¼ / ½ / ¾ 格。
+  /// 都是整像素，页面本身的字不多生字形。
+  static const _warmShifts = [0, 2, 4, 6];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.prewarm) _warmTimer = Timer(MeowTabStack.prewarmDelay, _warmNext);
+  }
+
   double _pos(_Layer l) => l.from + (l.to - l.from) * MeowMotion.tabSlideCurve.transform(_slide.value);
+
+  /// 预热下一页：连垫 [_warmShifts] 那么多帧后撤掉，隔 [MeowTabStack.prewarmGap] 再来下一页；正在切页就往后推（垫到一半时切页就此打住）。
+  /// 逐页而不是几页一起垫：每帧的光栅活少一些；OpenGLES 上实测也比一起垫好（那里字形图集装不下新字时整份重建、
+  /// 只留当帧用到的字，见引擎 typographer_context_skia.cc，一起垫的那一帧之后图集更容易被挤掉）。
+  void _warmNext() {
+    if (!mounted) return;
+    final next = MeowTab.values.where((t) => !_painted.contains(t)).firstOrNull;
+    if (next == null) return;
+    if (_slide.isAnimating || _shown != widget.current) {
+      _warmTimer = Timer(MeowTabStack.prewarmGap, _warmNext);
+      return;
+    }
+    setState(() {
+      _warming = next;
+      _warmStep = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback(_warmStepDone);
+  }
+
+  void _warmStepDone(Duration _) {
+    if (!mounted || _warming == null) return;
+    if (_warmStep < _warmShifts.length - 1 && !_slide.isAnimating && _shown == widget.current) {
+      setState(() => _warmStep++);
+      WidgetsBinding.instance.addPostFrameCallback(_warmStepDone);
+      return;
+    }
+    setState(() => _warming = null);
+    _warmTimer = Timer(MeowTabStack.prewarmGap, _warmNext);
+  }
 
   @override
   void didUpdateWidget(MeowTabStack oldWidget) {
@@ -123,6 +189,7 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
   @override
   void dispose() {
     _muteTimer?.cancel();
+    _warmTimer?.cancel();
     _slide.dispose();
     super.dispose();
   }
@@ -130,55 +197,70 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     final bg = context.mm.bg;
-    return AnimatedBuilder(
-      animation: _slide,
-      builder: (context, _) {
-        // 走到终点的那一帧就只画新页（控制器要再过一帧才报完成）
-        final layers = _slide.value >= 1 ? [_Layer(_shown, 0, 0)] : _layers;
-        final sliding = layers.length > 1;
-        final onStage = {for (final l in layers) l.tab: _pos(l)};
-        // 画面上的页按层次排在最后（后画的在上）；靠 key 认页，换顺序不丢状态
-        final order = [
-          for (final t in MeowTab.values)
-            if (!onStage.containsKey(t)) t,
-          for (final l in layers) l.tab,
-        ];
-        return ColoredBox(
-          color: bg,
-          child: ClipRect(
-            // 平推时旧页会退到内容区外（宽屏是侧栏那边），只在这时裁
-            clipBehavior: sliding ? Clip.hardEdge : Clip.none,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                for (final t in order)
-                  KeyedSubtree(
-                    key: ValueKey(t),
-                    child: Offstage(
-                      offstage: !onStage.containsKey(t),
-                      child: IgnorePointer(
-                        // 平推中只有正推入的那一页接手势
-                        ignoring: t != _shown,
-                        child: FractionalTranslation(
-                          translation: Offset(onStage[t] ?? 0, 0),
-                          child: RepaintBoundary(
-                            child: ColoredBox(
-                              color: bg,
-                              child: TickerMode(
-                                enabled: onStage.containsKey(t) || t == widget.current || _leaving.contains(t),
-                                child: widget.pageBuilder(t),
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return LayoutBuilder(
+      builder: (context, box) => AnimatedBuilder(
+        animation: _slide,
+        builder: (context, _) {
+          // 页的位置（页宽的比例）换成取整到物理像素的位移，见类注释「平推的位移取整」
+          double snap(double x) => (x * box.maxWidth * dpr).roundToDouble() / dpr;
+          // 走到终点的那一帧就只画新页（控制器要再过一帧才报完成）
+          final layers = _slide.value >= 1 ? [_Layer(_shown, 0, 0)] : _layers;
+          final sliding = layers.length > 1;
+          final onStage = {for (final l in layers) l.tab: _pos(l)};
+          _painted.addAll(onStage.keys);
+          final warming = onStage.containsKey(_warming) ? null : _warming;
+          if (warming != null) _painted.add(warming);
+          // 画面上的页按层次排在最后（后画的在上），预热的页垫在它们底下；靠 key 认页，换顺序不丢状态
+          final order = [
+            for (final t in MeowTab.values)
+              if (!onStage.containsKey(t) && t != warming) t,
+            ?warming,
+            for (final l in layers) l.tab,
+          ];
+          return ColoredBox(
+            color: bg,
+            child: ClipRect(
+              // 平推时旧页会退到内容区外（宽屏是侧栏那边），只在这时裁
+              clipBehavior: sliding ? Clip.hardEdge : Clip.none,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  for (final t in order)
+                    KeyedSubtree(
+                      key: ValueKey(t),
+                      child: Offstage(
+                        offstage: !onStage.containsKey(t) && t != warming,
+                        child: IgnorePointer(
+                          // 平推中只有正推入的那一页接手势
+                          ignoring: t != _shown,
+                          child: Transform.translate(
+                            offset: Offset(
+                              snap(onStage[t] ?? 0) + (t == warming ? _warmShifts[_warmStep] / dpr : 0),
+                              0,
+                            ),
+                            child: RepaintBoundary(
+                              child: ColoredBox(
+                                color: bg,
+                                child: ExcludeSemantics(
+                                  excluding: t == warming,
+                                  child: TickerMode(
+                                    enabled: onStage.containsKey(t) || t == widget.current || _leaving.contains(t),
+                                    child: widget.pageBuilder(t),
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }
