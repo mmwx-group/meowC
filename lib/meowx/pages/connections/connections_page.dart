@@ -21,6 +21,7 @@ import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
+import 'conn_rule_card.dart';
 
 enum _Seg { connections, logs }
 
@@ -1099,7 +1100,7 @@ class _StatPair extends StatelessWidget {
   }
 }
 
-/// 连接详情：出站链路（主卡）/ 命中规则 / 上传 · 下载 / 网络 · 入站 · 主机 · 目标 IP · 已持续。
+/// 连接详情：出站链路（主卡）/ 命中规则 / 上传 · 下载 / 网络 · 入站 · 主机 · 目标 IP · 已持续 / 这个域名走（自定义规则）。
 /// 宽屏放右栏，窄屏放底部弹层；「关闭这条连接」由外层另放。
 class _ConnDetail extends StatelessWidget {
   const _ConnDetail({required this.c});
@@ -1156,6 +1157,9 @@ class _ConnDetail extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 10),
+        // 按连接区分：换选中的连接时「仅此域名 / 含子域名」重新按那条连接定
+        ConnRuleCard(key: ValueKey(c.id), host: c.metadata.host, ip: c.metadata.destinationIP),
       ],
     );
   }

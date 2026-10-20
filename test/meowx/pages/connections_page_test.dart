@@ -161,6 +161,8 @@ void main() {
     expect(find.text('节点选择 › 自动选择 › 香港 01 · IEPL'), findsOneWidget);
     expect(find.text('GEOSITE,youtube'), findsWidgets);
     expect(find.text('TUN · DEFAULT-TUN'), findsOneWidget);
+    // 自定义规则入口（按钮与增删见 custom_rules_test.dart）
+    expect(find.text('这个域名走'), findsOneWidget);
     expect(find.text('关闭这条连接'), findsOneWidget);
   });
 

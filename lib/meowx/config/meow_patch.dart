@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:bett_box/models/meow.dart';
 
 import '../panel/po0.dart';
+import '../state/custom_rules.dart';
 import '../state/overrides.dart';
 
 /// fake-ip 缺省过滤（与 iOS 端补默认时一致）。
@@ -75,13 +76,22 @@ void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {
   rawConfig['hosts'] = hosts;
 }
 
-/// 返回要前置到规则表最前的规则（主控直连 → po0 直连 → 绕过代理 → 推送直连）。
+/// 返回要前置到规则表最前的规则（主控直连 → po0 直连 → 自定义规则 → 绕过代理 → 推送直连）。
 /// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，主机（IP 或域名）来自最近一次的上报目标
 /// （主控列表 + 自己添加的）。
 /// [subscriptionUrls]：本机各订阅档的地址，主控样式的那些（订阅域名）也直连，见 [panelDirectRules]。
-List<String> meowPrependRules(MeowSettings meow, {Iterable<String> subscriptionUrls = const [], bool? debugPo0}) => [
+/// [proxyGroups] / [rules]：要交给内核的那份配置的代理组与订阅规则，自定义规则的「代理」据此推断主代理组
+/// （[resolveMainProxyGroup]）。
+List<String> meowPrependRules(
+  MeowSettings meow, {
+  Iterable<String> subscriptionUrls = const [],
+  bool? debugPo0,
+  Object? proxyGroups,
+  Object? rules,
+}) => [
   ...panelDirectRules(meow.account, subscriptionUrls),
   if (meow.po0Enabled || (debugPo0 ?? debugPo0Urls.isNotEmpty)) ...po0DirectRules(meow.po0DirectHosts),
+  if (meow.customRules.isNotEmpty) ...customRuleLines(meow.customRules, resolveMainProxyGroup(proxyGroups, rules)),
   ...bypassRules(meow.bypassDomains, meow.bypassCidrs),
   if (meow.pushDirect) ...pushDirectRules,
 ];

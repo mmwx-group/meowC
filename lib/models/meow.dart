@@ -121,6 +121,51 @@ enum MeowGlassTint {
   };
 }
 
+/// 自定义规则的动作：直连 / 代理 / 拒绝。「代理」固定走订阅的主代理组（兜底 MATCH 指向的组，推断见
+/// `lib/meowx/state/custom_rules.dart resolveMainProxyGroup`），与 iOS / macOS 同一口径。
+enum MeowRuleAction {
+  direct,
+  proxy,
+  reject;
+
+  String get label => switch (this) {
+    MeowRuleAction.direct => '直连',
+    MeowRuleAction.proxy => '代理',
+    MeowRuleAction.reject => '拒绝',
+  };
+}
+
+/// 自定义规则的匹配方式：域名精确（DOMAIN）/ 后缀含子域名（DOMAIN-SUFFIX）/ 单个 IP（IP-CIDR /32、/128，no-resolve）。
+enum MeowRuleMatch {
+  domain,
+  suffix,
+  ip;
+
+  String get label => switch (this) {
+    MeowRuleMatch.domain => '仅此域名',
+    MeowRuleMatch.suffix => '含子域名',
+    MeowRuleMatch.ip => 'IP',
+  };
+}
+
+/// 用户自己加的分流规则（「我的 › 设置 › 自定义规则」与动态页连接详情里加的）。
+/// [value] 是规范化后的域名（小写、不带协议头 / 路径 / 端口）或 IP；列表顺序即优先级（先写的先匹配）。
+@freezed
+abstract class MeowCustomRule with _$MeowCustomRule {
+  const factory MeowCustomRule({
+    @Default('') String value,
+    @JsonKey(unknownEnumValue: MeowRuleMatch.suffix)
+    @Default(MeowRuleMatch.suffix)
+    MeowRuleMatch match,
+    @JsonKey(unknownEnumValue: MeowRuleAction.direct)
+    @Default(MeowRuleAction.direct)
+    MeowRuleAction action,
+  }) = _MeowCustomRule;
+
+  factory MeowCustomRule.fromJson(Map<String, Object?> json) =>
+      _$MeowCustomRuleFromJson(json);
+}
+
 /// 本地代理（HTTP/SOCKS5 混合端口）设置。
 @freezed
 abstract class MeowLocalProxy with _$MeowLocalProxy {
@@ -195,6 +240,9 @@ abstract class MeowSettings with _$MeowSettings {
     /// 绕过代理：域名与 CIDR
     @Default([]) List<String> bypassDomains,
     @Default([]) List<String> bypassCidrs,
+
+    /// 自定义规则：经前置规则插在全部订阅规则之前（排在主控直连 / po0 直连之后），只在规则模式生效
+    @Default([]) List<MeowCustomRule> customRules,
     @Default(MeowLocalProxy()) MeowLocalProxy localProxy,
     @Default(MeowAccount()) MeowAccount account,
 

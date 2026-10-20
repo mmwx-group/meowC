@@ -15,6 +15,7 @@ import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
 import '../../update/update_state.dart';
+import '../settings/custom_rules_page.dart';
 import '../settings/overrides_pages.dart';
 import '../settings/po0_servers_page.dart';
 import '../settings/proxy_apps_page.dart';
@@ -106,7 +107,7 @@ class ProxyRows extends ConsumerWidget {
   }
 }
 
-/// 流量控制：阻止 QUIC / 代理推送服务 / DNS 劫持 / 绕过代理。
+/// 流量控制：阻止 QUIC / 代理推送服务 / DNS 劫持 / 绕过代理 / 自定义规则。
 /// [showProxyApps] = 把 Android 的「代理应用」入口也列在这里（宽屏没有入口行那一层）。
 class TrafficRows extends ConsumerWidget {
   const TrafficRows({super.key, this.showProxyApps = false});
@@ -155,6 +156,12 @@ class TrafficRows extends ConsumerWidget {
           value: bypassCount == 0 ? null : '$bypassCount 条',
           chevron: true,
           onTap: () => mePush(context, const BypassPage()),
+        ),
+        MeRow(
+          label: '自定义规则',
+          value: meow.customRules.isEmpty ? null : '${meow.customRules.length} 条',
+          chevron: true,
+          onTap: () => mePush(context, const CustomRulesPage()),
         ),
       ],
     );

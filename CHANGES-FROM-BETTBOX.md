@@ -133,3 +133,8 @@
 - `services/NotificationComponentCache.kt`：M 图标开着时通知点开那个 alias（MainActivity 此时是停用的）。
 - 资源：`scripts/make-brand-assets.py` 由 `design/brand/icon-m-{dark,light}.png` 生成自适应图标（底色背景层 + 缩进 66dp 安全圆的前景层 + 单色层）与设置页缩略图 `assets/images/app_icon_m_*_256.png`。
 - 界面在 `lib/meowx/`：`state/app_icon.dart`、外观里的「App 图标」行（`pages/me/appearance_parts.dart`）。
+
+## 2026-10-20 · 自定义规则（直连 / 代理 / 拒绝）
+- `lib/state.dart patchRawConfig`：规则前置那一行多传要交给内核的那份配置的 `proxy-groups` 与订阅规则（`proxyGroups:` / `rules:`），自定义规则的「代理」据此推断主代理组（兜底 MATCH 指向的组；指向 DIRECT / REJECT 或没有 MATCH 时第一个 select 组；再没有用 GLOBAL 或第一个代理组）。自定义规则排在主控直连 / po0 直连之后、绕过代理之前，全部在订阅规则之前，只在规则模式生效。
+- `lib/models/meow.dart MeowSettings`：`customRules`（`MeowCustomRule{value, match: domain|suffix|ip, action: direct|proxy|reject}`，列表顺序即优先级；旧数据没有这个字段 = 空，认不出的枚举回到缺省）。
+- 其余在 `lib/meowx/`：规范化 / 主代理组推断 / 规则生成（`state/custom_rules.dart`，域名出 `DOMAIN` / `DOMAIN-SUFFIX`，IP 出 `IP-CIDR(6),…/32|/128,…,no-resolve`）、「我的 › 设置 › 流量控制 › 自定义规则」子页（`pages/settings/custom_rules_page.dart`）、动态页连接详情的「这个域名走：直连 / 代理 / 拒绝」（`pages/connections/conn_rule_card.dart`）。改了规则时连着就 `applyProfileDebounce` 重新套用配置（同绕过代理）。与 iOS / macOS 同一功能、同一口径。
