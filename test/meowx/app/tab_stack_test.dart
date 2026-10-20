@@ -35,6 +35,18 @@ class _CounterState extends State<_Counter> {
   Widget build(BuildContext context) => TextButton(onPressed: () => setState(() => taps++), child: Text('点了 $taps 次'));
 }
 
+/// 每画一次回调一次。
+class _PaintCounter extends CustomPainter {
+  _PaintCounter(this.onPaint);
+  final VoidCallback onPaint;
+
+  @override
+  void paint(Canvas canvas, Size size) => onPaint();
+
+  @override
+  bool shouldRepaint(_PaintCounter oldDelegate) => false;
+}
+
 void main() {
   group('MeowTabStack', () {
     Widget stack(MeowTab current, Widget Function(MeowTab) pageBuilder) => MaterialApp(
@@ -430,6 +442,135 @@ void main() {
       await switchTo(tester, MeowTab.me, reduce: true);
       expect(x(tester, MeowTab.me), 0);
       expect(x(tester, MeowTab.home), isNull);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+    });
+
+    testWidgets('位移取整到物理像素：字的横向小数位置和静止时一样，平推不生出新字形', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.625;
+      addTearDown(tester.view.reset);
+      const w = 1080 / 2.625;
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.proxies);
+      var unsnapped = 0;
+      for (var ms = 0; ms < 380; ms += 23) {
+        final t = Duration(milliseconds: ms);
+        final x1 = x(tester, MeowTab.proxies)!, x0 = x(tester, MeowTab.home)!;
+        for (final v in [x1, x0]) {
+          expect(v * 2.625, closeTo((v * 2.625).roundToDouble(), 1e-6));
+        }
+        // 与不取整的位置差不到半个物理像素
+        final exact = w * (1 - eased(t));
+        expect(x1, closeTo(exact, 0.5 / 2.625 + 1e-9));
+        if ((x1 - exact).abs() > 1e-6) unsnapped++;
+        await tester.pump(const Duration(milliseconds: 23));
+      }
+      expect(unsnapped, greaterThan(0));
+    });
+  });
+
+  group('MeowTabStack 预热', () {
+    Key pageKey(MeowTab t) => ValueKey('page-${t.name}');
+
+    testWidgets('启动后把没上过台的页逐个垫在当前页底下画几帧；第一次切过去不用现画', (tester) async {
+      final paints = <MeowTab, int>{};
+      final ticking = <MeowTab, bool>{};
+      Widget pages(MeowTab t) => Builder(
+        builder: (context) {
+          ticking[t] = TickerMode.valuesOf(context).enabled;
+          return SizedBox.expand(
+            key: pageKey(t),
+            child: CustomPaint(painter: _PaintCounter(() => paints[t] = (paints[t] ?? 0) + 1), child: Text(t.label)),
+          );
+        },
+      );
+      Widget stack(MeowTab current) => MaterialApp(
+        home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true)),
+      );
+      final page = find.byKey(pageKey(MeowTab.proxies));
+      bool semanticsExcluded(MeowTab t) => tester
+          .widget<ExcludeSemantics>(
+            find.ancestor(of: find.byKey(pageKey(t), skipOffstage: false), matching: find.byType(ExcludeSemantics)).first,
+          )
+          .excluding;
+
+      await tester.pumpWidget(stack(MeowTab.home));
+      expect(paints, {MeowTab.home: 1});
+      await tester.pump(MeowTabStack.prewarmDelay - const Duration(milliseconds: 1));
+      expect(page, findsNothing);
+
+      // 到点：节点页上台，垫在首页底下——不开 Ticker、不进无障碍树、点不到它
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(page, findsOneWidget);
+      expect(paints[MeowTab.proxies], 1);
+      expect(ticking[MeowTab.proxies], isFalse);
+      expect(semanticsExcluded(MeowTab.proxies), isTrue);
+      expect(semanticsExcluded(MeowTab.home), isFalse);
+      final hit = tester.hitTestOnBinding(tester.getCenter(find.byType(MeowTabStack)));
+      final creators = hit.path.map((e) => e.target).whereType<RenderObject>().map((r) => r.debugCreator.toString());
+      expect(creators.any((c) => c.contains('page-home')), isTrue);
+      expect(creators.any((c) => c.contains('page-proxies')), isFalse);
+      // 连垫四帧，依次往右挪 0 / 2 / 4 / 6 个物理像素（只挪图层、不重画），下一帧撤掉
+      final dpr = tester.view.devicePixelRatio;
+      for (final px in [0, 2, 4, 6]) {
+        expect(tester.getTopLeft(page).dx, closeTo(px / dpr, 1e-9));
+        await tester.pump();
+      }
+      expect(page, findsNothing);
+      expect(paints[MeowTab.proxies], 1);
+
+      // 隔一会儿下一页，直到都画过；当前页一直没重画
+      for (final t in [MeowTab.connections, MeowTab.me]) {
+        await tester.pump(MeowTabStack.prewarmGap);
+        for (var i = 0; i < 4; i++) {
+          expect(find.byKey(pageKey(t)), findsOneWidget);
+          await tester.pump();
+        }
+        expect(find.byKey(pageKey(t)), findsNothing);
+      }
+      await tester.pump(MeowTabStack.prewarmGap);
+      expect(tester.binding.hasScheduledFrame, isFalse);
+      expect(paints, {MeowTab.home: 1, MeowTab.proxies: 1, MeowTab.connections: 1, MeowTab.me: 1});
+
+      // 第一次切到节点页：平推一路都用预热时录好的图层，不再现画
+      await tester.pumpWidget(stack(MeowTab.proxies));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(MeowMotion.tabSlide);
+      expect(page, findsOneWidget);
+      expect(paints[MeowTab.proxies], 1);
+    });
+
+    testWidgets('到点时正在切页：往后推，已经上过台的页不再垫', (tester) async {
+      Widget pages(MeowTab t) => SizedBox.expand(key: pageKey(t), child: Text(t.label));
+      Widget stack(MeowTab current) => MaterialApp(
+        home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true)),
+      );
+      await tester.pumpWidget(stack(MeowTab.home));
+      await tester.pump(MeowTabStack.prewarmDelay - const Duration(milliseconds: 100));
+      await tester.pumpWidget(stack(MeowTab.connections));
+      await tester.pump();
+      // 平推途中到点：除了正在推的两页，没有别的页上台
+      await tester.pump(const Duration(milliseconds: 150));
+      expect(find.byKey(pageKey(MeowTab.proxies)), findsNothing);
+      expect(find.byKey(pageKey(MeowTab.me)), findsNothing);
+      // 推完之后才垫：首页与动态页都上过台，只剩节点页和我的页
+      final warmed = <MeowTab>[];
+      void look() {
+        for (final t in [MeowTab.home, MeowTab.proxies, MeowTab.me]) {
+          if (find.byKey(pageKey(t)).evaluate().isNotEmpty) warmed.add(t);
+        }
+      }
+      await tester.pump(MeowMotion.tabSlide);
+      look();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump();
+        look();
+        await tester.pump(MeowTabStack.prewarmGap);
+        look();
+      }
+      expect(warmed.toSet().toList(), [MeowTab.proxies, MeowTab.me]);
+      await tester.pump(const Duration(seconds: 2));
       expect(tester.binding.hasScheduledFrame, isFalse);
     });
   });

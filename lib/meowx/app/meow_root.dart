@@ -216,7 +216,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     // 控制器每秒写一次、Riverpod 就排一次回收——它排回收靠的是让 ProviderScope 重建，等于连接着就每秒白出一两帧
     ref.listen(trafficsProvider, (_, _) {});
     ref.listen(totalTrafficProvider, (_, _) {});
-    final content = MeowTabStack(current: tab, pageBuilder: _page);
+    final content = MeowTabStack(current: tab, pageBuilder: _page, prewarm: true);
 
     final Widget body;
     if (wide) {
