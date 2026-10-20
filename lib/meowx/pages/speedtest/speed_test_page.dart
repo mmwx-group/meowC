@@ -65,6 +65,8 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
             ? c.node
             : (nodes.contains(exitLeaf) ? exitLeaf : nodes.firstOrNull);
         final running = c.isRunning;
+        // 测的时候节点行写实际在测的节点（核心回的 via）：主组是 url-test / fallback 时测速中途组可能换了节点，缺省推算的会跟着变
+        final shown = running ? (c.progress.via ?? node) : node;
         final canStart = connected && node != null;
         final last = c.history.records.firstOrNull;
         return MeSubPage.list(
@@ -84,11 +86,11 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                 children: [
                   // 测速节点 + 出口（ASN · 运营商 · IP）；测的时候不能换
                   _NodePicker(
-                    node: node,
+                    node: shown,
                     nodes: nodes,
                     onPicked: c.setNode,
                     enabled: !running,
-                    exit: c.progress.via == node ? c.progress : null,
+                    exit: c.progress.via == shown ? c.progress : null,
                   ),
                   const SizedBox(height: 6),
                   SpeedTestGauge(progress: c.progress),
@@ -251,7 +253,8 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-/// 测速节点（码表上方那一行）：名字下面一行是出口「AS2516 KDDI · 203.0.113.8」（测速时查到才有）；
+/// 测速节点（码表上方那一行）：名字下面一行是出口「AS2516 KDDI · 203.0.113.8」（测速时查到才有；测速中这一行一直占着，
+/// 查不到写「未查到出口」——查询失败时这一行一收，下面的码表会在测速中途往上跳）；
 /// 点开底部面板选（最上面固定一行「直连」，下面是节点），测的时候不能换。
 class _NodePicker extends StatelessWidget {
   const _NodePicker({required this.node, required this.nodes, required this.onPicked, this.enabled = true, this.exit});
@@ -267,7 +270,9 @@ class _NodePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     final p = exit;
-    final showExit = p != null && SpeedTestExitLine.visible(p.exit, pending: p.isRunning && p.exitPending);
+    final pending = p != null && p.isRunning && p.exitPending;
+    final found = p != null && SpeedTestExitLine.visible(p.exit, pending: pending);
+    final showExit = p != null && (found || p.isRunning);
     return Material(
       color: mm.card2,
       borderRadius: BorderRadius.circular(14),
@@ -292,7 +297,23 @@ class _NodePicker extends StatelessWidget {
                     ),
                     if (showExit) ...[
                       const SizedBox(height: 2),
-                      SpeedTestExitLine(exit: p.exit, pending: p.isRunning && p.exitPending),
+                      if (found)
+                        SpeedTestExitLine(exit: p.exit, pending: pending)
+                      else
+                        Stack(
+                          alignment: AlignmentDirectional.centerStart,
+                          children: [
+                            // 看不见的「查询出口…」只用来撑高：两种状态一样高（它带 ASN 小标签），换过来时码表一点不动
+                            const Visibility(
+                              visible: false,
+                              maintainSize: true,
+                              maintainAnimation: true,
+                              maintainState: true,
+                              child: SpeedTestExitLine(exit: null, pending: true),
+                            ),
+                            Text('未查到出口', maxLines: 1, style: TextStyle(fontSize: 12, color: mm.t2)),
+                          ],
+                        ),
                     ],
                   ],
                 ),
@@ -647,12 +668,16 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
 
   bool get _canAnimate => _resumed && TickerMode.valuesOf(context).enabled && !MediaQuery.disableAnimationsOf(context);
 
+  /// inactive 也看得见（桌面窗口失焦、安卓拉下通知栏 / 分屏里焦点在另一侧），照常走；
+  /// 只有 hidden / paused / detached 才停（口径同动态页的 connPollingPaused）
+  static bool _visible(AppLifecycleState? s) =>
+      s == null || s == AppLifecycleState.resumed || s == AppLifecycleState.inactive;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    final state = WidgetsBinding.instance.lifecycleState;
-    _resumed = state == null || state == AppLifecycleState.resumed;
+    _resumed = _visible(WidgetsBinding.instance.lifecycleState);
     motion.jump(_target);
   }
 
@@ -670,7 +695,7 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    _resumed = state == AppLifecycleState.resumed;
+    _resumed = _visible(state);
     _sync();
   }
 
@@ -738,28 +763,32 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
               left: 0,
               right: 0,
               top: 186,
-              child: Column(
-                children: [
-                  Text(
-                    widget.value,
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 44,
-                      fontWeight: FontWeight.w800,
-                      height: 1.05,
-                      color: widget.dimmed ? mm.t2.withValues(alpha: 0.5) : mm.t1,
-                      fontFamilyFallback: meowRounded,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+              // 码表里的字不跟系统字号放大（同表盘刻度字）：这块高度写死，按 1.4 倍放大时阶段字会被裁掉
+              child: MediaQuery.withClampedTextScaling(
+                maxScaleFactor: 1.0,
+                child: Column(
+                  children: [
+                    Text(
+                      widget.value,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        height: 1.05,
+                        color: widget.dimmed ? mm.t2.withValues(alpha: 0.5) : mm.t1,
+                        fontFamilyFallback: meowRounded,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
-                  ),
-                  Text('Mbps', style: TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w700, color: mm.t2)),
-                  const SizedBox(height: 1),
-                  Text(
-                    widget.phase,
-                    maxLines: 1,
-                    style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: widget.phaseColor),
-                  ),
-                ],
+                    Text('Mbps', style: TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w700, color: mm.t2)),
+                    const SizedBox(height: 1),
+                    Text(
+                      widget.phase,
+                      maxLines: 1,
+                      style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: widget.phaseColor),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

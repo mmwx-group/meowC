@@ -1,13 +1,21 @@
+import 'dart:async';
 import 'dart:convert';
 
+import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_history_page.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_page.dart';
+import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/speed_test.dart';
+import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:bett_box/meowx/theme/tokens.dart';
+import 'package:bett_box/models/models.dart';
+import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // 主题只建一份：每次 pumpWidget 都新建的话 AnimatedTheme 会做一次 200ms 渐变，测「不要帧」时会被它干扰
 final _theme = meowThemeData(brightness: Brightness.light);
@@ -199,6 +207,109 @@ void main() {
     expect(_needle(tester), speedGaugePosition(50));
     await tester.pump(const Duration(milliseconds: 100));
     expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('App inactive（桌面窗口失焦、安卓拉下通知栏，仍看得见）：指针照常按帧走；hidden / paused 才停', (tester) async {
+    addTearDown(() => tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed));
+    Widget build(double mbps) =>
+        _app(SpeedTestDial(mbps: mbps, color: Colors.purple, value: '1', phase: '下载中', phaseColor: Colors.purple));
+    // 码表在 inactive 时建出来（initState 读当时的状态）
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pumpWidget(build(0));
+    await tester.pumpWidget(build(300));
+    expect(_dial(tester).animating, isTrue);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(_needle(tester), allOf(greaterThan(0), lessThan(speedGaugePosition(300))), reason: '弹簧在走，不是直接落到位');
+
+    // 真退到后台（hidden / paused）：停帧，指针直接落到位
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    expect(_dial(tester).animating, isFalse);
+    expect(_needle(tester), speedGaugePosition(300));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(_dial(tester).animating, isFalse);
+
+    // 回到看得见但没焦点（paused → hidden → inactive）：照常按帧走
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await tester.pumpWidget(build(50));
+    expect(_dial(tester).animating, isTrue);
+    await tester.pump(const Duration(seconds: 3));
+    expect(_needle(tester), speedGaugePosition(50));
+    expect(_dial(tester).animating, isFalse);
+  });
+
+  testWidgets('系统字号放大（1.4 倍）：码表里的字不跟着放大，阶段字不被裁掉', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: _theme,
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(1.4)), child: child!),
+        home: const Scaffold(
+          body: SingleChildScrollView(
+            child: SpeedTestGauge(progress: SpeedTestProgress(phase: 'done', downloadMbps: 257.4)),
+          ),
+        ),
+      ),
+    );
+    final dial = tester.getRect(find.byType(SpeedTestDial));
+    expect(tester.getRect(find.text('测速完成')).bottom, lessThanOrEqualTo(dial.bottom));
+    expect(tester.getRect(find.text('Mbps')).bottom, lessThanOrEqualTo(dial.bottom));
+  });
+
+  testWidgets('测速页：测速中节点行写实际在测的节点（组中途换了节点也不跟着变）；出口没查到时这一行占着、码表不跳', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    const tokyo = '东京 01', osaka = '大阪 02';
+    var status = '{"runID":1,"phase":"latency","via":"$tokyo","exitPending":true}';
+    final c = SpeedTestController(call: (method, data) async => method == ActionMethod.meowSpeedTestStatus ? status : '');
+    // 主组是 url-test，当前用的是 [leaf]
+    Widget build(String leaf) => ProviderScope(
+      overrides: [
+        isRunningProvider.overrideWithValue(true),
+        currentGroupsStateProvider.overrideWithValue(
+          GroupsState(
+            value: [
+              Group(
+                name: '自动选择',
+                type: GroupType.URLTest,
+                now: leaf,
+                all: const [Proxy(name: tokyo, type: 'Vless'), Proxy(name: osaka, type: 'Trojan')],
+              ),
+            ],
+          ),
+        ),
+        currentNodeProvider.overrideWithValue(CurrentNode(group: '自动选择', path: const ['自动选择'], leaf: leaf)),
+      ],
+      child: MaterialApp(theme: _theme, home: SpeedTestPage(controller: c)),
+    );
+    await tester.pumpWidget(build(tokyo));
+    expect(find.text(tokyo), findsOneWidget);
+    unawaited(c.start(tokyo));
+    await tester.pump();
+    expect(find.text('查询出口…'), findsOneWidget);
+    final gaugeTop = tester.getTopLeft(find.byType(SpeedTestDial)).dy;
+
+    // 测速中组换到了大阪：节点行仍是正在测的东京，出口那一行也还在
+    await tester.pumpWidget(build(osaka));
+    expect(find.text(tokyo), findsOneWidget);
+    expect(find.text(osaka), findsNothing);
+    expect(find.text('查询出口…'), findsOneWidget);
+
+    // 出口没查到：这一行换成「未查到出口」，码表不动
+    status = '{"runID":1,"phase":"download","via":"$tokyo","currentMbps":20,"exitPending":false}';
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.text('下载中'), findsOneWidget);
+    expect(find.text('未查到出口'), findsOneWidget);
+    expect(tester.getTopLeft(find.byType(SpeedTestDial)).dy, gaugeTop);
+
+    // 测完：又是选择器，节点行回到缺省（首页当前出口）；没查到出口就收起这一行
+    status = '{"runID":1,"phase":"done","via":"$tokyo","downloadMbps":20,"exitPending":false}';
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.text('测速完成'), findsOneWidget);
+    expect(find.text(osaka), findsOneWidget);
+    expect(find.text('未查到出口'), findsNothing);
+    await tester.pump(const Duration(seconds: 3));
   });
 
   group('出口 ASN', () {
