@@ -137,3 +137,6 @@
 ## 2026-10-20 · 测速：指针码表 + 出口 ASN
 - `core/Clash.Meta/component/speedtest`（我们加的内核包）：测速准备阶段经所选出站（不过规则）并行请求 `https://speed.cloudflare.com/meta`（要带 `Referer: https://speed.cloudflare.com/`，否则 403 + `{}`），限时 5 秒，取 clientIp / asn / asOrganization / country 写进进度（`exit` / `exitPending` 两个字段，旧界面忽略）；查不到只记日志、不影响测速（`exit.go`，测试 `exit_test.go`）。
 - 界面只在 `lib/meowx/`：测速页读数换成 270° 指针码表（`pages/speedtest/speed_test_page.dart`），节点行挪到码表上方并显示出口，测速记录存出口并在详情显示（`state/speed_test.dart`、`pages/speedtest/speed_test_history_page.dart`）。
+
+## 2026-10-20 · 测速：每条连接上做 HTTP/1.1 流水线
+- `core/Clash.Meta/component/speedtest`（我们加的内核包）：下载 / 上传阶段每条测速连接自己经出站拨号 + TLS（校验证书，只协商 http/1.1），在这条连接上手写 HTTP/1.1 流水线，始终多一个请求在路上（深度 2，与 iOS / macOS 一致）；上传不等响应就发下一段。原来用 net/http 的 `client.Do` 循环，每到段边界（每段 25–32MB）下行停一个 RTT、随后突发，单线程逐格速率呈锯齿（用户反馈「中间几秒网速下降」）。单线程 = 1 条 TCP、多线程 = 8 条不变（`pipeline.go`，测试 `pipeline_test.go`）。
