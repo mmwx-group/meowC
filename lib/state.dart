@@ -10,6 +10,7 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/l10n/l10n.dart';
 import 'package:bett_box/meowx/config/meow_patch.dart';
 import 'package:bett_box/meowx/panel/node_match.dart';
+import 'package:bett_box/meowx/state/custom_rules.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/plugins/service.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -986,15 +987,16 @@ class GlobalState {
       }
     }
 
+    // MeowX：阻止 QUIC 的规则不并进 rules，写回规则表时排在 MeowX 前置规则之前（自定义规则命中的域名也照样丢 UDP 443）
+    var quicRules = const <String>[];
     if (config.vpnProps.disableQuic) {
       final isRussian =
           config.appSetting.locale?.toLowerCase().startsWith('ru') ?? false;
-      final quicRules = config.vpnProps.excludeChina && !isRussian
+      quicRules = config.vpnProps.excludeChina && !isRussian
           ? [
               'AND,((NETWORK,UDP),(DST-PORT,443),(NOT,((OR,((GEOSITE,geolocation-cn),(GEOIP,CN,no-resolve)))))),REJECT',
             ]
           : ['AND,((NETWORK,UDP),(DST-PORT,443)),REJECT'];
-      rules = [...quicRules, ...rules];
     }
 
     if (rawConfig['proxy-groups'] == null && originalProxyGroups != null) {
@@ -1062,17 +1064,16 @@ class GlobalState {
     }
 
     rawConfig.remove('rule');
-    // MeowX：主控直连 / 自定义规则 / 绕过代理 / 推送直连规则放最前（先于订阅规则）；主控直连要看各订阅档的地址（订阅域名），
-    // 自定义规则的「代理」要看代理组与订阅规则（推断主代理组）
-    rawConfig['rules'] = [
-      ...meowPrependRules(
-        config.meow,
-        subscriptionUrls: config.profiles.map((p) => p.url),
-        proxyGroups: rawConfig['proxy-groups'],
-        rules: rules,
-      ),
-      ...rules,
-    ];
+    // MeowX：阻止 QUIC → 主控直连 / po0 直连 / 绕过代理 / 推送直连 / 自定义规则放最前（先于订阅规则）；主控直连要看各订阅档的地址
+    // （订阅域名），自定义规则的「代理」要看代理组与订阅规则（推断主代理组），界面显示的组名也从这份记下
+    if (profileId == config.currentProfile?.id) captureMainProxyGroup(profileId, rawConfig['proxy-groups'], rules);
+    rawConfig['rules'] = meowRuleTable(
+      config.meow,
+      quicRules: quicRules,
+      rules: rules,
+      subscriptionUrls: config.profiles.map((p) => p.url),
+      proxyGroups: rawConfig['proxy-groups'],
+    );
     return rawConfig;
   }
 

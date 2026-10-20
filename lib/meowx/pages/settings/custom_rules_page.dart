@@ -1,4 +1,5 @@
 import 'package:bett_box/models/meow.dart';
+import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,9 +13,17 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
 
-/// 当前订阅的主代理组（界面上「代理（节点选择）」用；生效时在 patchRawConfig 里按要交给内核的那份配置再算一次）。
-final mainProxyGroupProvider = Provider<String>((ref) {
+/// 当前订阅的主代理组（界面上「代理（节点选择）」用；null = 没有代理组或还不知道，只显示「代理」）。
+/// 优先用应用配置时按交给内核的那份记下的（[appliedMainProxyGroup]，Bettbox 的规则覆写、停用组都算进去了）；
+/// 当前订阅还没应用过才按订阅原始配置推断。
+final mainProxyGroupProvider = Provider<String?>((ref) {
+  void changed() => ref.invalidateSelf();
+  appliedMainProxyGroup.addListener(changed);
+  ref.onDispose(() => appliedMainProxyGroup.removeListener(changed));
+  final applied = appliedMainProxyGroup.value;
+  if (applied != null && applied.$1 == ref.watch(currentProfileIdProvider)) return applied.$2;
   final raw = ref.watch(currentRawConfigProvider);
+  if (raw.isEmpty) return null;
   return resolveMainProxyGroup(raw['proxy-groups'], raw['rules'] ?? raw['rule']);
 });
 
@@ -71,7 +80,7 @@ class CustomRulesPage extends ConsumerWidget {
 class _RuleRow extends StatelessWidget {
   const _RuleRow({required this.rule, required this.group, required this.onTap, required this.onDelete});
   final MeowCustomRule rule;
-  final String group;
+  final String? group;
   final VoidCallback onTap, onDelete;
 
   @override
@@ -183,7 +192,10 @@ Future<void> showCustomRuleEditor(BuildContext context, WidgetRef ref, {int? ind
                 onChanged: (v) => setState(() => action = v),
               ),
               const SizedBox(height: 6),
-              Text('代理 = 走「$group」', style: TextStyle(fontSize: MeowFont.caption, color: mm.t2)),
+              Text(
+                group == null ? '订阅里没有代理组：「代理」规则不生效，按订阅规则走' : '代理 = 走「$group」',
+                style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
+              ),
             ],
           ),
           actions: [

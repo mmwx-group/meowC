@@ -135,6 +135,9 @@
 - 界面在 `lib/meowx/`：`state/app_icon.dart`、外观里的「App 图标」行（`pages/me/appearance_parts.dart`）。
 
 ## 2026-10-20 · 自定义规则（直连 / 代理 / 拒绝）
-- `lib/state.dart patchRawConfig`：规则前置那一行多传要交给内核的那份配置的 `proxy-groups` 与订阅规则（`proxyGroups:` / `rules:`），自定义规则的「代理」据此推断主代理组（兜底 MATCH 指向的组；指向 DIRECT / REJECT 或没有 MATCH 时第一个 select 组；再没有用 GLOBAL 或第一个代理组）。自定义规则排在主控直连 / po0 直连之后、绕过代理之前，全部在订阅规则之前，只在规则模式生效。
+- `lib/state.dart patchRawConfig`（三处）：
+  - 写回规则表那一行改成调 `meowRuleTable`（`lib/meowx/config/meow_patch.dart`），多传 `quicRules` 与要交给内核的那份配置的 `proxy-groups`、订阅规则（`proxyGroups:` / `rules:`）；整张表的顺序 = 阻止 QUIC → 主控直连 → po0 直连 → 绕过代理 → 推送直连 → 自定义规则 → 订阅规则。自定义规则排在绕过代理 / 推送直连之后（同 iOS：绕过表与推送直连先于全部规则判断，用户开着的这两项不被自定义规则盖掉），只在规则模式生效。「代理」按 `rules`（不含阻止 QUIC 的规则）与代理组推断主代理组（兜底 MATCH 指向的组；指向 DIRECT / REJECT 或没有 MATCH 时第一个 select 组；再没有用 GLOBAL 或第一个代理组；一个代理组都没有 = 不生成「代理」规则，交给订阅规则）。
+  - 「阻止 QUIC」的 REJECT 规则不再并进 `rules`（`rules = [...quicRules, ...rules]` 删掉，`quicRules` 提到 if 外面），改由上面那一行排在全部 MeowX 前置规则之前：否则自定义规则命中的域名（直连 / 代理都支持 UDP）的 QUIC 照样发出去。副作用：绕过代理、推送直连、主控直连、po0 直连的 UDP 443 也被丢，与 iOS 一致（iOS 在收包处就丢 UDP 443、先于一切规则）；主控与 po0 的上报走 TCP，不受影响。
+  - 写回规则表前多一行 `captureMainProxyGroup`（当前订阅才记，同 `captureNodeKeys`）：记下按交给内核的那份配置（Bettbox 规则覆写、停用组改 PASS 之后）算出的主代理组，界面上「代理（组名）」优先用它；多一行 import `meowx/state/custom_rules.dart`。
 - `lib/models/meow.dart MeowSettings`：`customRules`（`MeowCustomRule{value, match: domain|suffix|ip, action: direct|proxy|reject}`，列表顺序即优先级；旧数据没有这个字段 = 空，认不出的枚举回到缺省）。
-- 其余在 `lib/meowx/`：规范化 / 主代理组推断 / 规则生成（`state/custom_rules.dart`，域名出 `DOMAIN` / `DOMAIN-SUFFIX`，IP 出 `IP-CIDR(6),…/32|/128,…,no-resolve`）、「我的 › 设置 › 流量控制 › 自定义规则」子页（`pages/settings/custom_rules_page.dart`）、动态页连接详情的「这个域名走：直连 / 代理 / 拒绝」（`pages/connections/conn_rule_card.dart`）。改了规则时连着就 `applyProfileDebounce` 重新套用配置（同绕过代理）。与 iOS / macOS 同一功能、同一口径。
+- 其余在 `lib/meowx/`：规范化 / 主代理组推断 / 规则生成（`state/custom_rules.dart`，域名出 `DOMAIN` / `DOMAIN-SUFFIX`，IP 出 `IP-CIDR(6),…/32|/128,…,no-resolve`；域名标签允许 `_`、IPv6 统一成标准写法、IPv4-mapped 转 IPv4，上限 1000 条）、「我的 › 设置 › 流量控制 › 自定义规则」子页（`pages/settings/custom_rules_page.dart`）、动态页连接详情的「这个域名走：直连 / 代理 / 拒绝」（`pages/connections/conn_rule_card.dart`，点了把这条挪到最前、立即生效）。改了规则时连着就 `applyProfileDebounce` 重新套用配置（同绕过代理）。与 iOS / macOS 同一功能、同一口径。

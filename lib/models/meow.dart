@@ -241,7 +241,7 @@ abstract class MeowSettings with _$MeowSettings {
     @Default([]) List<String> bypassDomains,
     @Default([]) List<String> bypassCidrs,
 
-    /// 自定义规则：经前置规则插在全部订阅规则之前（排在主控直连 / po0 直连之后），只在规则模式生效
+    /// 自定义规则：经前置规则插在全部订阅规则之前（排在主控直连 / po0 直连 / 绕过代理 / 推送直连之后），只在规则模式生效
     @Default([]) List<MeowCustomRule> customRules,
     @Default(MeowLocalProxy()) MeowLocalProxy localProxy,
     @Default(MeowAccount()) MeowAccount account,

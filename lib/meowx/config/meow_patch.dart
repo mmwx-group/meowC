@@ -76,7 +76,9 @@ void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {
   rawConfig['hosts'] = hosts;
 }
 
-/// 返回要前置到规则表最前的规则（主控直连 → po0 直连 → 自定义规则 → 绕过代理 → 推送直连）。
+/// 返回要前置到规则表最前的规则（主控直连 → po0 直连 → 绕过代理 → 推送直连 → 自定义规则）。
+/// 自定义规则排在绕过代理 / 推送直连之后（同 iOS：绕过表与推送直连先于全部规则判断，用户开着的这两项不被自定义规则盖掉），
+/// 仍在全部订阅规则之前。「阻止 QUIC」的规则排在这些之前（见 [meowRuleTable]）。
 /// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，主机（IP 或域名）来自最近一次的上报目标
 /// （主控列表 + 自己添加的）。
 /// [subscriptionUrls]：本机各订阅档的地址，主控样式的那些（订阅域名）也直连，见 [panelDirectRules]。
@@ -91,9 +93,26 @@ List<String> meowPrependRules(
 }) => [
   ...panelDirectRules(meow.account, subscriptionUrls),
   if (meow.po0Enabled || (debugPo0 ?? debugPo0Urls.isNotEmpty)) ...po0DirectRules(meow.po0DirectHosts),
-  if (meow.customRules.isNotEmpty) ...customRuleLines(meow.customRules, resolveMainProxyGroup(proxyGroups, rules)),
   ...bypassRules(meow.bypassDomains, meow.bypassCidrs),
   if (meow.pushDirect) ...pushDirectRules,
+  if (meow.customRules.isNotEmpty) ...customRuleLines(meow.customRules, resolveMainProxyGroup(proxyGroups, rules)),
+];
+
+/// 写回 `rawConfig['rules']` 的整张规则表：阻止 QUIC → MeowX 前置规则（[meowPrependRules]）→ 订阅规则（Bettbox 处理过的）。
+/// 阻止 QUIC 排在全部 MeowX 前置规则之前，自定义规则命中的域名也照样丢 UDP 443（同 iOS：QUIC 在收包处就丢、先于一切规则）；
+/// 副作用是绕过代理 / 推送直连 / 主控直连 / po0 直连的 UDP 443 也被丢（主控与 po0 的上报走 TCP，不受影响）。
+/// [rules] 也用来推断自定义规则「代理」的主代理组（不含阻止 QUIC 的规则）。在 Bettbox 的 `patchRawConfig` 末尾调用。
+List<dynamic> meowRuleTable(
+  MeowSettings meow, {
+  List<String> quicRules = const [],
+  required List<dynamic> rules,
+  Iterable<String> subscriptionUrls = const [],
+  Object? proxyGroups,
+  bool? debugPo0,
+}) => [
+  ...quicRules,
+  ...meowPrependRules(meow, subscriptionUrls: subscriptionUrls, debugPo0: debugPo0, proxyGroups: proxyGroups, rules: rules),
+  ...rules,
 ];
 
 /// 主控直连（与 iOS / macOS 的 `PanelDirect` 同一规则）：登录了的主控，加上本机订阅里形如主控订阅地址的那些主机
