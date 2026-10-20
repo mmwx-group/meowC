@@ -134,6 +134,13 @@
 - 资源：`scripts/make-brand-assets.py` 由 `design/brand/icon-m-{dark,light}.png` 生成自适应图标（底色背景层 + 缩进 66dp 安全圆的前景层 + 单色层）与设置页缩略图 `assets/images/app_icon_m_*_256.png`。
 - 界面在 `lib/meowx/`：`state/app_icon.dart`、外观里的「App 图标」行（`pages/me/appearance_parts.dart`）。
 
+## 2026-10-20 · 测速：指针码表 + 出口 ASN
+- `core/Clash.Meta/component/speedtest`（我们加的内核包）：测速准备阶段经所选出站（不过规则）并行请求 `https://speed.cloudflare.com/meta`（要带 `Referer: https://speed.cloudflare.com/`，否则 403 + `{}`），限时 5 秒，取 clientIp / asn / asOrganization / country 写进进度（`exit` / `exitPending` 两个字段，旧界面忽略）；查不到只记日志、不影响测速（`exit.go`，测试 `exit_test.go`）。
+- 界面只在 `lib/meowx/`：测速页读数换成 270° 指针码表（`pages/speedtest/speed_test_page.dart`），节点行挪到码表上方并显示出口，测速记录存出口并在详情显示（`state/speed_test.dart`、`pages/speedtest/speed_test_history_page.dart`）。
+
+## 2026-10-20 · 测速：每条连接上做 HTTP/1.1 流水线
+- `core/Clash.Meta/component/speedtest`（我们加的内核包）：下载 / 上传阶段每条测速连接自己经出站拨号 + TLS（校验证书，只协商 http/1.1），在这条连接上手写 HTTP/1.1 流水线，始终多一个请求在路上（深度 2，与 iOS / macOS 一致）；上传不等响应就发下一段。原来用 net/http 的 `client.Do` 循环，每到段边界（每段 25–32MB）下行停一个 RTT、随后突发，单线程逐格速率呈锯齿（用户反馈「中间几秒网速下降」）。单线程 = 1 条 TCP、多线程 = 8 条不变（`pipeline.go`，测试 `pipeline_test.go`）。
+
 ## 2026-10-20 · 自定义规则（直连 / 代理 / 拒绝）
 - `lib/state.dart patchRawConfig`（三处）：
   - 写回规则表那一行改成调 `meowRuleTable`（`lib/meowx/config/meow_patch.dart`），多传 `quicRules` 与要交给内核的那份配置的 `proxy-groups`、订阅规则（`proxyGroups:` / `rules:`）；整张表的顺序 = 阻止 QUIC → 主控直连 → po0 直连 → 绕过代理 → 推送直连 → 自定义规则 → 订阅规则。自定义规则排在绕过代理 / 推送直连之后（同 iOS：绕过表与推送直连先于全部规则判断，用户开着的这两项不被自定义规则盖掉），只在规则模式生效。「代理」按 `rules`（不含阻止 QUIC 的规则）与代理组推断主代理组（兜底 MATCH 指向的组；指向 DIRECT / REJECT 或没有 MATCH 时第一个 select 组；再没有用 GLOBAL 或第一个代理组；一个代理组都没有 = 不生成「代理」规则，交给订阅规则）。

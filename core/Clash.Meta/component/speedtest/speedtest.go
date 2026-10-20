@@ -57,6 +57,9 @@ type Progress struct {
 	PhaseProgress    float64   `json:"phaseProgress"`
 	BytesUsed        int64     `json:"bytesUsed"`
 	Error            string    `json:"error,omitempty"`
+	// 出口（经同一出站查 Cloudflare /meta）：ExitPending 查询中；查完 Exit 有值 = 查到了，nil = 查不到（不显示）
+	Exit        *ExitInfo `json:"exit,omitempty"`
+	ExitPending bool      `json:"exitPending,omitempty"`
 }
 
 const (
@@ -105,7 +108,7 @@ func Start(params Params) string {
 	}
 	runID := speedState.progress.RunID + 1
 	speedState.progress = Progress{RunID: runID, Phase: "preparing", Source: params.Source, Via: params.Proxy,
-		DownloadSamples: []float64{}, UploadSamples: []float64{}}
+		DownloadSamples: []float64{}, UploadSamples: []float64{}, ExitPending: true}
 	speedState.cancel = cancel
 	speedState.Unlock()
 	go speedRun(ctx, runID, params.Source, proxy, connections)
@@ -131,6 +134,7 @@ func Stop() {
 	case "preparing", "latency", "download", "upload":
 		speedState.progress.Phase = "cancelled"
 		speedState.progress.CurrentMbps = 0
+		speedState.progress.ExitPending = false
 	}
 }
 
@@ -190,11 +194,14 @@ func speedRun(ctx context.Context, runID int, source string, proxy constant.Prox
 		speedUpdate(runID, func(p *Progress) {
 			p.Phase = "failed"
 			p.CurrentMbps = 0
+			p.ExitPending = false
 			p.BytesUsed = used.Load()
 			p.Error = speedDescribe(err)
 		})
 		log.Warnln("[MeowX] 测速失败 %s 经 %s：%s", source, proxy.Name(), speedDescribe(err))
 	}
+
+	go speedQueryExit(ctx, runID, proxy)
 
 	endpoints, err := speedResolve(ctx, source, proxy)
 	if err != nil {
@@ -263,12 +270,7 @@ func speedClient(proxy constant.Proxy, keepAlive bool) *http.Client {
 		Transport: &http.Transport{
 			Proxy: nil,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				var metadata constant.Metadata
-				metadata.NetWork = constant.TCP
-				if err := metadata.SetRemoteAddress(addr); err != nil {
-					return nil, err
-				}
-				return proxy.DialContext(ctx, &metadata)
+				return speedDialProxy(ctx, proxy, addr)
 			},
 			ForceAttemptHTTP2:     false,
 			DisableKeepAlives:     !keepAlive,
@@ -353,6 +355,7 @@ func speedMbps(bytes int64, d time.Duration) float64 {
 }
 
 // speedTransfer N 条连接各自循环请求 phaseDuration 秒，每 250ms 采样一次；到点就收掉所有连接（取消 context），不等在途请求读完。
+// 每条连接上是 HTTP/1.1 流水线（见 pipeline.go）；连接断了（对端关连接、出错）就重拨一条接着来，单线程始终只有 1 条 TCP。
 func speedTransfer(ctx context.Context, runID int, download bool, ep *speedEndpoints, proxy constant.Proxy,
 	connections int, used *atomic.Int64) (float64, float64, error) {
 	var meter atomic.Int64
@@ -361,20 +364,29 @@ func speedTransfer(ctx context.Context, runID int, download bool, ep *speedEndpo
 	var errMu sync.Mutex
 	var errs []error
 	var failedWorkers atomic.Int32
+	dial := speedTLSDialer(proxy, nil)
 	for i := 0; i < connections; i++ {
 		go func(index int) {
-			client := speedClient(proxy, true)
-			defer client.CloseIdleConnections()
 			failures := 0
-			for round := 0; phaseCtx.Err() == nil; round++ {
-				var err error
-				if download {
-					err = speedDownloadOnce(phaseCtx, client, ep.download(index, round, connections), &meter, used)
-				} else {
-					err = speedUploadOnce(phaseCtx, client, ep.upload(index, round, connections), ep.uploadChunk, &meter, used)
-				}
-				if err == nil || phaseCtx.Err() != nil {
+			for round := 0; phaseCtx.Err() == nil; {
+				base := round
+				pipe := &speedPipeline{download: download, uploadChunk: ep.uploadChunk, meter: &meter, used: used,
+					target: func(i int) speedTarget {
+						if download {
+							return ep.download(index, base+i, connections)
+						}
+						return ep.upload(index, base+i, connections)
+					}}
+				n, err := pipe.run(phaseCtx, dial)
+				round += n
+				if phaseCtx.Err() != nil {
 					continue
+				}
+				if err == nil && n == 0 {
+					err = errSpeedConnClosed
+				}
+				if err == nil {
+					continue // 对端正常关了连接：重拨一条
 				}
 				errMu.Lock()
 				errs = append(errs, err)
@@ -495,36 +507,6 @@ loop:
 	return avg, peak, nil
 }
 
-func speedDownloadOnce(ctx context.Context, client *http.Client, t speedTarget, meter, used *atomic.Int64) error {
-	req, err := speedRequest(ctx, t, nil, 0)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("测速服务器返回 %d", resp.StatusCode)
-	}
-	buf := make([]byte, 64*1024)
-	for {
-		n, err := resp.Body.Read(buf)
-		if n > 0 && ctx.Err() == nil {
-			meter.Add(int64(n))
-			used.Add(int64(n))
-			statistic.DefaultManager.PushDownloaded(false, int64(n))
-		}
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-	}
-}
-
 var speedZeros = make([]byte, 64*1024)
 
 // zeroReader 上传用的全零 body，读一块记一块。
@@ -554,23 +536,6 @@ func (z *zeroReader) Read(p []byte) (int, error) {
 	z.used.Add(int64(n))
 	statistic.DefaultManager.PushUploaded(false, int64(n))
 	return n, nil
-}
-
-func speedUploadOnce(ctx context.Context, client *http.Client, t speedTarget, length int64, meter, used *atomic.Int64) error {
-	req, err := speedRequest(ctx, t, &zeroReader{ctx: ctx, remaining: length, meter: meter, used: used}, length)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	_, _ = io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("测速服务器返回 %d", resp.StatusCode)
-	}
-	return nil
 }
 
 // MARK: - 测速地址
