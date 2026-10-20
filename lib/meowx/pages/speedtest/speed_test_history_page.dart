@@ -503,6 +503,48 @@ class SpeedTestRecordRow extends StatelessWidget {
   }
 }
 
+/// 出口一行：「AS2516」小标签 + 「KDDI · 203.0.113.8」；还在查时是「… 查询出口…」。测速页节点行与记录详情共用。
+class SpeedTestExitLine extends StatelessWidget {
+  const SpeedTestExitLine({super.key, required this.exit, this.pending = false, this.center = false});
+  final SpeedTestExit? exit;
+  final bool pending;
+
+  /// 居中（记录详情的标题下面）
+  final bool center;
+
+  /// 有东西可显示：查到了，或者还在查
+  static bool visible(SpeedTestExit? exit, {bool pending = false}) => exit != null || pending;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final e = exit;
+    if (!visible(e, pending: pending)) return const SizedBox.shrink();
+    final tag = e == null ? '…' : e.asnTag;
+    return Row(
+      mainAxisSize: center ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        if (tag != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(color: mm.down.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
+            child: Text(tag, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mm.down)),
+          ),
+          const SizedBox(width: 6),
+        ],
+        Flexible(
+          child: Text(
+            e == null ? '查询出口…' : e.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, color: mm.t2, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 详情：标题、平均 / 峰值大字、速率曲线、参数表（操作按钮在 [SpeedTestRecordPage] 里）。
 class SpeedTestRecordDetail extends StatelessWidget {
   const SpeedTestRecordDetail({super.key, required this.record});
@@ -532,6 +574,10 @@ class SpeedTestRecordDetail extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: mm.t2),
               ),
+              if (r.exit != null) ...[
+                const SizedBox(height: 6),
+                SpeedTestExitLine(exit: r.exit, center: true),
+              ],
             ],
           ),
         ),

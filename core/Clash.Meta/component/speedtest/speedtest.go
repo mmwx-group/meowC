@@ -57,6 +57,9 @@ type Progress struct {
 	PhaseProgress    float64   `json:"phaseProgress"`
 	BytesUsed        int64     `json:"bytesUsed"`
 	Error            string    `json:"error,omitempty"`
+	// 出口（经同一出站查 Cloudflare /meta）：ExitPending 查询中；查完 Exit 有值 = 查到了，nil = 查不到（不显示）
+	Exit        *ExitInfo `json:"exit,omitempty"`
+	ExitPending bool      `json:"exitPending,omitempty"`
 }
 
 const (
@@ -105,7 +108,7 @@ func Start(params Params) string {
 	}
 	runID := speedState.progress.RunID + 1
 	speedState.progress = Progress{RunID: runID, Phase: "preparing", Source: params.Source, Via: params.Proxy,
-		DownloadSamples: []float64{}, UploadSamples: []float64{}}
+		DownloadSamples: []float64{}, UploadSamples: []float64{}, ExitPending: true}
 	speedState.cancel = cancel
 	speedState.Unlock()
 	go speedRun(ctx, runID, params.Source, proxy, connections)
@@ -131,6 +134,7 @@ func Stop() {
 	case "preparing", "latency", "download", "upload":
 		speedState.progress.Phase = "cancelled"
 		speedState.progress.CurrentMbps = 0
+		speedState.progress.ExitPending = false
 	}
 }
 
@@ -190,11 +194,14 @@ func speedRun(ctx context.Context, runID int, source string, proxy constant.Prox
 		speedUpdate(runID, func(p *Progress) {
 			p.Phase = "failed"
 			p.CurrentMbps = 0
+			p.ExitPending = false
 			p.BytesUsed = used.Load()
 			p.Error = speedDescribe(err)
 		})
 		log.Warnln("[MeowX] 测速失败 %s 经 %s：%s", source, proxy.Name(), speedDescribe(err))
 	}
+
+	go speedQueryExit(ctx, runID, proxy)
 
 	endpoints, err := speedResolve(ctx, source, proxy)
 	if err != nil {

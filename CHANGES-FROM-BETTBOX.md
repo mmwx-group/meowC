@@ -133,3 +133,7 @@
 - `services/NotificationComponentCache.kt`：M 图标开着时通知点开那个 alias（MainActivity 此时是停用的）。
 - 资源：`scripts/make-brand-assets.py` 由 `design/brand/icon-m-{dark,light}.png` 生成自适应图标（底色背景层 + 缩进 66dp 安全圆的前景层 + 单色层）与设置页缩略图 `assets/images/app_icon_m_*_256.png`。
 - 界面在 `lib/meowx/`：`state/app_icon.dart`、外观里的「App 图标」行（`pages/me/appearance_parts.dart`）。
+
+## 2026-10-20 · 测速：指针码表 + 出口 ASN
+- `core/Clash.Meta/component/speedtest`（我们加的内核包）：测速准备阶段经所选出站（不过规则）并行请求 `https://speed.cloudflare.com/meta`（要带 `Referer: https://speed.cloudflare.com/`，否则 403 + `{}`），限时 5 秒，取 clientIp / asn / asOrganization / country 写进进度（`exit` / `exitPending` 两个字段，旧界面忽略）；查不到只记日志、不影响测速（`exit.go`，测试 `exit_test.go`）。
+- 界面只在 `lib/meowx/`：测速页读数换成 270° 指针码表（`pages/speedtest/speed_test_page.dart`），节点行挪到码表上方并显示出口，测速记录存出口并在详情显示（`state/speed_test.dart`、`pages/speedtest/speed_test_history_page.dart`）。

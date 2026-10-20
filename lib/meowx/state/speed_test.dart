@@ -26,6 +26,47 @@ enum SpeedTestSource {
   bool get hasUpload => this != SpeedTestSource.google;
 }
 
+/// 测速出站的出口（核心在准备阶段经同一出站查 speed.cloudflare.com/meta）：界面显示「AS2516 KDDI · 203.0.113.8」。
+/// 字段同 component/speedtest 的 ExitInfo；测速记录里原样存一份。
+@immutable
+class SpeedTestExit {
+  const SpeedTestExit({required this.ip, this.asn, this.org, this.country});
+
+  final String ip;
+  final int? asn;
+
+  /// 运营商（Cloudflare 的 asOrganization）、国家码
+  final String? org, country;
+
+  /// 「AS2516」；没有 ASN 时 null
+  String? get asnTag => asn == null || asn == 0 ? null : 'AS$asn';
+
+  /// 「KDDI · 203.0.113.8」（没有运营商名就只有 IP）
+  String get label => [if (org != null && org!.isNotEmpty) org!, ip].join(' · ');
+
+  static String? _s(Object? v) => v is String && v.isNotEmpty ? v : null;
+
+  /// 没有 ip（或不是对象）返回 null
+  static SpeedTestExit? fromJson(Object? j) {
+    if (j is! Map) return null;
+    final ip = _s(j['ip']);
+    if (ip == null) return null;
+    return SpeedTestExit(
+      ip: ip,
+      asn: (j['asn'] as num?)?.toInt(),
+      org: _s(j['org']),
+      country: _s(j['country']),
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'ip': ip,
+    'asn': ?asn,
+    'org': ?org,
+    'country': ?country,
+  };
+}
+
 /// 测速进度 / 结果（核心 meowSpeedTestStatus 回的 JSON，字段同 component/speedtest 的 Progress）。速率单位 Mbps。
 @immutable
 class SpeedTestProgress {
@@ -46,6 +87,8 @@ class SpeedTestProgress {
     this.phaseProgress = 0,
     this.bytesUsed = 0,
     this.error,
+    this.exit,
+    this.exitPending = false,
   });
 
   final int runID;
@@ -59,6 +102,10 @@ class SpeedTestProgress {
   final double currentMbps, phaseProgress;
   final List<double> downloadSamples, uploadSamples;
   final int bytesUsed;
+
+  /// 出口（查到才有）；[exitPending] = 还在查
+  final SpeedTestExit? exit;
+  final bool exitPending;
 
   bool get isRunning => const {'preparing', 'latency', 'download', 'upload'}.contains(phase);
 
@@ -82,6 +129,8 @@ class SpeedTestProgress {
     phaseProgress: _d(j['phaseProgress']) ?? 0,
     bytesUsed: (j['bytesUsed'] as num?)?.toInt() ?? 0,
     error: (j['error'] as String?)?.isEmpty == true ? null : j['error'] as String?,
+    exit: SpeedTestExit.fromJson(j['exit']),
+    exitPending: j['exitPending'] == true,
   );
 
   SpeedTestProgress copyWith({String? phase, double? currentMbps}) => SpeedTestProgress(
@@ -101,6 +150,8 @@ class SpeedTestProgress {
     phaseProgress: phaseProgress,
     bytesUsed: bytesUsed,
     error: error,
+    exit: exit,
+    exitPending: exitPending,
   );
 }
 
@@ -186,7 +237,7 @@ class SpeedTestController extends ChangeNotifier {
     final connections = multiThread ? multiConnections : 1;
     message = null;
     _starting = true;
-    progress = SpeedTestProgress(phase: 'preparing', source: source, via: via);
+    progress = SpeedTestProgress(phase: 'preparing', source: source, via: via, exitPending: true);
     notifyListeners();
     String? reason;
     try {
@@ -256,6 +307,7 @@ class SpeedTestRecord {
     this.uploadSamples = const [],
     this.bytesUsed = 0,
     this.error,
+    this.exit,
   });
 
   final String id;
@@ -277,6 +329,9 @@ class SpeedTestRecord {
 
   /// 失败原因；null = 测完了
   final String? error;
+
+  /// 出口（ASN / 运营商 / IP）；旧记录与没查到的是 null
+  final SpeedTestExit? exit;
 
   bool get isDirect => outbound == kSpeedTestDirect;
   bool get failed => error != null;
@@ -315,6 +370,7 @@ class SpeedTestRecord {
       uploadSamples: SpeedTestHistory.downsample(p.uploadSamples),
       bytesUsed: p.bytesUsed,
       error: p.phase == 'failed' ? (p.error ?? '未知原因') : null,
+      exit: p.exit,
     );
   }
 
@@ -335,6 +391,7 @@ class SpeedTestRecord {
     'uploadSamples': uploadSamples,
     'bytesUsed': bytesUsed,
     'error': ?error,
+    'exit': ?exit?.toJson(),
   };
 
   /// 字段不全（id / 时间 / 出站缺了）返回 null，读盘时跳过
@@ -358,6 +415,7 @@ class SpeedTestRecord {
       uploadSamples: SpeedTestProgress._list(j['uploadSamples']),
       bytesUsed: (j['bytesUsed'] as num?)?.toInt() ?? 0,
       error: j['error'] as String?,
+      exit: SpeedTestExit.fromJson(j['exit']),
     );
   }
 

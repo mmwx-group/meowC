@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:bett_box/common/navigator.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -79,6 +82,15 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(24)),
               child: Column(
                 children: [
+                  // 测速节点 + 出口（ASN · 运营商 · IP）；测的时候不能换
+                  _NodePicker(
+                    node: node,
+                    nodes: nodes,
+                    onPicked: c.setNode,
+                    enabled: !running,
+                    exit: c.progress.via == node ? c.progress : null,
+                  ),
+                  const SizedBox(height: 6),
                   SpeedTestGauge(progress: c.progress),
                   const SizedBox(height: 10),
                   _infoLine(mm),
@@ -129,9 +141,6 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                         fontSize: 13,
                         onCard: true,
                       ),
-                      const SizedBox(height: 12),
-                      _label(mm, '测速节点'),
-                      _NodePicker(node: node, nodes: nodes, onPicked: c.setNode),
                     ],
                   ),
                 ),
@@ -242,36 +251,58 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-/// 测速节点：点开底部面板选（最上面固定一行「直连」，下面是节点）。
+/// 测速节点（码表上方那一行）：名字下面一行是出口「AS2516 KDDI · 203.0.113.8」（测速时查到才有）；
+/// 点开底部面板选（最上面固定一行「直连」，下面是节点），测的时候不能换。
 class _NodePicker extends StatelessWidget {
-  const _NodePicker({required this.node, required this.nodes, required this.onPicked});
+  const _NodePicker({required this.node, required this.nodes, required this.onPicked, this.enabled = true, this.exit});
   final String? node;
   final List<String> nodes;
   final ValueChanged<String> onPicked;
+  final bool enabled;
+
+  /// 这个节点的测速进度（取其中的出口）；不是这个节点测的传 null
+  final SpeedTestProgress? exit;
 
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    final p = exit;
+    final showExit = p != null && SpeedTestExitLine.visible(p.exit, pending: p.isRunning && p.exitPending);
     return Material(
-      color: mm.bg,
-      borderRadius: BorderRadius.circular(12),
+      color: mm.card2,
+      borderRadius: BorderRadius.circular(14),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => _pick(context),
+        onTap: enabled ? () => _pick(context) : null,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               Expanded(
-                child: Text(
-                  node == null ? '没有节点' : speedTestDisplayName(node!),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 15, color: node == null ? mm.t2 : mm.t1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      node == null ? '没有节点' : speedTestDisplayName(node!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: node == null ? mm.t2 : mm.t1),
+                    ),
+                    if (showExit) ...[
+                      const SizedBox(height: 2),
+                      SpeedTestExitLine(exit: p.exit, pending: p.isRunning && p.exitPending),
+                    ],
+                  ],
                 ),
               ),
-              Icon(Icons.unfold_more_rounded, size: 18, color: mm.t2),
+              if (enabled) ...[
+                const SizedBox(width: 8),
+                Text('更换', style: TextStyle(fontSize: 13, color: mm.t2)),
+                const SizedBox(width: 2),
+                MeowChipChevron(color: mm.t2),
+              ],
             ],
           ),
         ),
@@ -399,7 +430,8 @@ class _LastResult extends StatelessWidget {
   }
 }
 
-/// 读数区：阶段 + 大号 Mbps + 阶段进度条 + 下载 / 上传曲线 + 延迟 / 下载 / 上传三格。下载紫、上传玫红（同网速卡）。
+/// 读数区（设计稿 Design/ui-redesign/speedtest-gauge-preview.html「方案 A · 指针码表」）：270° 指针码表 + 表盘下方的大号 Mbps 与阶段，
+/// 下面是延迟 / 下载 / 上传三格（带峰值）与下载 / 上传曲线。下载紫、上传玫红（同网速卡），测完阶段字是绿的。
 class SpeedTestGauge extends StatelessWidget {
   const SpeedTestGauge({super.key, required this.progress});
   final SpeedTestProgress progress;
@@ -411,6 +443,7 @@ class SpeedTestGauge extends StatelessWidget {
     final Color tint = switch (p.phase) {
       'download' => mm.down,
       'upload' => mm.accent,
+      'done' => mm.good,
       'failed' => mm.slow,
       _ => mm.t2,
     };
@@ -429,59 +462,19 @@ class SpeedTestGauge extends StatelessWidget {
       'done' || 'failed' || 'cancelled' => p.downloadMbps ?? p.uploadMbps,
       _ => null,
     };
-    final running = p.phase == 'download' || p.phase == 'upload';
-    final barValue = running ? p.phaseProgress : (p.phase == 'done' ? 1.0 : 0.0);
+    final transferring = p.phase == 'download' || p.phase == 'upload';
     return Column(
       children: [
-        Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tint)),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              big == null ? '0' : fmtMbps(big),
-              style: TextStyle(
-                fontSize: 52,
-                fontWeight: FontWeight.w700,
-                height: 1.1,
-                color: big == null ? mm.t2.withValues(alpha: 0.5) : mm.t1,
-                fontFamilyFallback: meowRounded,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(width: 4),
-            Text('Mbps', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t2)),
-          ],
+        SpeedTestDial(
+          // 指针只在下载 / 上传时指着当前速度，其余时候回到 0（测完的平均值在数字和三格里）
+          mbps: transferring ? p.currentMbps : 0,
+          color: p.phase == 'upload' ? mm.accent : mm.down,
+          value: big == null ? '0' : fmtMbps(big),
+          dimmed: big == null,
+          phase: title,
+          phaseColor: tint,
         ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(end: barValue),
-            duration: const Duration(milliseconds: 300),
-            builder: (_, v, _) => LinearProgressIndicator(
-              value: v,
-              minHeight: 4,
-              backgroundColor: mm.card2,
-              valueColor: AlwaysStoppedAnimation(tint),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 64,
-          child: SpeedTestChart(
-            download: p.downloadSamples,
-            upload: p.uploadSamples,
-            animating: p.isRunning,
-            downColor: mm.down,
-            upColor: mm.accent,
-            baseColor: mm.line,
-          ),
-        ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 4),
         Row(
           children: [
             _tile(mm, '延迟', p.latencyMs?.toString(), 'ms', mm.t1),
@@ -492,6 +485,21 @@ class SpeedTestGauge extends StatelessWidget {
             _tile(mm, '上传', p.uploadMbps == null ? null : fmtMbps(p.uploadMbps!), 'Mbps', mm.accent,
                 peak: p.uploadPeakMbps, note: p.source?.hasUpload == false ? '不支持' : null),
           ],
+        ),
+        const SizedBox(height: 10),
+        // 曲线测速时逐帧重画，单独一层：不带着码表和三格一起重画
+        RepaintBoundary(
+          child: SizedBox(
+            height: 56,
+            child: SpeedTestChart(
+              download: p.downloadSamples,
+              upload: p.uploadSamples,
+              animating: p.isRunning,
+              downColor: mm.down,
+              upColor: mm.accent,
+              baseColor: mm.line,
+            ),
+          ),
         ),
       ],
     );
@@ -533,6 +541,329 @@ class SpeedTestGauge extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// 码表刻度（Mbps）：等距分段线性——低速段看得清，千兆也装得下（同 Speedtest）
+const speedGaugeScale = <double>[0, 5, 10, 50, 100, 250, 500, 1000];
+
+/// 速度 → 刻度位置 0…1
+double speedGaugePosition(double mbps) {
+  if (!(mbps > 0)) return 0;
+  const s = speedGaugeScale;
+  for (var i = 1; i < s.length; i++) {
+    if (mbps <= s[i]) return (i - 1 + (mbps - s[i - 1]) / (s[i] - s[i - 1])) / (s.length - 1);
+  }
+  return 1;
+}
+
+/// 指针的帧间状态（纯逻辑，单测直接测它）：在刻度位置上做一个略欠阻尼的弹簧（阻尼比约 0.7，过冲几个百分点），
+/// 进度每 300ms 才来一个值，指针在两次之间一直平滑地追过去、带一点弹簧感；按位置而不是按 Mbps 追，低速段的变化一样看得出来。
+class SpeedGaugeMotion {
+  static const stiffness = 60.0, damping = 11.0;
+
+  /// 当前显示的位置（0…1）与速度
+  double position = 0, velocity = 0;
+
+  bool settledAt(double target) => (position - target).abs() < 0.0005 && velocity.abs() < 0.002;
+
+  /// 往 [target] 走 [dt] 秒（大步长拆成小步积分，免得掉帧时弹簧发散）
+  void advance(double target, double dt) {
+    var left = dt;
+    while (left > 0) {
+      final h = left > 1 / 120 ? 1 / 120 : left;
+      velocity += (stiffness * (target - position) - damping * velocity) * h;
+      position += velocity * h;
+      left -= h;
+    }
+    if (position < 0) {
+      position = 0;
+      if (velocity < 0) velocity = 0;
+    } else if (position > 1) {
+      position = 1;
+      if (velocity > 0) velocity = 0;
+    }
+    if (settledAt(target)) jump(target);
+  }
+
+  void jump(double target) {
+    position = target;
+    velocity = 0;
+  }
+}
+
+/// 270° 指针码表（起点 135°，顺时针扫 270°）：轨道 + 走过的弧段着色 + 墨色指针，数字与阶段在表盘下方。
+/// 按设计稿 300×262 的画板画（高留到 270），窄屏等比缩小。
+///
+/// 性能：表盘（轨道 / 刻度 / 刻度字）与指针分两层，指针一层单独 RepaintBoundary；指针只在没追上目标时才按约 60 帧重画
+/// （用定时器而不是 Ticker，同首页网速卡的理由），追上了、页面被盖住（TickerMode 关）、App 在后台、系统关了动画都不要帧。
+class SpeedTestDial extends StatefulWidget {
+  const SpeedTestDial({
+    super.key,
+    required this.mbps,
+    required this.color,
+    required this.value,
+    required this.phase,
+    required this.phaseColor,
+    this.dimmed = false,
+  });
+
+  /// 指针指的速度
+  final double mbps;
+
+  /// 走过的弧段的颜色（下载紫 / 上传玫红）
+  final Color color;
+
+  /// 表盘下方的大数字
+  final String value;
+
+  /// 没有读数（准备中 / 没测过）：数字用浅色
+  final bool dimmed;
+
+  final String phase;
+  final Color phaseColor;
+
+  // 设计稿画板 300×262（CSS 行高）；这里三行文字的行高写死，多留几 pt，免得中文回落字体行高大时阶段字被裁掉
+  static const width = 300.0, height = 270.0;
+  static const center = Offset(150, 132);
+  static const radius = 118.0, startDeg = 135.0, sweepDeg = 270.0;
+
+  @override
+  State<SpeedTestDial> createState() => SpeedTestDialState();
+}
+
+class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserver {
+  final motion = SpeedGaugeMotion();
+  final _repaint = _DialRepaint();
+  Timer? _timer;
+  bool _resumed = true;
+
+  static const _frameGap = Duration(milliseconds: 16);
+
+  /// 指针正在按帧走（测试看它）
+  @visibleForTesting
+  bool get animating => _timer != null;
+
+  double get _target => speedGaugePosition(widget.mbps);
+
+  bool get _canAnimate => _resumed && TickerMode.valuesOf(context).enabled && !MediaQuery.disableAnimationsOf(context);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final state = WidgetsBinding.instance.lifecycleState;
+    _resumed = state == null || state == AppLifecycleState.resumed;
+    motion.jump(_target);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(SpeedTestDial oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _resumed = state == AppLifecycleState.resumed;
+    _sync();
+  }
+
+  void _sync() {
+    final target = _target;
+    if (!_canAnimate) {
+      _stop();
+      if (!motion.settledAt(target)) {
+        motion.jump(target);
+        _repaint.tick();
+      }
+      return;
+    }
+    if (!motion.settledAt(target)) _timer ??= Timer.periodic(_frameGap, (_) => _onTick());
+  }
+
+  void _onTick() {
+    final target = _target;
+    motion.advance(target, _frameGap.inMicroseconds / 1e6);
+    _repaint.tick();
+    if (motion.settledAt(target)) _stop();
+  }
+
+  void _stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _stop();
+    _repaint.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    const size = Size(SpeedTestDial.width, 250);
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: SizedBox(
+        width: SpeedTestDial.width,
+        height: SpeedTestDial.height,
+        child: Stack(
+          children: [
+            CustomPaint(
+              size: size,
+              painter: _DialFacePainter(track: mm.card2, tick: mm.t2.withValues(alpha: 0.55)),
+            ),
+            RepaintBoundary(
+              child: CustomPaint(
+                size: size,
+                painter: _DialNeedlePainter(
+                  motion: motion,
+                  repaint: _repaint,
+                  color: widget.color,
+                  ink: mm.t1,
+                  dot: mm.elev,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 186,
+              child: Column(
+                children: [
+                  Text(
+                    widget.value,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 44,
+                      fontWeight: FontWeight.w800,
+                      height: 1.05,
+                      color: widget.dimmed ? mm.t2.withValues(alpha: 0.5) : mm.t1,
+                      fontFamilyFallback: meowRounded,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  Text('Mbps', style: TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w700, color: mm.t2)),
+                  const SizedBox(height: 1),
+                  Text(
+                    widget.phase,
+                    maxLines: 1,
+                    style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: widget.phaseColor),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DialRepaint extends ChangeNotifier {
+  void tick() => notifyListeners();
+}
+
+double _rad(double deg) => deg * math.pi / 180;
+
+Offset _dialPoint(double deg, double r) =>
+    SpeedTestDial.center + Offset(r * math.cos(_rad(deg)), r * math.sin(_rad(deg)));
+
+Rect get _dialArcRect => Rect.fromCircle(center: SpeedTestDial.center, radius: SpeedTestDial.radius);
+
+/// 表盘：轨道、刻度线、刻度字。只在配色变了才重画。
+class _DialFacePainter extends CustomPainter {
+  _DialFacePainter({required this.track, required this.tick});
+  final Color track, tick;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const r = SpeedTestDial.radius;
+    canvas.drawArc(
+      _dialArcRect,
+      _rad(SpeedTestDial.startDeg),
+      _rad(SpeedTestDial.sweepDeg),
+      false,
+      Paint()
+        ..color = track
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 14
+        ..strokeCap = StrokeCap.round,
+    );
+    final line = Paint()
+      ..color = tick
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final n = speedGaugeScale.length - 1;
+    for (var i = 0; i <= n; i++) {
+      final deg = SpeedTestDial.startDeg + SpeedTestDial.sweepDeg * i / n;
+      canvas.drawLine(_dialPoint(deg, r - 16), _dialPoint(deg, r - 9), line);
+      final label = TextPainter(
+        text: TextSpan(
+          text: speedGaugeScale[i].toInt().toString(),
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tick, fontFamilyFallback: meowRounded),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final at = _dialPoint(deg, r - 30);
+      label.paint(canvas, at - Offset(label.width / 2, label.height / 2));
+      label.dispose();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DialFacePainter old) => old.track != track || old.tick != tick;
+}
+
+/// 指针层：走过的弧段 + 指针（墨色细线 + 圆心小圆 + 白点）。指针动时按帧重画，只重画这一层。
+class _DialNeedlePainter extends CustomPainter {
+  _DialNeedlePainter({required this.motion, required Listenable repaint, required this.color, required this.ink, required this.dot})
+    : super(repaint: repaint);
+  final SpeedGaugeMotion motion;
+  final Color color, ink, dot;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const c = SpeedTestDial.center, r = SpeedTestDial.radius;
+    final p = motion.position.clamp(0.0, 1.0);
+    final deg = SpeedTestDial.startDeg + SpeedTestDial.sweepDeg * p;
+    if (p > 0.002) {
+      canvas.drawArc(
+        _dialArcRect,
+        _rad(SpeedTestDial.startDeg),
+        _rad(SpeedTestDial.sweepDeg * p),
+        false,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 14
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+    canvas.drawLine(
+      c,
+      _dialPoint(deg, r - 46),
+      Paint()
+        ..color = ink
+        ..strokeWidth = 3.5
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(c, 9, Paint()..color = ink);
+    canvas.drawCircle(c, 3.5, Paint()..color = dot);
+  }
+
+  @override
+  bool shouldRepaint(_DialNeedlePainter old) =>
+      old.motion != motion || old.color != color || old.ink != ink || old.dot != dot;
 }
 
 /// 下载 / 上传两条速率曲线（每 0.25s 一格，一屏按 10 秒 = 40 格；两条共用纵轴）。
