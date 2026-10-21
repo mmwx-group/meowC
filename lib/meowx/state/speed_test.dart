@@ -44,6 +44,33 @@ class SpeedTestExit {
   /// 「KDDI · 203.0.113.8」（没有运营商名就只有 IP）
   String get label => [if (org != null && org!.isNotEmpty) org!, ip].join(' · ');
 
+  /// 运营商名去掉公司后缀（Limited / Ltd / Inc / Co., Ltd …）：「Hong Kong Telecommunications (HKT) Limited」→
+  /// 「Hong Kong Telecommunications (HKT)」。只给界面用，记录里存原文。同 iOS 的 `SpeedTestExit.shortOrganization`。
+  String? get shortOrg {
+    var name = org?.trim() ?? '';
+    if (name.isEmpty) return null;
+    const suffixes = ['co., ltd.', 'co.,ltd.', 'co., ltd', 'co.,ltd', 'company limited', 'pte. ltd.', 'pte ltd',
+        'limited', 'ltd.', 'ltd', 'inc.', 'inc', 'corporation', 'corp.', 'corp', 'llc', 'gmbh', 's.a.', 'b.v.'];
+    var trimmed = true;
+    while (trimmed) {
+      trimmed = false;
+      final lower = name.toLowerCase();
+      for (final suffix in suffixes) {
+        if (!lower.endsWith(' $suffix') && !lower.endsWith(',$suffix')) continue;
+        final cut = name.substring(0, name.length - suffix.length).replaceAll(RegExp(r'[ ,]+$'), '');
+        if (cut.isNotEmpty) {
+          name = cut;
+          trimmed = true;
+        }
+        break;
+      }
+    }
+    return name;
+  }
+
+  /// 出口第二行：「203.0.113.8 · JP」
+  String get ipLine => [ip, if (country != null && country!.isNotEmpty) country!].join(' · ');
+
   static String? _s(Object? v) => v is String && v.isNotEmpty ? v : null;
 
   /// 没有 ip（或不是对象）返回 null

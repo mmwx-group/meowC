@@ -503,7 +503,8 @@ class SpeedTestRecordRow extends StatelessWidget {
   }
 }
 
-/// 出口一行：「AS2516」小标签 + 「KDDI · 203.0.113.8」；还在查时是「… 查询出口…」。测速页节点行与记录详情共用。
+/// 出口两行（同 iOS）：「AS2516」小标签 + 运营商（去掉公司后缀），下面一行「203.0.113.8 · JP」；还在查时是「… 查询出口…」，
+/// 第二行留空占位（查到时高度不变）。以前「运营商 · IP」挤在一行，运营商名只剩一半。测速页节点行与记录详情共用。
 class SpeedTestExitLine extends StatelessWidget {
   const SpeedTestExitLine({super.key, required this.exit, this.pending = false, this.center = false});
   final SpeedTestExit? exit;
@@ -521,24 +522,35 @@ class SpeedTestExitLine extends StatelessWidget {
     final e = exit;
     if (!visible(e, pending: pending)) return const SizedBox.shrink();
     final tag = e == null ? '…' : e.asnTag;
-    return Row(
-      mainAxisSize: center ? MainAxisSize.min : MainAxisSize.max,
+    final org = e == null ? '查询出口…' : e.shortOrg;
+    return Column(
+      crossAxisAlignment: center ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        if (tag != null) ...[
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-            decoration: BoxDecoration(color: mm.down.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
-            child: Text(tag, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mm.down)),
+        if (tag != null || org != null)
+          Row(
+            mainAxisSize: center ? MainAxisSize.min : MainAxisSize.max,
+            children: [
+              if (tag != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(color: mm.down.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
+                  child: Text(tag, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mm.down)),
+                ),
+                if (org != null) const SizedBox(width: 6),
+              ],
+              if (org != null)
+                Flexible(
+                  child: Text(org, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: mm.t2)),
+                ),
+            ],
           ),
-          const SizedBox(width: 6),
-        ],
-        Flexible(
-          child: Text(
-            e == null ? '查询出口…' : e.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 12, color: mm.t2, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
+        const SizedBox(height: 2),
+        Text(
+          e?.ipLine ?? ' ',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: MeowFont.mono(size: MeowFont.caption2, color: mm.t2),
         ),
       ],
     );

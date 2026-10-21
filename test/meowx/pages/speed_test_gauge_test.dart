@@ -44,21 +44,36 @@ double _needle(WidgetTester tester) => _dial(tester).motion.position;
 Color? _colorOf(WidgetTester tester, String text) => tester.widget<Text>(find.text(text)).style?.color;
 
 void main() {
-  test('刻度：0·5·10·50·100·250·500·1000 等距分段线性，超出 1000 停在满格', () {
+  test('刻度：起步 0·5·10·50·100·250·500 等距分段线性，超出最大值停在满格', () {
     expect(speedGaugePosition(0), 0);
     expect(speedGaugePosition(-3), 0);
     expect(speedGaugePosition(double.nan), 0);
-    expect(speedGaugePosition(5), closeTo(1 / 7, 1e-12));
-    expect(speedGaugePosition(7.5), closeTo(1.5 / 7, 1e-12));
-    expect(speedGaugePosition(100), closeTo(4 / 7, 1e-12));
-    expect(speedGaugePosition(375), closeTo(5.5 / 7, 1e-12));
-    expect(speedGaugePosition(1000), 1);
-    expect(speedGaugePosition(2500), 1);
+    expect(speedGaugePosition(5), closeTo(1 / 6, 1e-12));
+    expect(speedGaugePosition(7.5), closeTo(1.5 / 6, 1e-12));
+    expect(speedGaugePosition(100), closeTo(4 / 6, 1e-12));
+    expect(speedGaugePosition(375), closeTo(5.5 / 6, 1e-12));
+    expect(speedGaugePosition(500), 1);
+    expect(speedGaugePosition(800), 1);
+    expect(speedGaugePosition(750, speedGaugeTiers[1]), closeTo(6.5 / 7, 1e-12));
+  });
+
+  test('量程同 Speedtest 动态变：起步 500，超了换到装得下的那档，一次测速里只升不降', () {
+    expect(speedGaugeTiers.first.last, 500);
+    expect(speedGaugeTier(0), 0);
+    expect(speedGaugeTier(500), 0, reason: '正好到顶不换');
+    expect(speedGaugeTier(501), 1);
+    expect(speedGaugeTier(2300), 2, reason: '一次跳到 2500，不一档一档升');
+    expect(speedGaugeTier(99999), speedGaugeTiers.length - 1);
+    expect(speedGaugeTier(30, atLeast: 2), 2);
+    // 按这次测到过的最高速率定：上传阶段速度掉下来也不缩回去；新的一次测速（样本清空）回到 500
+    expect(speedGaugeTierFor(const SpeedTestProgress(phase: 'upload', currentMbps: 40, downloadSamples: [300, 860, 700])), 1);
+    expect(speedGaugeTierFor(const SpeedTestProgress(phase: 'done', downloadPeakMbps: 1200)), 2);
+    expect(speedGaugeTierFor(const SpeedTestProgress(phase: 'preparing')), 0);
   });
 
   test('指针弹簧：追得上目标、过冲不超过几个百分点；低速样本之间也在动', () {
     final m = SpeedGaugeMotion();
-    final target = speedGaugePosition(640);
+    final target = speedGaugePosition(340);
     var peak = 0.0;
     for (var i = 0; i < 120; i++) {
       m.advance(target, 1 / 60);
@@ -357,10 +372,15 @@ void main() {
       expect(old.exit, isNull);
     });
 
-    testWidgets('出口一行：ASN 小标签 + 运营商 · IP；查询中「查询出口…」；查不到不显示', (tester) async {
+    testWidgets('出口两行：ASN 小标签 + 运营商（去掉公司后缀）、IP · 国家；查询中「查询出口…」；查不到不显示', (tester) async {
       await tester.pumpWidget(_app(const SpeedTestExitLine(exit: _kddi)));
       expect(find.text('AS2516'), findsOneWidget);
-      expect(find.text('KDDI · 203.0.113.8'), findsOneWidget);
+      expect(find.text('KDDI'), findsOneWidget);
+      expect(find.text('203.0.113.8 · JP'), findsOneWidget);
+      const hkt = SpeedTestExit(ip: '203.0.113.9', asn: 4760, org: 'Hong Kong Telecommunications (HKT) Limited');
+      expect(hkt.shortOrg, 'Hong Kong Telecommunications (HKT)');
+      expect(const SpeedTestExit(ip: '1.1.1.1', org: 'Foo Co., Ltd.').shortOrg, 'Foo');
+      expect(const SpeedTestExit(ip: '1.1.1.1', org: 'Limited').shortOrg, 'Limited', reason: '只剩后缀时不删光');
 
       await tester.pumpWidget(_app(const SpeedTestExitLine(exit: null, pending: true)));
       expect(find.text('查询出口…'), findsOneWidget);
@@ -385,7 +405,8 @@ void main() {
       );
       await tester.pumpWidget(_app(SpeedTestRecordDetail(record: record(exit: _kddi))));
       expect(find.text('AS2516'), findsOneWidget);
-      expect(find.text('KDDI · 203.0.113.8'), findsOneWidget);
+      expect(find.text('KDDI'), findsOneWidget);
+      expect(find.text('203.0.113.8 · JP'), findsOneWidget);
       await tester.pumpWidget(_app(SpeedTestRecordDetail(record: record())));
       expect(find.text('AS2516'), findsNothing);
       expect(find.byType(SpeedTestExitLine), findsNothing);

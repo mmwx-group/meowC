@@ -189,13 +189,25 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     if (p.phase == 'failed' && p.error != null) {
       return Text(p.error!, textAlign: TextAlign.center, style: style.copyWith(color: mm.slow));
     }
+    // 服务器 · 经由 一行、已用 一行，各自不折行：以前三段拼成一句，窄屏上「已用」涨到某个数就折成两行、码表卡跟着上下跳
     final parts = [
       if (p.server != null) '服务器 ${p.server}',
       if (p.via != null) '经由 ${speedTestDisplayName(p.via!)}',
-      if (p.bytesUsed > 0) '已用 ${fmtSize(p.bytesUsed)}',
     ];
     if (parts.isEmpty) return const SizedBox.shrink();
-    return Text(parts.join(' · '), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: style);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(parts.join(' · '), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
+        const SizedBox(height: 2),
+        // 从开测起就占着这一行（没用量时透明），数出来不再撑高
+        Opacity(
+          opacity: p.bytesUsed > 0 ? 1 : 0,
+          child: Text('已用 ${fmtSize(p.bytesUsed)}',
+              maxLines: 1, style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+        ),
+      ],
+    );
   }
 
   /// 按流量计费的网络（蜂窝）先确认一次
@@ -282,47 +294,48 @@ class _NodePicker extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: 48),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
+          // 出口两行（ASN + 运营商、IP）占满整行宽度，「更换」放在节点名那一行（同 iOS）：挤在一行时运营商名只剩一半
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       node == null ? '没有节点' : speedTestDisplayName(node!),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: node == null ? mm.t2 : mm.t1),
                     ),
-                    if (showExit) ...[
-                      const SizedBox(height: 2),
-                      if (found)
-                        SpeedTestExitLine(exit: p.exit, pending: pending)
-                      else
-                        Stack(
-                          alignment: AlignmentDirectional.centerStart,
-                          children: [
-                            // 看不见的「查询出口…」只用来撑高：两种状态一样高（它带 ASN 小标签），换过来时码表一点不动
-                            const Visibility(
-                              visible: false,
-                              maintainSize: true,
-                              maintainAnimation: true,
-                              maintainState: true,
-                              child: SpeedTestExitLine(exit: null, pending: true),
-                            ),
-                            Text('未查到出口', maxLines: 1, style: TextStyle(fontSize: 12, color: mm.t2)),
-                          ],
-                        ),
-                    ],
+                  ),
+                  if (enabled) ...[
+                    const SizedBox(width: 8),
+                    Text('更换', style: TextStyle(fontSize: 13, color: mm.t2)),
+                    const SizedBox(width: 2),
+                    MeowChipChevron(color: mm.t2),
                   ],
-                ),
+                ],
               ),
-              if (enabled) ...[
-                const SizedBox(width: 8),
-                Text('更换', style: TextStyle(fontSize: 13, color: mm.t2)),
-                const SizedBox(width: 2),
-                MeowChipChevron(color: mm.t2),
+              if (showExit) ...[
+                const SizedBox(height: 4),
+                if (found)
+                  SpeedTestExitLine(exit: p.exit, pending: pending)
+                else
+                  Stack(
+                    alignment: AlignmentDirectional.topStart,
+                    children: [
+                      // 看不见的「查询出口…」只用来撑高：两种状态一样高（它带 ASN 小标签与留空的第二行），换过来时码表一点不动
+                      const Visibility(
+                        visible: false,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: SpeedTestExitLine(exit: null, pending: true),
+                      ),
+                      Text('未查到出口', maxLines: 1, style: TextStyle(fontSize: 12, color: mm.t2)),
+                    ],
+                  ),
               ],
             ],
           ),
@@ -489,6 +502,7 @@ class SpeedTestGauge extends StatelessWidget {
         SpeedTestDial(
           // 指针只在下载 / 上传时指着当前速度，其余时候回到 0（测完的平均值在数字和三格里）
           mbps: transferring ? p.currentMbps : 0,
+          scale: speedGaugeTiers[speedGaugeTierFor(p)],
           color: p.phase == 'upload' ? mm.accent : mm.down,
           value: big == null ? '0' : fmtMbps(big),
           dimmed: big == null,
@@ -564,13 +578,38 @@ class SpeedTestGauge extends StatelessWidget {
       );
 }
 
-/// 码表刻度（Mbps）：等距分段线性——低速段看得清，千兆也装得下（同 Speedtest）
-const speedGaugeScale = <double>[0, 5, 10, 50, 100, 250, 500, 1000];
+/// 码表各档量程（Mbps，按最大值从小到大）：每档刻度等距、段内线性（低速段看得清）。同 Speedtest 动态变——起步最大 500，
+/// 测到的速率超过当前最大值就换到下一档（1000 / 2500 / 5000 / 10000），一次测速里只升不降。同 iOS 的 `SpeedGaugeScale`。
+const speedGaugeTiers = <List<double>>[
+  [0, 5, 10, 50, 100, 250, 500],
+  [0, 5, 10, 50, 100, 250, 500, 1000],
+  [0, 10, 50, 100, 250, 500, 1000, 2500],
+  [0, 50, 100, 250, 500, 1000, 2500, 5000],
+  [0, 100, 250, 500, 1000, 2500, 5000, 10000],
+];
 
-/// 速度 → 刻度位置 0…1
-double speedGaugePosition(double mbps) {
+/// 装得下 [mbps] 的最小一档（不小于 [atLeast]）
+int speedGaugeTier(double mbps, {int atLeast = 0}) {
+  var index = atLeast.clamp(0, speedGaugeTiers.length - 1);
+  while (index < speedGaugeTiers.length - 1 && mbps > speedGaugeTiers[index].last) {
+    index++;
+  }
+  return index;
+}
+
+/// 这一次测速该用哪档：按这次测到过的最高速率（曲线样本、峰值、当前值）定，所以只升不降；新的一次测速样本清空，回到 500
+int speedGaugeTierFor(SpeedTestProgress p) {
+  var top = p.currentMbps;
+  for (final v in [...p.downloadSamples, ...p.uploadSamples, ?p.downloadPeakMbps, ?p.uploadPeakMbps]) {
+    if (v > top) top = v;
+  }
+  return speedGaugeTier(top);
+}
+
+/// 速度 → 刻度位置 0…1（超过最大值停在 1）
+double speedGaugePosition(double mbps, [List<double> scale = const [0, 5, 10, 50, 100, 250, 500]]) {
   if (!(mbps > 0)) return 0;
-  const s = speedGaugeScale;
+  final s = scale;
   for (var i = 1; i < s.length; i++) {
     if (mbps <= s[i]) return (i - 1 + (mbps - s[i - 1]) / (s[i] - s[i - 1])) / (s.length - 1);
   }
@@ -612,8 +651,8 @@ class SpeedGaugeMotion {
   }
 }
 
-/// 270° 指针码表（起点 135°，顺时针扫 270°）：轨道 + 走过的弧段着色 + 墨色指针，数字与阶段在表盘下方。
-/// 按设计稿 300×262 的画板画（高留到 270），窄屏等比缩小。
+/// 270° 指针码表（起点 135°，顺时针扫 270°）：粗轨道 + 走过的弧段着色 + 墨色指针；刻度数字在弧外（放在弧内会被大数字压住），
+/// 大数字与阶段在弧内两脚之间。按 300×266 的画板画，窄屏等比缩小。同 iOS 的 `SpeedTestDial`。
 ///
 /// 性能：表盘（轨道 / 刻度 / 刻度字）与指针分两层，指针一层单独 RepaintBoundary；指针只在没追上目标时才按约 60 帧重画
 /// （用定时器而不是 Ticker，同首页网速卡的理由），追上了、页面被盖住（TickerMode 关）、App 在后台、系统关了动画都不要帧。
@@ -626,10 +665,14 @@ class SpeedTestDial extends StatefulWidget {
     required this.phase,
     required this.phaseColor,
     this.dimmed = false,
+    this.scale = const [0, 5, 10, 50, 100, 250, 500],
   });
 
   /// 指针指的速度
   final double mbps;
+
+  /// 当前量程的刻度（[speedGaugeTiers] 里的一档）
+  final List<double> scale;
 
   /// 走过的弧段的颜色（下载紫 / 上传玫红）
   final Color color;
@@ -643,10 +686,10 @@ class SpeedTestDial extends StatefulWidget {
   final String phase;
   final Color phaseColor;
 
-  // 设计稿画板 300×262（CSS 行高）；这里三行文字的行高写死，多留几 pt，免得中文回落字体行高大时阶段字被裁掉
+  // 三行文字的行高写死，多留几 pt，免得中文回落字体行高大时阶段字被裁掉
   static const width = 300.0, height = 270.0;
-  static const center = Offset(150, 132);
-  static const radius = 118.0, startDeg = 135.0, sweepDeg = 270.0;
+  static const center = Offset(150, 134);
+  static const radius = 104.0, arcWidth = 20.0, startDeg = 135.0, sweepDeg = 270.0;
 
   @override
   State<SpeedTestDial> createState() => SpeedTestDialState();
@@ -664,7 +707,7 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
   @visibleForTesting
   bool get animating => _timer != null;
 
-  double get _target => speedGaugePosition(widget.mbps);
+  double get _target => speedGaugePosition(widget.mbps, widget.scale);
 
   bool get _canAnimate => _resumed && TickerMode.valuesOf(context).enabled && !MediaQuery.disableAnimationsOf(context);
 
@@ -735,7 +778,7 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    const size = Size(SpeedTestDial.width, 250);
+    const size = Size(SpeedTestDial.width, SpeedTestDial.height);
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: SizedBox(
@@ -745,7 +788,7 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
           children: [
             CustomPaint(
               size: size,
-              painter: _DialFacePainter(track: mm.card2, tick: mm.t2.withValues(alpha: 0.55)),
+              painter: _DialFacePainter(track: mm.card2, tick: mm.t2.withValues(alpha: 0.55), scale: widget.scale),
             ),
             RepaintBoundary(
               child: CustomPaint(
@@ -762,30 +805,38 @@ class SpeedTestDialState extends State<SpeedTestDial> with WidgetsBindingObserve
             Positioned(
               left: 0,
               right: 0,
-              top: 186,
+              top: 154,
               // 码表里的字不跟系统字号放大（同表盘刻度字）：这块高度写死，按 1.4 倍放大时阶段字会被裁掉
               child: MediaQuery.withClampedTextScaling(
                 maxScaleFactor: 1.0,
                 child: Column(
                   children: [
-                    Text(
-                      widget.value,
-                      maxLines: 1,
-                      style: TextStyle(
-                        fontSize: 44,
-                        fontWeight: FontWeight.w800,
-                        height: 1.05,
-                        color: widget.dimmed ? mm.t2.withValues(alpha: 0.5) : mm.t1,
-                        fontFamilyFallback: meowRounded,
-                        fontFeatures: const [FontFeature.tabularFigures()],
+                    // 两脚内侧之间的宽度：四位数自己缩小，不顶到弧线
+                    SizedBox(
+                      width: 124,
+                      height: 61,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          widget.value,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 58,
+                            fontWeight: FontWeight.w800,
+                            height: 1.05,
+                            color: widget.dimmed ? mm.t2.withValues(alpha: 0.5) : mm.t1,
+                            fontFamilyFallback: meowRounded,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
                       ),
                     ),
-                    Text('Mbps', style: TextStyle(fontSize: 13, height: 1.25, fontWeight: FontWeight.w700, color: mm.t2)),
+                    Text('Mbps', style: TextStyle(fontSize: 15, height: 1.25, fontWeight: FontWeight.w700, color: mm.t2)),
                     const SizedBox(height: 1),
                     Text(
                       widget.phase,
                       maxLines: 1,
-                      style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w700, color: widget.phaseColor),
+                      style: TextStyle(fontSize: 15, height: 1.35, fontWeight: FontWeight.w700, color: widget.phaseColor),
                     ),
                   ],
                 ),
@@ -809,10 +860,11 @@ Offset _dialPoint(double deg, double r) =>
 
 Rect get _dialArcRect => Rect.fromCircle(center: SpeedTestDial.center, radius: SpeedTestDial.radius);
 
-/// 表盘：轨道、刻度线、刻度字。只在配色变了才重画。
+/// 表盘：轨道、刻度线、刻度字。只在配色或量程变了才重画。
 class _DialFacePainter extends CustomPainter {
-  _DialFacePainter({required this.track, required this.tick});
+  _DialFacePainter({required this.track, required this.tick, required this.scale});
   final Color track, tick;
+  final List<double> scale;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -825,32 +877,34 @@ class _DialFacePainter extends CustomPainter {
       Paint()
         ..color = track
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 14
+        ..strokeWidth = SpeedTestDial.arcWidth
         ..strokeCap = StrokeCap.round,
     );
     final line = Paint()
       ..color = tick
-      ..strokeWidth = 2
+      ..strokeWidth = 2.5
       ..strokeCap = StrokeCap.round;
-    final n = speedGaugeScale.length - 1;
+    final n = scale.length - 1;
     for (var i = 0; i <= n; i++) {
       final deg = SpeedTestDial.startDeg + SpeedTestDial.sweepDeg * i / n;
-      canvas.drawLine(_dialPoint(deg, r - 16), _dialPoint(deg, r - 9), line);
+      // 两头不画刻度线：弧线端头就是 0 与最大值，画了会挨着中间的大数字
+      if (i > 0 && i < n) canvas.drawLine(_dialPoint(deg, r - 24), _dialPoint(deg, r - 17), line);
       final label = TextPainter(
         text: TextSpan(
-          text: speedGaugeScale[i].toInt().toString(),
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tick, fontFamilyFallback: meowRounded),
+          text: scale[i].toInt().toString(),
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tick, fontFamilyFallback: meowRounded),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final at = _dialPoint(deg, r - 30);
+      // 刻度数字在弧外
+      final at = _dialPoint(deg, r + SpeedTestDial.arcWidth / 2 + 14);
       label.paint(canvas, at - Offset(label.width / 2, label.height / 2));
       label.dispose();
     }
   }
 
   @override
-  bool shouldRepaint(_DialFacePainter old) => old.track != track || old.tick != tick;
+  bool shouldRepaint(_DialFacePainter old) => old.track != track || old.tick != tick || !identical(old.scale, scale);
 }
 
 /// 指针层：走过的弧段 + 指针（墨色细线 + 圆心小圆 + 白点）。指针动时按帧重画，只重画这一层。
@@ -874,20 +928,20 @@ class _DialNeedlePainter extends CustomPainter {
         Paint()
           ..color = color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 14
+          ..strokeWidth = SpeedTestDial.arcWidth
           ..strokeCap = StrokeCap.round,
       );
     }
     canvas.drawLine(
       c,
-      _dialPoint(deg, r - 46),
+      _dialPoint(deg, r - 50),
       Paint()
         ..color = ink
-        ..strokeWidth = 3.5
+        ..strokeWidth = 4.5
         ..strokeCap = StrokeCap.round,
     );
-    canvas.drawCircle(c, 9, Paint()..color = ink);
-    canvas.drawCircle(c, 3.5, Paint()..color = dot);
+    canvas.drawCircle(c, 11, Paint()..color = ink);
+    canvas.drawCircle(c, 4.5, Paint()..color = dot);
   }
 
   @override
