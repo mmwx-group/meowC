@@ -64,10 +64,12 @@ enum NodeCardSize {
 }
 
 /// 首页上可以关掉的卡片（连接主卡恒在）。隐藏的卡记在 `MeowSettings.homeHiddenCards`（存 name）。
+/// 列表顺序 = 「首页卡片」设置里的顺序；[apps] 只在 Android 手机 / 平板上有（Windows 没有分应用代理）。
 enum HomeCard {
   upload,
   download,
   chart,
+  apps,
   proxied,
   direct,
   memory,
@@ -78,6 +80,7 @@ enum HomeCard {
     HomeCard.upload => '上传',
     HomeCard.download => '下载',
     HomeCard.chart => '网速图',
+    HomeCard.apps => '代理应用',
     HomeCard.proxied => '代理连接',
     HomeCard.direct => '直连连接',
     HomeCard.memory => '内存',

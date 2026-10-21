@@ -522,6 +522,15 @@ void main() {
     expect(find.byType(HomeSpeedCard), isDesktopUi ? findsOneWidget : findsNothing);
   });
 
+  testWidgets('首页卡片设置：「代理应用」只在 Android 上列出（这里不是 Android）', (tester) async {
+    await _pump(tester, _page(), size: const Size(412, 892), overrides: _overrides(running: true, profile: _profile), textScale: 1);
+    await tester.tap(find.byTooltip('首页卡片'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(SwitchListTile, '代理连接'), findsOneWidget);
+    expect(find.widgetWithText(SwitchListTile, '代理应用'), findsNothing);
+    expect(HomeCard.apps.label, '代理应用');
+  });
+
   testWidgets('标题行的重查钮立即重查出口 IP', (tester) async {
     final exitIp = _ExitIp(const ExitIpState());
     await _pump(

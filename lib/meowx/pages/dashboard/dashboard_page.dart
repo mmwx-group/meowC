@@ -31,7 +31,10 @@ const _pad = 16.0;
 ///
 /// 「首页卡片」开关（[HomeCard]）与新布局的对应：上传 / 下载 = 网速卡里的两列，网速图 = 网速卡里的折线（三个都关，网速卡不出现）；
 /// 代理连接 / 直连连接 / 内存 / DNS 模式 = 指标行里的四格（剩下的等分一行）；出口 IP = 那两格 + 标题行的重查钮。
-/// Windows 上折线恒在（它撑满左列），不给关。
+/// 代理应用 = 那一行（只在 Android 上有，设置里也只在 Android 上列出）。Windows 上折线恒在（它撑满左列），不给关。
+/// 「代理应用」行只在 Android 上有；MEOWX_PREVIEW_DESKTOP 在 Android 模拟器上预览的是 Windows 的样子，也不带。
+bool get _hasAppsCard => system.isAndroid && !isDesktopUi;
+
 class DashboardPage extends ConsumerWidget {
   const DashboardPage({super.key, this.fetchConnections});
 
@@ -59,8 +62,7 @@ class DashboardPage extends ConsumerWidget {
         ? HomeSpeedCard(up: up, down: down, chart: chart, dense: wide, expand: twoPane)
         : null;
     final subscription = HomeSubscriptionCard(dense: wide);
-    // MEOWX_PREVIEW_DESKTOP 在 Android 模拟器上预览的是 Windows 的样子，不带这行
-    final apps = system.isAndroid && !isDesktopUi ? HomeProxyAppsRow(dense: wide) : null;
+    final apps = _hasAppsCard && shows(HomeCard.apps) ? HomeProxyAppsRow(dense: wide) : null;
     final takeover = isDesktopUi ? const HomeTakeoverCard() : null;
     final tiles = [
       for (final c in const [HomeCard.proxied, HomeCard.direct, HomeCard.memory, HomeCard.dns])
@@ -147,7 +149,7 @@ class DashboardPage extends ConsumerWidget {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      isScrollControlled: true,   // 默认上限是屏高的 9/16，八个开关 + 说明放不下
+      isScrollControlled: true,   // 默认上限是屏高的 9/16，最多九个开关 + 说明放不下
       builder: (ctx) => Consumer(
         builder: (ctx, ref, _) {
           final mm = ctx.mm;
@@ -165,7 +167,7 @@ class DashboardPage extends ConsumerWidget {
                   ),
                 ),
                 for (final c in HomeCard.values)
-                  if (!(isDesktopUi && c == HomeCard.chart))
+                  if (!(isDesktopUi && c == HomeCard.chart) && (c != HomeCard.apps || _hasAppsCard))
                     SwitchListTile(
                       dense: true,
                       title: Text(c.label, style: TextStyle(fontSize: MeowFont.body, color: mm.t1)),
