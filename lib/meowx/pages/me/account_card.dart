@@ -27,6 +27,8 @@ class AccountCard extends ConsumerWidget {
     final mm = context.mm;
     final account = ref.watch(meowSettingProvider.select((s) => s.account));
     final loggedIn = account.token.isNotEmpty;
+    // 登录已过期：留着昵称头像，说明换成「登录已过期，请重新登录」，下面照常给登录按钮
+    final expired = ref.watch(isSessionExpiredProvider);
     // 主控上传的头像存的是站内路径，接上主控地址才加载得出来
     final avatarUrl = absoluteAvatarUrl(account.avatarUrl, account.host);
     final avatarSize = compact ? 52.0 : 60.0;
@@ -64,7 +66,7 @@ class AccountCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      loggedIn ? account.nickname : '未登录',
+                      loggedIn || expired ? account.nickname : '未登录',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -77,13 +79,17 @@ class AccountCard extends ConsumerWidget {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        if (loggedIn) ...[StatusDot(color: mm.good, size: 7), const SizedBox(width: 5)],
+                        if (loggedIn || expired) ...[StatusDot(color: expired ? mm.slow : mm.good, size: 7), const SizedBox(width: 5)],
                         Expanded(
                           child: Text(
-                            loggedIn ? '实时同步已启用' : '登录以启用实时同步与账户功能',   // 不带主控域名（同 iOS）
+                            // 不带主控域名（同 iOS）
+                            loggedIn ? '实时同步已启用' : expired ? '登录已过期，请重新登录' : '登录以启用实时同步与账户功能',
                             maxLines: loggedIn ? 1 : 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: compact ? MeowFont.caption2 : MeowFont.caption, color: mm.t2),
+                            style: TextStyle(
+                              fontSize: compact ? MeowFont.caption2 : MeowFont.caption,
+                              color: expired ? mm.slow : mm.t2,
+                            ),
                           ),
                         ),
                       ],

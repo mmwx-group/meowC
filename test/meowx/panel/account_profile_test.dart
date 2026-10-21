@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/panel/client.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
+import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,6 +42,7 @@ ProviderContainer _container(MeowAccount account, _Client client) {
     overrides: [
       meowSettingProvider.overrideWith(() => _Meow(MeowSettings(account: account))),
       panelClientProvider.overrideWithValue(client),
+      isRunningProvider.overrideWithValue(false),   // 登录过期要按「连着就重套规则」判断，测试里没有 App 的全局状态
     ],
   );
   addTearDown(c.dispose);
@@ -69,9 +71,24 @@ void main() {
   });
 
   test('主控回出错应答 / 请求失败：昵称和头像都不动，也不往外抛', () async {
-    final c = _container(_old, _Client((_) async => throw const PanelException('unauthorized')));
+    final c = _container(_old, _Client((_) async => throw const PanelException('未拿到个人资料')));
     await c.read(accountActionsProvider).refreshProfile();
     expect(_account(c), _old);
+  });
+
+  test('主控回 unauthorized（登录过期）：清掉 token、留着昵称头像，账户卡显示「登录已过期」', () async {
+    final c = _container(_old, _Client((_) async => throw const PanelException('unauthorized')));
+    expect(c.read(isSessionExpiredProvider), isFalse);
+    await c.read(accountActionsProvider).refreshProfile();
+    expect(_account(c).token, '');
+    expect(_account(c).nickname, '旧昵称');
+    expect(_account(c).avatarUrl, _old.avatarUrl);
+    expect(_account(c).host, _host);
+    expect(c.read(isLoggedInProvider), isFalse);
+    expect(c.read(isSessionExpiredProvider), isTrue);
+    // 主动退出会连昵称一起清：那是未登录，不是过期
+    expect(isUnauthorizedError(const PanelException('Unauthorized ')), isTrue);
+    expect(isUnauthorizedError(const PanelException('主控响应异常（HTTP 502）')), isFalse);
   });
 
   test('没登录：不发请求', () async {

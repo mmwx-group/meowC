@@ -26,6 +26,16 @@ final panelClientProvider = Provider<PanelClient?>((ref) {
 
 final isLoggedInProvider = Provider<bool>((ref) => ref.watch(meowSettingProvider.select((s) => s.account.token.isNotEmpty)));
 
+/// 登录已过期：主控不认这次登录的会话 token 了（30 天到期 / 改密码 / 在主控上被登出），token 已清、昵称头像还留着。
+/// 主动退出会连昵称一起清，所以「没 token 但有昵称」只会是过期。见 [AccountActions.sessionExpired]。
+final isSessionExpiredProvider = Provider<bool>((ref) {
+  final a = ref.watch(meowSettingProvider.select((s) => s.account));
+  return a.token.isEmpty && a.nickname.isNotEmpty;
+});
+
+/// 主控对会话 token 的拒绝（`RequireToken` 回 401 `unauthorized`，经加密 RPC 解出来就是这个错误串）
+bool isUnauthorizedError(Object e) => e is PanelException && e.message.trim().toLowerCase() == 'unauthorized';
+
 /// 「我的订阅」列表。
 final remoteSubsProvider = StateProvider<AsyncValue<List<RemoteSubscription>>>((ref) => const AsyncValue.data([]));
 
@@ -159,6 +169,23 @@ class AccountActions {
     _subsAttempt = null;
   }
 
+  /// 登录过期（主控回 `unauthorized`）：清掉失效的 token 与跟账号走的数据，回到未登录态让用户重新登录；
+  /// 和主动退出不同，**不删本机的订阅档**（正在用的订阅不能因为登录过期突然没了），也留着昵称头像（账户卡显示「登录已过期」）。
+  /// 只在登录那台主控（`_client()` 缺省就是它）拒绝时调：别家主控对这个 token 本来就不认。
+  void sessionExpired() {
+    if (_account.token.isEmpty) return;
+    commonPrint.log('session expired: panel rejected the token');
+    _update((a) => a.copyWith(token: ''));
+    _reapplyRules();
+    ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
+    _setMedals(const []);
+    _setUnlocks(const []);
+    ref.read(panelFeaturesProvider.notifier).state = const PanelFeatures();
+    ref.read(po0ReporterProvider).stop();
+    _extrasAt = null;
+    _subsAttempt = null;
+  }
+
   /// 向主控重取昵称与头像。这两项以前只在登录应答里写一次：用户之后在主控换了头像 / 改了昵称，要重新登录才跟上。
   /// **不定时拉**（用户明确要求），只由用户点的刷新带着调（订阅卡的「刷新」「刷新我的订阅」）。
   /// 没拿到答复、主控回的是出错应答、等答复期间退出或换了账号：什么都不动。
@@ -173,6 +200,7 @@ class AccountActions {
       _update((a) => a.copyWith(nickname: p.nickname, avatarUrl: p.avatarUrl));
     } catch (e) {
       commonPrint.log('refreshProfile failed: $e');
+      if (isUnauthorizedError(e) && _account.token == token) sessionExpired();
     }
   }
 
@@ -206,6 +234,8 @@ class AccountActions {
     } catch (e, st) {
       commonPrint.log('refreshSubscriptions failed: $e');
       ref.read(remoteSubsProvider.notifier).state = AsyncValue.error(e, st);
+      // 主控不认这个 token：登录已过期，别再把「unauthorized」挂在「已登录」的账户卡下面
+      if (isUnauthorizedError(e) && _account.token == token) sessionExpired();
     }
   }
 
