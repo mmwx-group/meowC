@@ -90,6 +90,15 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         commonPrint.log('Camera permission request: $e');
       }
       granted = await app.hasCameraPermission();
+      // MeowX：这次 start 只为弹授权框，那时扫码组件还没挂上（页面在「检查权限」的黑底）。相机先于组件跑起来，
+      // 扫描框没对上，第一次打开对准了也识别不到、退出重进才好。先停掉，下面等组件挂上后再正式启动。
+      if (controller.value.isRunning) {
+        try {
+          await controller.stop();
+        } catch (e) {
+          commonPrint.log('Camera stop after permission request: $e');
+        }
+      }
     }
     if (!mounted) return;
     
@@ -104,7 +113,10 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
       }
     } else {
       // Start camera only if not already running
-      if (!controller.value.isRunning && !controller.value.isInitialized) {
+      // MeowX：等扫码组件挂上（上面的 setState 那一帧画完）再启动，相机不先于组件跑起来
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
+      if (!controller.value.isRunning) {
         try {
           await controller.start();
         } catch (e) {
