@@ -2,6 +2,7 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/app.dart';
 import 'package:bett_box/state.dart';
 import 'package:bett_box/meowx/app/page_route.dart';
+import 'package:bett_box/meowx/app/window_controls.dart';
 import 'package:flutter/material.dart';
 
 class BaseNavigator {
@@ -10,6 +11,8 @@ class BaseNavigator {
     Widget child, {
     bool maintainState = true,
   }) async {
+    // MeowX：Windows 的窗口按钮并进了主页的标题行，二级页顶上留一条可拖动的窗口栏给它们（见 WindowPageFrame）
+    child = WindowPageFrame(child: child);
     if (globalState.appState.viewMode != ViewMode.mobile) {
       return await Navigator.of(
         context,

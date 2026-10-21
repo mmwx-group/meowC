@@ -14,6 +14,7 @@ import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:bett_box/meowx/app/glass_host.dart';
 import 'package:bett_box/meowx/app/meow_root.dart';
+import 'package:bett_box/meowx/app/window_controls.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:flutter/material.dart';
@@ -187,7 +188,7 @@ class ApplicationState extends ConsumerState<Application>
 
   Widget _buildPlatformApp(Widget child) {
     if (system.isDesktop) {
-      return WindowHeaderContainer(child: child);
+      return WindowHeaderContainer(merged: windowControlsMerged, child: child);   // MeowX：窗口按钮并进标题行
     }
     return VpnManager(child: child);
   }

@@ -30,6 +30,7 @@ import 'meow_dock.dart';
 import 'meow_sidebar.dart';
 import 'meow_tab.dart';
 import 'tab_stack.dart';
+import 'window_controls.dart';
 
 /// MeowX 壳：手机 = 悬浮的液态玻璃底栏 4 Tab；宽屏（Windows 窗口、平板）= 左侧栏 + 内容。
 /// Bettbox 内部的 toPage(PageLabel) 经 currentPageLabelProvider 映射到 Tab；非 Tab 页（日志 / 请求 / 资源 / 脚本）走 push。
@@ -227,8 +228,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
           // 侧栏照旧跟着键盘收（Android 平板）：矮了栏内滚动，电源键留在键盘上面
           KeyboardInset(
             child: Padding(
-              // Windows 顶上已有 40 高的窗口标题栏，侧栏不再留上边距
-              padding: EdgeInsets.only(left: 12, top: system.isDesktop ? 0 : 12, bottom: 12),
+              // Windows 没有单独的标题栏了（窗口按钮并进页面标题行），侧栏顶边与标题行对齐
+              padding: EdgeInsets.only(left: 12, top: system.isDesktop ? 6 : 12, bottom: 12),
               child: MeowSidebar(selected: tab, onSelect: _select, compact: compact),
             ),
           ),
@@ -251,7 +252,11 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
           extendBody: !wide,
           // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
           resizeToAvoidBottomInset: false,
-          body: SafeArea(bottom: wide, child: body), // 状态栏下留白
+          body: SafeArea(
+            bottom: wide,
+            // 模拟器上预览桌面布局时画一排假的窗口按钮看对齐（Windows 上真的按钮由 WindowHeaderContainer 画）
+            child: windowControlsShown && !windowControlsMerged ? Stack(children: [body, const PreviewWindowControls()]) : body,
+          ), // 状态栏下留白
           // 悬浮胶囊底栏（移植自 FlClash 0.9.1，见 meow_dock.dart）：选中项是一块透镜，按住鼓起、拖动跟手带果冻形变。
           // 玻璃由 Navigator 外面的 LiquidGlassHost 统一取背景：每帧把底栏背后的画面缩小后截一次、在小图上模糊，
           // 不再像原来的 liquid_glass_widgets 那样每帧对全分辨率背景做一次大半径模糊（切页、展开代理组时整屏掉帧的原因）。
