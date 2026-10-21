@@ -148,3 +148,7 @@
   - 写回规则表前多一行 `captureMainProxyGroup`（当前订阅才记，同 `captureNodeKeys`）：记下按交给内核的那份配置（Bettbox 规则覆写、停用组改 PASS 之后）算出的主代理组，界面上「代理（组名）」优先用它；多一行 import `meowx/state/custom_rules.dart`。
 - `lib/models/meow.dart MeowSettings`：`customRules`（`MeowCustomRule{value, match: domain|suffix|ip, action: direct|proxy|reject}`，列表顺序即优先级；旧数据没有这个字段 = 空，认不出的枚举回到缺省）。
 - 其余在 `lib/meowx/`：规范化 / 主代理组推断 / 规则生成（`state/custom_rules.dart`，域名出 `DOMAIN` / `DOMAIN-SUFFIX`，IP 出 `IP-CIDR(6),…/32|/128,…,no-resolve`；域名标签允许 `_`、IPv6 统一成标准写法、IPv4-mapped 转 IPv4，上限 1000 条）、「我的 › 设置 › 流量控制 › 自定义规则」子页（`pages/settings/custom_rules_page.dart`）、动态页连接详情的「这个域名走：直连 / 代理 / 拒绝」（`pages/connections/conn_rule_card.dart`，点了把这条挪到最前、立即生效）。改了规则时连着就 `applyProfileDebounce` 重新套用配置（同绕过代理）。与 iOS / macOS 同一功能、同一口径。
+
+## 2026-10-21 · TLS 依赖与 Go 版本（安全更新）
+- `core/Clash.Meta/go.mod`、`core/go.mod`（及 go.sum）：`github.com/metacubex/tls` v0.1.8 → v0.1.9，同上游 mihomo「fix: CVE-2026-97031 for crypto/tls」。mihomo 用的是这份 crypto/tls 的副本，升 Go 修不到它。
+- `.github/workflows/build.yaml`：`GO_VERSION` 1.25.x → 1.26.10（CVE-2026-111943：旧版 crypto/x509 仍接受已被撤销信任的中间 CA 签的证书，1.25 不再出修复）。
