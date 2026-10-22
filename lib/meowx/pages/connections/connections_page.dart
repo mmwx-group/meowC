@@ -12,6 +12,7 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/meow_tab.dart';
+import '../../app/window_controls.dart';
 import '../../app/strings.dart';
 import '../../state/connection.dart';
 import '../../state/format.dart';
@@ -417,21 +418,27 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 标题行：标题 + 分段 + 搜索 + 本页操作（窗口按钮在上面的全局标题栏里，这里不画）
-          Row(
-            children: [
-              Text(
-                MeowTab.connections.label,
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: mm.t1, height: 1.15),
+          // 标题行：标题 + 分段 + 搜索 + 本页操作。Windows 的窗口按钮并在这一行最右边（见 window_controls.dart）：
+          // 让出它们的位置、整行可拖动窗口；上边距 8 让 40 高的这一行与窗口按钮居中对齐（同 PageTitle 的第一行）
+          WindowDragArea(
+            child: Padding(
+              padding: EdgeInsets.only(top: 8, right: windowControlsShown ? windowControlsReserve : 0),
+              child: Row(
+                children: [
+                  Text(
+                    MeowTab.connections.label,
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: mm.t1, height: 1.15),
+                  ),
+                  const SizedBox(width: 14),
+                  // 分段定宽 190，跟着文字缩放放大
+                  SizedBox(width: 190 * MediaQuery.textScalerOf(context).scale(13) / 13, child: segment),
+                  const SizedBox(width: 8),
+                  Expanded(child: search),
+                  const SizedBox(width: 8),
+                  rowAction,
+                ],
               ),
-              const SizedBox(width: 14),
-              // 分段定宽 190，跟着文字缩放放大
-              SizedBox(width: 190 * MediaQuery.textScalerOf(context).scale(13) / 13, child: segment),
-              const SizedBox(width: 8),
-              Expanded(child: search),
-              const SizedBox(width: 8),
-              rowAction,
-            ],
+            ),
           ),
           const SizedBox(height: 8),
           kindFilter,

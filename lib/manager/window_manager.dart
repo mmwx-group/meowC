@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_ext/window_ext.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'package:bett_box/meowx/app/window_controls.dart';
+
 class WindowManager extends ConsumerStatefulWidget {
   final Widget child;
 
@@ -208,10 +210,21 @@ class _WindowContainerState extends ConsumerState<WindowManager>
 class WindowHeaderContainer extends StatelessWidget {
   final Widget child;
 
-  const WindowHeaderContainer({super.key, required this.child});
+  /// MeowX：窗口按钮并进页面标题那一行，不再单占顶上一条标题栏（见 lib/meowx/app/window_controls.dart）
+  final bool merged;
+
+  const WindowHeaderContainer({super.key, required this.child, this.merged = false});
 
   @override
   Widget build(BuildContext context) {
+    if (merged) {
+      return Stack(
+        children: [
+          child,
+          const Positioned(top: windowControlsTop, right: 4, child: WindowHeader(merged: true)),
+        ],
+      );
+    }
     return Consumer(
       builder: (_, ref, child) {
         final isMobileView = ref.watch(isMobileViewProvider);
@@ -237,7 +250,10 @@ class WindowHeaderContainer extends StatelessWidget {
 }
 
 class WindowHeader extends ConsumerStatefulWidget {
-  const WindowHeader({super.key});
+  /// MeowX：只画按钮（并进页面标题行），不画整条可拖动的标题栏、不做悬停才显示
+  final bool merged;
+
+  const WindowHeader({super.key, this.merged = false});
 
   @override
   ConsumerState<WindowHeader> createState() => _WindowHeaderState();
@@ -297,9 +313,10 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
 
   Widget _buildActions() {
     final shouldUseHoverEffect = system.isWindows || system.isLinux;
-    final alwaysShowTitleBar = ref.watch(
-      vpnSettingProvider.select((state) => state.alwaysShowTitleBar),
-    );
+    final alwaysShowTitleBar = widget.merged ||
+        ref.watch(
+          vpnSettingProvider.select((state) => state.alwaysShowTitleBar),
+        );
 
     return MouseRegion(
       onEnter: shouldUseHoverEffect
@@ -374,6 +391,9 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.merged) {
+      return Material(type: MaterialType.transparency, child: _buildActions());
+    }
     return Material(
       child: Stack(
         alignment: AlignmentDirectional.center,
