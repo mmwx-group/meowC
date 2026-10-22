@@ -157,17 +157,28 @@ class PanelClient {
   }
 
   Future<Uint8List> _fetchCert() async {
-    final res = await _send(
-      (dio) => dio.get<dynamic>(
-        '$base/api/secure/cert',
-        options: Options(
-          responseType: ResponseType.json,
-          receiveTimeout: const Duration(seconds: 15),
-          headers: {HttpHeaders.userAgentHeader: userAgent},
+    // 收下所有状态码：主控拿不到证书时回 503 + {"error": 原因}，不收下的话 Dio 直接抛异常，
+    // 界面上只剩一大段英文的 DioException，看不出是没填主控地址还是没激活许可证（#1382）
+    final Response<dynamic> res;
+    try {
+      res = await _send(
+        (dio) => dio.get<dynamic>(
+          '$base/api/secure/cert',
+          options: Options(
+            responseType: ResponseType.json,
+            receiveTimeout: const Duration(seconds: 15),
+            headers: {HttpHeaders.userAgentHeader: userAgent},
+            validateStatus: (_) => true,
+          ),
         ),
-      ),
-    );
-    if (res.statusCode != 200 || res.data is! Map) throw PanelException('无法获取主控证书（HTTP ${res.statusCode}）');
+      );
+    } on DioException catch (e) {
+      throw PanelException('无法连接主控：${e.message ?? e.type.name}');
+    }
+    if (res.statusCode != 200 || res.data is! Map) {
+      final reason = certErrorReason(res.data);
+      throw PanelException('无法获取主控证书（HTTP ${res.statusCode}）${reason.isEmpty ? '' : '：$reason'}');
+    }
     final json = (res.data as Map).cast<String, dynamic>();
     // 验签在后台 isolate 里做：每个实例用缓存证书起步后的这次后台重拉，不该卡界面线程
     final pub = await MeowCrypto.verifyCertOffThread(json, host: host);
@@ -331,6 +342,16 @@ class PanelClient {
     if (err != null && r['servers'] == null) throw PanelException(err);
     return Po0Server.parse(r);
   }
+}
+
+/// 主控 /api/secure/cert 失败时回的 {"error": …} 转成给人看的原因；认得的几种换成中文说法，
+/// 其余原样带上，不是 JSON（反代返回的 HTML / 404 页）时为空。
+String certErrorReason(Object? data) {
+  final raw = data is Map ? (data['error']?.toString() ?? '').trim() : '';
+  if (raw.isEmpty) return '';
+  if (raw.contains('license is not configured')) return '主控尚未激活许可证，无法登录客户端';
+  if (raw.contains('claimed by another license')) return '主控地址的域名已绑定在另一份许可证名下';
+  return raw;
 }
 
 class PanelException implements Exception {
