@@ -11,7 +11,7 @@ import '../theme/tokens.dart';
 /// - 主页四个 Tab 的标题行右侧让出按钮的位置（[windowControlsReserve]），标题行本身可以拖动窗口（[WindowDragArea]）；
 /// - 从主页推出去的二级页（测速、设置子页、高级设置…）顶上照旧有一条可拖动的窗口栏（[WindowPageFrame]，
 ///   `BaseNavigator.push` 统一包），按钮落在那条栏里。
-bool get windowControlsMerged => system.isWindows || system.isLinux;
+bool get windowControlsMerged => system.isWindows;
 
 /// 只在 Android 模拟器上预览桌面布局时用（`--dart-define=MEOWX_PREVIEW_DESKTOP=true`）：画一排假的窗口按钮看对齐，正式包不带
 const _previewDesktop = bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
