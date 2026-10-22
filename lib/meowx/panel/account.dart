@@ -141,9 +141,9 @@ class AccountActions {
     if (ref.read(isRunningProvider)) globalState.appController.applyProfileDebounce(silence: true);
   }
 
-  /// 登出：先删掉从这个主控导入的订阅档（用户的配置不该留在设备上），再清 token / 昵称 / 头像（保留主控地址）。
+  /// 登出：先删掉从这个主控导入的订阅档（用户的配置不该留在设备上），再清 token / 昵称 / 头像（保留主控地址）与跟账号走的数据。
   /// 删档抛错就原样抛给界面提示，此时仍是登录态、可重试。当前档在其中时先切到剩下的第一份自有订阅，
-  /// 没有才落到内置直连档（deleteProfile 自己会切到内部顺序的第一份，通常正是直连档）。
+  /// 没有才落到内置直连档（deleteProfile 自己会切到内部顺序的第一份，通常正是直连档）。与 iOS / macOS 同一套规则。
   Future<void> logout() async {
     final host = Uri.tryParse(_account.host)?.host ?? '';
     if (host.isNotEmpty) {
@@ -159,14 +159,7 @@ class AccountActions {
       }
     }
     _update((a) => a.copyWith(token: '', nickname: '', avatarUrl: ''));
-    _reapplyRules();
-    ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
-    _setMedals(const []);
-    _setUnlocks(const []);
-    ref.read(panelFeaturesProvider.notifier).state = const PanelFeatures();
-    ref.read(po0ReporterProvider).stop();
-    _extrasAt = null;
-    _subsAttempt = null;
+    _clearAccountData();
   }
 
   /// 登录过期（主控回 `unauthorized`）：清掉失效的 token 与跟账号走的数据，回到未登录态让用户重新登录；
@@ -176,6 +169,11 @@ class AccountActions {
     if (_account.token.isEmpty) return;
     commonPrint.log('session expired: panel rejected the token');
     _update((a) => a.copyWith(token: ''));
+    _clearAccountData();
+  }
+
+  /// 退出 / 过期共用：token 已清之后，撤掉主控直连规则并清空跟账号走的内存数据。
+  void _clearAccountData() {
     _reapplyRules();
     ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
     _setMedals(const []);

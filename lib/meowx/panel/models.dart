@@ -325,7 +325,8 @@ class NodeUnlocks {
 
 /// 登录后自动导入哪一份（null = 不自动导入）：当前没在用订阅（内置直连档 / 没有档）、本机还没有这个主控的订阅、
 /// 账户下恰好一份。多份不替用户选，在用别家订阅时也不替用户换。与 iOS / macOS 端同一套规则。
-/// [host] 是主控地址（`https://host[:port]`），按主机名与本机各订阅的地址比。
+/// [host] 是主控地址（`https://host[:port]`），按主机名与本机各订阅的地址比；另外这一份按 [notDownloadedSubscriptions]
+/// 的规则已在本机（开了「订阅域名」、本机那份挂在别的域名上）也不导入。
 RemoteSubscription? autoImportCandidate({
   required List<RemoteSubscription> remote,
   required String host,
@@ -335,7 +336,8 @@ RemoteSubscription? autoImportCandidate({
   final h = Uri.tryParse(host)?.host.toLowerCase() ?? '';
   if (usingSubscription || remote.length != 1 || h.isEmpty) return null;
   final hasLocal = localUrls.any((u) => u.isNotEmpty && Uri.tryParse(u)?.host.toLowerCase() == h);
-  return hasLocal ? null : remote.first;
+  if (hasLocal) return null;
+  return notDownloadedSubscriptions(remote: remote, host: host, localUrls: localUrls).firstOrNull;
 }
 
 /// 账户下还没下载到本机的订阅（首页切换菜单的「账户订阅 · 未下载」），与 iOS / macOS 的 `SubAccountStore.notDownloaded` 同一套规则：

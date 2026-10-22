@@ -108,6 +108,8 @@ void main() {
     expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://Panel.Example.com/x/old'], usingSubscription: false), isNull);
     // 别家机场的订阅不算这个主控的
     expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://airport.example.org/sub'], usingSubscription: false), a);
+    // 这一份已在本机、挂在主控的「订阅域名」上（主机名不同、短链路径相同）：不重复导入
+    expect(autoImportCandidate(remote: [a], host: host, localUrls: const ['https://sub.example.net/x/a'], usingSubscription: false), isNull);
   });
 
   test('账户订阅去重：短链按路径认（不比主机名），filename 旧式按主控主机 + 参数认', () {
