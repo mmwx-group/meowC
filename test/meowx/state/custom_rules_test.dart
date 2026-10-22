@@ -5,10 +5,12 @@ import 'package:bett_box/meowx/pages/settings/custom_rules_page.dart';
 import 'package:bett_box/meowx/state/custom_rules.dart';
 import 'package:bett_box/meowx/state/overrides.dart';
 import 'package:bett_box/meowx/state/status.dart';
+import 'package:bett_box/models/common.dart';
 import 'package:bett_box/models/meow.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yaml/yaml.dart';
 
 const _d = MeowRuleAction.direct, _p = MeowRuleAction.proxy, _r = MeowRuleAction.reject;
 
@@ -193,6 +195,83 @@ void main() {
       ]);
       // 没开阻止 QUIC：前置规则直接在最前
       expect(meowRuleTable(const MeowSettings(), rules: ['MATCH,DIRECT'], debugPo0: false), ['MATCH,DIRECT']);
+    });
+  });
+
+  group('主控模板形状的真实订阅（emoji 组名，MATCH,🐟 漏网之鱼）', () {
+    // 主控 rule_templates/redirhost__v3.yaml 的代理组与规则（节选，组的顺序与类型照原样）
+    const sub = '''
+proxy-groups:
+  - {name: 🚀 手动选择, type: select, proxies: [♻️ 自动选择]}
+  - {name: ♻️ 自动选择, type: url-test, proxies: []}
+  - {name: 🚀 GitHub, type: select, proxies: [🚀 手动选择, ♻️ 自动选择, 🎯 全球直连]}
+  - {name: 🍎 苹果服务, type: select, proxies: [🎯 全球直连, 🚀 手动选择]}
+  - {name: 🐟 漏网之鱼, type: select, proxies: [🚀 手动选择, ♻️ 自动选择, 🎯 全球直连]}
+  - {name: 🔀 非标端口, type: select, proxies: [🐟 遵循规则, 🎯 全球直连]}
+  - {name: 🎯 全球直连, type: select, proxies: [DIRECT]}
+  - {name: 🐟 遵循规则, type: select, proxies: [🐟 漏网之鱼]}
+rules:
+  - GEOSITE,private,🎯 全球直连
+  - GEOSITE,gfw,🚀 手动选择
+  - GEOSITE,cn,🎯 全球直连
+  - GEOIP,cn,🎯 全球直连,no-resolve
+  - RULE-SET,Custom_Port_Direct,🔀 非标端口
+  - MATCH,🐟 漏网之鱼
+''';
+    final raw = jsonDecode(jsonEncode(loadYaml(sub))) as Map<String, dynamic>;
+
+    test('「代理」规则生成且排在全部订阅规则之前；缺省设置下前面没有别的 MeowX 规则', () {
+      final table = meowRuleTable(
+        MeowSettings(customRules: [_rule('bilibili.com', MeowRuleMatch.suffix, _p)]),
+        rules: raw['rules'] as List,
+        proxyGroups: raw['proxy-groups'],
+        debugPo0: false,
+      );
+      expect(table, ['DOMAIN-SUFFIX,bilibili.com,🐟 漏网之鱼', ...raw['rules'] as List]);
+    });
+
+    test('登录了主控、开着阻止 QUIC / 推送直连：自定义规则仍在全部订阅规则（GEOSITE,cn → 全球直连）之前', () {
+      const quic = ['AND,((NETWORK,UDP),(DST-PORT,443)),REJECT'];
+      final table = meowRuleTable(
+        MeowSettings(
+          account: const MeowAccount(host: 'https://panel.example.com', token: 't'),
+          pushDirect: true,
+          customRules: [_rule('bilibili.com', MeowRuleMatch.suffix, _p)],
+        ),
+        quicRules: quic,
+        rules: raw['rules'] as List,
+        subscriptionUrls: const ['https://sub.example.com/x/abc'],
+        proxyGroups: raw['proxy-groups'],
+        debugPo0: false,
+      );
+      expect(table.take(6), [
+        ...quic,
+        'DOMAIN,panel.example.com,DIRECT',
+        'DOMAIN,sub.example.com,DIRECT',
+        ...pushDirectRules,
+      ]);
+      expect(table[6], 'DOMAIN-SUFFIX,bilibili.com,🐟 漏网之鱼');
+      expect(table.indexOf('GEOSITE,cn,🎯 全球直连'), greaterThan(6));
+    });
+  });
+
+  group('连接按哪个域名过规则', () {
+    test('有嗅探域名用它（同 mihomo RuleHost），否则用 host；都没有为空', () {
+      expect(connRuleHost(host: 'b.example.net', sniffHost: 'www.bilibili.com'), 'www.bilibili.com');
+      expect(connRuleHost(host: 'www.bilibili.com', sniffHost: ''), 'www.bilibili.com');
+      expect(connRuleHost(host: '', sniffHost: 'www.bilibili.com'), 'www.bilibili.com');
+      expect(connRuleHost(host: '', sniffHost: ''), '');
+    });
+
+    test('内核 /connections 的 metadata 带 sniffHost（本机 mihomo 实测的一条：host 是 CONNECT 的目标，规则按 SNI 命中）', () {
+      final c = TrackerInfo.fromJson(jsonDecode('''
+{"id":"1","metadata":{"network":"tcp","type":"HTTPS","sourceIP":"127.0.0.1","destinationIP":"127.0.0.1",
+"sourcePort":"50482","destinationPort":"28443","host":"example.test","dnsMode":"normal","sniffHost":"other.test",
+"inboundName":"DEFAULT-MIXED"},"upload":0,"download":0,"start":"2026-10-22T07:11:23.894265+08:00",
+"chains":["DIRECT","🎯 全球直连"],"rule":"DomainSuffix","rulePayload":"other.test"}''') as Map<String, Object?>);
+      expect(c.metadata.host, 'example.test');
+      expect(c.metadata.sniffHost, 'other.test');
+      expect(connRuleHost(host: c.metadata.host, sniffHost: c.metadata.sniffHost), c.rulePayload);
     });
   });
 

@@ -63,6 +63,9 @@ abstract class Metadata with _$Metadata {
     // 用来在连接页区分一条连接走的是 TUN 还是系统代理
     @Default('') String type,
     @Default('') String inboundName,
+    // MeowX：嗅探到的域名（mihomo metadata.sniffHost）。有它时域名规则只按它匹配（mihomo `RuleHost()`）：
+    // TUN + redir-host 下 host 是按目标 IP 反查的 DNS 映射，可能是同一 IP 上的别的域名；连接详情加自定义规则要用它
+    @Default('') String sniffHost,
   }) = _Metadata;
 
   factory Metadata.fromJson(Map<String, Object?> json) =>

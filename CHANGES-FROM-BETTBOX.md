@@ -152,3 +152,7 @@
 ## 2026-10-21 · TLS 依赖与 Go 版本（安全更新）
 - `core/Clash.Meta/go.mod`、`core/go.mod`（及 go.sum）：`github.com/metacubex/tls` v0.1.8 → v0.1.9，同上游 mihomo「fix: CVE-2026-97031 for crypto/tls」。mihomo 用的是这份 crypto/tls 的副本，升 Go 修不到它。
 - `.github/workflows/build.yaml`：`GO_VERSION` 1.25.x → 1.26.10（CVE-2026-111943：旧版 crypto/x509 仍接受已被撤销信任的中间 CA 签的证书，1.25 不再出修复）。
+
+## 2026-10-22 · 连接详情按嗅探域名加自定义规则
+- `lib/models/common.dart Metadata`：多一个 `sniffHost`（内核 `/connections` 本来就带，旧模型丢掉了；生成文件 `common.freezed.dart` / `common.g.dart` 随之更新）。用户实报 Windows 上连接详情点「这个域名走 → 代理」后还是 DIRECT：TUN + redir-host 下 `host` 是按目标 IP 反查的 DNS 映射（同一 CDN IP 上最近被查的域名，浏览器自己走 DoH 时更对不上），默认嗅探（TLS 不改写目标、`force-dns-mapping` 开）把 SNI 记进 `sniffHost`，内核的域名规则只按它匹配（mihomo `RuleHost()`），照 `host` 加的规则永远不命中。
+- 其余在 `lib/meowx/`：`connRuleHost`（`state/custom_rules.dart`）；动态页连接的主机、搜索、详情的「这个域名走」改按嗅探域名，两者不同时详情多一行「DNS 映射」（`pages/connections/connections_page.dart`）。

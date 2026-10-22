@@ -125,6 +125,11 @@ List<String> customRuleLines(List<MeowCustomRule> rules, String? proxyTarget) =>
   for (final r in rules) ?customRuleLine(r, proxyTarget),
 ];
 
+/// 连接按哪个域名过规则（同 mihomo `Metadata.RuleHost()`）：嗅探到了域名就用它，否则用 host。
+/// TUN + redir-host 下 host 是按目标 IP 反查的 DNS 映射（同一 IP 上最近一次被查的域名，浏览器自己走 DoH 时更是对不上），
+/// 而嗅探默认不改写目标（TLS 的 override-destination 关着），内核按 sniffHost 匹配；照 host 加的规则永远不命中。
+String connRuleHost({required String host, required String sniffHost}) => sniffHost.isNotEmpty ? sniffHost : host;
+
 /// 这条连接命中的第一条自定义规则（按列表顺序；没有返回 null）。[host] 为空时只按 [ip] 找。
 MeowCustomRule? customRuleFor(List<MeowCustomRule> rules, {required String host, String ip = ''}) {
   final h = host.trim().toLowerCase();
