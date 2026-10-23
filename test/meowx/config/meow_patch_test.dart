@@ -33,7 +33,7 @@ void main() {
       ]);
       expect(meowPrependRules(const MeowSettings()), isEmpty);
     });
-    test('主控直连：登录的主控 + 主控样式的订阅地址（订阅域名）排在最前；别家订阅、没登录不算', () {
+    test('主控直连：登录的主控 + 主控样式的订阅地址（订阅域名），排在绕过代理之后；别家订阅、没登录不算', () {
       const account = MeowAccount(host: 'https://Panel.Example.com:8443', token: 't');
       final urls = [
         'https://sub.example.com/x/abc',
@@ -43,10 +43,10 @@ void main() {
         '',
       ];
       expect(meowPrependRules(const MeowSettings(account: account, bypassDomains: ['x.com']), subscriptionUrls: urls), [
+        'DOMAIN,x.com,DIRECT',
         'DOMAIN,panel.example.com,DIRECT',
         'DOMAIN,sub.example.com,DIRECT',
         'DOMAIN,cdn.example.net,DIRECT',
-        'DOMAIN,x.com,DIRECT',
       ]);
       // 没登录：只看订阅地址
       expect(panelDirectRules(const MeowAccount(host: 'https://panel.example.com'), urls.take(1)), ['DOMAIN,sub.example.com,DIRECT']);

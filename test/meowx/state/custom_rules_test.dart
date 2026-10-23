@@ -141,7 +141,7 @@ void main() {
       );
     });
 
-    test('前置规则的位置：主控直连 → po0 直连 → 绕过代理 → 推送直连 → 自定义规则，全部在订阅规则之前', () {
+    test('前置规则的位置：po0 直连 → 绕过代理 → 推送直连 → 自定义规则 → 主控直连，全部在订阅规则之前', () {
       final meow = MeowSettings(
         account: const MeowAccount(host: 'https://panel.example.com', token: 't'),
         po0Enabled: true,
@@ -160,13 +160,14 @@ void main() {
         rules: ['GEOIP,CN,DIRECT', 'MATCH,兜底'],
       );
       // 绕过代理与推送直连在自定义规则之前：用户开着的这两项不被「google.com 含子域名 → 代理」这类规则盖掉（同 iOS）
+      // 主控直连在自定义规则之后：用户把主控域名指给代理组时以用户的为准
       expect(rules, [
-        'DOMAIN,panel.example.com,DIRECT',
         'IP-CIDR,209.248.57.93/32,DIRECT,no-resolve',
         'DOMAIN,x.com,DIRECT',
         ...pushDirectRules,
         'DOMAIN-SUFFIX,example.org,兜底',
         'DOMAIN,ads.example.com,REJECT',
+        'DOMAIN,panel.example.com,DIRECT',
       ]);
       // 没给代理组：「代理」规则不生成
       expect(meowPrependRules(MeowSettings(customRules: [_rule('a.com', MeowRuleMatch.suffix, _p)]), debugPo0: false), isEmpty);
