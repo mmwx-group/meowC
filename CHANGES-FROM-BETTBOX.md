@@ -152,3 +152,8 @@
 ## 2026-10-21 · TLS 依赖与 Go 版本（安全更新）
 - `core/Clash.Meta/go.mod`、`core/go.mod`（及 go.sum）：`github.com/metacubex/tls` v0.1.8 → v0.1.9，同上游 mihomo「fix: CVE-2026-97031 for crypto/tls」。mihomo 用的是这份 crypto/tls 的副本，升 Go 修不到它。
 - `.github/workflows/build.yaml`：`GO_VERSION` 1.25.x → 1.26.10（CVE-2026-111943：旧版 crypto/x509 仍接受已被撤销信任的中间 CA 签的证书，1.25 不再出修复）。
+
+## 2026-10-22 · 内核同步上游 mihomo v1.19.33
+- `core/Clash.Meta/`：底子从上游 mihomo Alpha 的 fbb67422（2026-09-16，介于 v1.19.31 与 v1.19.32 之间，即 Bettbox v1.19.2 带来的那份）换成 **v1.19.33** 标签（26 个上游提交：tun `dns-mode`、sudoku 重构、openvpn / loadbalance 修复等）。做法：在上游历史上把「Bettbox 对上游的补丁」（Android 相关的 patch*.go、features/android.go 等约 40 个文件）与「本项目对 Bettbox 的修改」（Miu、Snell v6、AnyTLS + REALITY、测速包、tls v0.1.9 等）两个提交依次重放到 v1.19.33 上；只有 go.mod / go.sum 冲突，取上游版本（上游已是 `metacubex/tls` v0.1.9、`utls` v1.8.8）。
+- `core/go.mod`、`core/go.sum`：随内核 `go mod tidy`。
+- 验证：android/arm64、windows/amd64、linux/amd64、darwin/arm64 交叉编译通过；`transport/miu`、`transport/snell`、`component/speedtest`、`adapter/outbound`、`config`、`rules`、桥接层 `core` 测试通过。
