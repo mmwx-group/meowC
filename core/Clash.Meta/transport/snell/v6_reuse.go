@@ -188,6 +188,17 @@ func (p *v6Pool) expireLoop() {
 	}
 }
 
+// closeIdle (meowC) closes the pooled sessions but keeps the pool open for new ones.
+func (p *v6Pool) closeIdle() {
+	p.access.Lock()
+	entries := p.entries
+	p.entries = nil
+	p.access.Unlock()
+	for _, entry := range entries {
+		_ = entry.session.Close()
+	}
+}
+
 func (p *v6Pool) drainDone() {
 	p.drainWg.Done()
 }

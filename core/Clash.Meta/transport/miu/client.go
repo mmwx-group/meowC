@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/metacubex/mihomo/component/netreset"
 	"github.com/metacubex/mihomo/transport/anytls/padding"
 	"github.com/metacubex/mihomo/transport/vmess"
 
@@ -52,6 +53,9 @@ type Client struct {
 	sweeper  *time.Timer
 	closed   bool
 
+	// drops the idle lanes when the device switches networks (lanes from the old network are dead)
+	unregisterReset func()
+
 	// set by the tests only: lanes dialed and reused, raw segments, replays, resets
 	observer func(event string)
 }
@@ -81,6 +85,7 @@ func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
 	}
 	// Initialize the padding state of this client
 	padding.UpdatePaddingScheme(padding.DefaultPaddingScheme, &c.padding)
+	c.unregisterReset = netreset.Register(c.closeIdle)
 	return c, nil
 }
 
@@ -147,6 +152,9 @@ func (c *Client) dial(ctx context.Context) (*lane, error) {
 // Close closes the lanes in the pool. A lane still carrying a stream is closed
 // when that stream lets go of it.
 func (c *Client) Close() error {
+	if c.unregisterReset != nil {
+		c.unregisterReset()
+	}
 	c.cancel()
 	c.mu.Lock()
 	idle := c.idle

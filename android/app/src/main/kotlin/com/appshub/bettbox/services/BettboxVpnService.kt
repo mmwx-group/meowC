@@ -52,6 +52,9 @@ class BettboxVpnService : VpnService(), BaseServiceInterface {
     @Volatile
     private var pendingSpeedInfo: String? = null
 
+    // MeowX：跟踪 VPN 底下的物理网络，换网时让内核清掉旧连接（见 UnderlyingNetworkTracker）
+    private var networkTracker: UnderlyingNetworkTracker? = null
+
     override fun onCreate() {
         super.onCreate()
         GlobalState.initServiceEngine()
@@ -154,6 +157,8 @@ class BettboxVpnService : VpnService(), BaseServiceInterface {
             null
         }
         if (fd != null && fd > 0) {
+            networkTracker?.stop()
+            networkTracker = UnderlyingNetworkTracker(this@BettboxVpnService).also { it.start() }
             return fd
         }
         Log.e(TAG, "Establish VPN rejected by system")
@@ -170,21 +175,24 @@ class BettboxVpnService : VpnService(), BaseServiceInterface {
                     updateNotificationSpeed(profileName, speedInfo)
                 }
             }
-        } else if (intent?.action == "RESTORE_NOTIFICATION") {
-            isSpeedNotificationEnabled = false
-            pendingSpeedProfile = null
-            pendingSpeedInfo = null
-            if (hasStartedForeground) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    startForeground()
-                }
-            }
         }
         return START_STICKY
     }
+
+    internal suspend fun restoreNotification() {
+        isSpeedNotificationEnabled = false
+        pendingSpeedProfile = null
+        pendingSpeedInfo = null
+        if (hasStartedForeground) {
+            startForeground()
+        }
+    }
+
     override fun stop() {
         if (isStopped) return
         isStopped = true
+        networkTracker?.stop()
+        networkTracker = null
         hasStartedForeground = false
         lastNotificationText = null
 

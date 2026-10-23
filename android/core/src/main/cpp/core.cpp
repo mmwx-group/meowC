@@ -23,6 +23,13 @@ Java_com_appshub_bettbox_core_Core_suspend(JNIEnv *, jobject, jint suspended) {
     suspend(suspended);
 }
 
+// MeowX：默认物理网络换了，内核清掉旧网络上的连接与连接池（见 core/meow_netreset_android.go）
+extern "C"
+JNIEXPORT void JNICALL
+Java_com_appshub_bettbox_core_Core_networkChanged(JNIEnv *, jobject) {
+    networkChanged();
+}
+
 
 static jmethodID m_tun_interface_protect;
 static jmethodID m_tun_interface_resolve_process;

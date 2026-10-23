@@ -8,6 +8,7 @@ object Core {
     private external fun startTun(fd: Int, cb: TunInterface)
     private external fun suspend(suspended: Int)
     external fun stopTun()
+    private external fun networkChanged()
 
     init {
         System.loadLibrary("core")
@@ -62,6 +63,12 @@ object Core {
         }.onFailure {
             Log.e("Core", "Error calling suspend: ${it.message}", it)
         }
+    }
+
+    /** MeowX：VPN 底下的默认物理网络换了，让内核清掉旧网络上的连接、DNS 连接与空闲连接池。 */
+    fun onUnderlyingNetworkChanged() {
+        runCatching { networkChanged() }
+            .onFailure { Log.e("Core", "networkChanged JNI call failed: ${it.message}", it) }
     }
 
     fun dozeSuspend(value: Boolean) {

@@ -16,6 +16,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/metacubex/mihomo/component/netreset"
 	"github.com/metacubex/mihomo/transport/shadowsocks/shadowaead"
 	"github.com/metacubex/mihomo/transport/socks5"
 )
@@ -81,6 +82,8 @@ type V6Client struct {
 	reuse   bool
 	dial    func(ctx context.Context) (net.Conn, error)
 	pool    v6Pool
+
+	unregisterReset func()
 }
 
 func NewV6Client(option V6Option) (*V6Client, error) {
@@ -106,6 +109,8 @@ func NewV6Client(option V6Option) (*V6Client, error) {
 	}
 	if option.Reuse {
 		client.pool.init()
+		// pooled connections were dialed on the old network: drop them when the device switches networks
+		client.unregisterReset = netreset.Register(client.pool.closeIdle)
 	}
 	return client, nil
 }
@@ -113,6 +118,9 @@ func NewV6Client(option V6Option) (*V6Client, error) {
 // Close closes the pooled connections. Connections that are in use are not
 // affected, but they are no longer returned to the pool.
 func (c *V6Client) Close() error {
+	if c.unregisterReset != nil {
+		c.unregisterReset()
+	}
 	return c.pool.close()
 }
 
