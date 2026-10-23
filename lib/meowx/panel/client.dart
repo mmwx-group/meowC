@@ -367,11 +367,16 @@ String certErrorReason(Object? data) {
 const _certStatusHint = '管理员可在面板「系统设置 → 主控地址 → 客户端证书状态」查看';
 
 String _describeCertError(String code, String raw, {String cause = '', int retryAfter = 0}) {
-  if (code == 'no_domain' || raw.contains('未配置对外域名')) {
+  // 按 error 文本认只给不带 code 的老主控用:带了 code 时 error 里也可能含这些片段
+  // (退避中的 error 就是「license is not configured(29s 后重试)」),先按文本认会把退避信息吞掉。
+  final legacy = code.isEmpty;
+  if (code == 'no_domain' || (legacy && raw.contains('未配置对外域名'))) {
     return '主控还没填对外域名，请管理员在面板「系统设置 → 主控地址」填好后重试';
   }
-  if (code == 'no_license' || raw.contains('license is not configured')) return '主控尚未激活许可证，无法登录客户端';
-  if (code == 'domain_claimed' || raw.contains('claimed by another license')) return '主控地址的域名已绑定在另一份许可证名下';
+  if (code == 'no_license' || (legacy && raw.contains('license is not configured'))) return '主控尚未激活许可证，无法登录客户端';
+  if (code == 'domain_claimed' || (legacy && raw.contains('claimed by another license'))) {
+    return '主控地址的域名已绑定在另一份许可证名下';
+  }
   if (code == 'backoff') {
     // 别的请求正在签发（主控回「证书签发中」、不带 cause）不是失败，稍后重试即可
     if (retryAfter <= 0 || (cause.isEmpty && raw.contains('签发中'))) return '主控正在签发证书，请稍后重试';
