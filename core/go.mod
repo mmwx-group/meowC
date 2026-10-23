@@ -4,6 +4,9 @@ go 1.20
 
 replace github.com/metacubex/mihomo => ./Clash.Meta
 
+// accept 循环遇错不退出（见 third_party/sing-tun/README.md）
+replace github.com/metacubex/sing-tun => ./third_party/sing-tun
+
 require (
 	github.com/metacubex/mihomo v0.0.0-00010101000000-000000000000
 	golang.org/x/sync v0.11.0
