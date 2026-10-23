@@ -157,3 +157,10 @@
 - `core/Clash.Meta/`：底子从上游 mihomo Alpha 的 fbb67422（2026-09-16，介于 v1.19.31 与 v1.19.32 之间，即 Bettbox v1.19.2 带来的那份）换成 **v1.19.33** 标签（26 个上游提交：tun `dns-mode`、sudoku 重构、openvpn / loadbalance 修复等）。做法：在上游历史上把「Bettbox 对上游的补丁」（Android 相关的 patch*.go、features/android.go 等约 40 个文件）与「本项目对 Bettbox 的修改」（Miu、Snell v6、AnyTLS + REALITY、测速包、tls v0.1.9 等）两个提交依次重放到 v1.19.33 上；只有 go.mod / go.sum 冲突，取上游版本（上游已是 `metacubex/tls` v0.1.9、`utls` v1.8.8）。
 - `core/go.mod`、`core/go.sum`：随内核 `go mod tidy`。
 - 验证：android/arm64、windows/amd64、linux/amd64、darwin/arm64 交叉编译通过；`transport/miu`、`transport/snell`、`component/speedtest`、`adapter/outbound`、`config`、`rules`、桥接层 `core` 测试通过。
+
+## 2026-10-22 · Android 用几小时后断网（三星 One UI 实报，同机 NekoBox 正常）
+- 新增 `core/third_party/sing-tun`（vendored `metacubex/sing-tun` v0.4.28，GPL-3.0，`core/go.mod` 用 replace 引入）：只改 `stack_system.go` 的 `acceptLoop`——上游 Accept 出任何错就退出，此后经 TUN 的 TCP 全部挂住（DNS / UDP 照常），要关掉重开重建栈才恢复；改成监听关闭或 ctx 取消才退出，其它错误（如 fd 用尽）记日志、退避后继续。附单测 `meow_accept_test.go`。mixed 栈的 TCP 与 Windows 都走这份。
+- `core/Clash.Meta/component/keepalive/tcp_keepalive.go`：Android 上不再强制关闭 TCP keepalive（上游为省电一律关），idle / interval 不低于 60 秒；换网 / NAT 超时死掉的连接能被发现、释放。
+- 换网重置：新增 `android/.../services/UnderlyingNetworkTracker.kt`（VPN 建好时由 `BettboxVpnService` 启动、stop 时停）跟踪最佳非 VPN 网络，变了就 `setUnderlyingNetworks`，换成另一个网络时去抖 1 秒调 `Core.onUnderlyingNetworkChanged`（`core.cpp` JNI → `core/meow_netreset_android.go` 的 `networkChanged`）：清网卡缓存、DNS 上游连接与缓存、统计表里全部连接、各协议空闲连接池，再重测自动组。以前只有系统 DNS 字符串变了才通知内核，Wi-Fi 与移动数据同时在线时来回切往往不变。新增 `core/Clash.Meta/component/netreset` 钩子，Miu 空闲通道（`transport/miu/client.go`）与 Snell v6 复用池（`transport/snell/v6.go`、`v6_reuse.go` 的 `closeIdle`）接上。
+- 拣选上游 Bettbox `60c9862e`（Improve Android service lifecycle）的一部分：`VpnPlugin.kt` 连上后 `startStickyService`（VPN 服务成为 started + START_STICKY，被系统杀掉后拉起并以 quick 参数重连）、`restoreNotification` 改成直接调服务方法（`ServicePlugin.kt` / `BettboxVpnService.kt`）、`core/lib_android.go` 的 quickStart 初始化失败后 return。MainActivity 的高刷新率改动没拣。
+- `lib/meowx/state/battery_prompt.dart` + `app/meow_root.dart`：Android 第一次连上后，App 不在「忽略电池优化」白名单里就提示一次（附三星「永不休眠的应用」「电池 › 不受限制」的设置位置），只提示一次。
