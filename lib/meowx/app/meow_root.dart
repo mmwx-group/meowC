@@ -20,6 +20,7 @@ import '../panel/account.dart';
 import '../panel/client.dart';
 import '../panel/po0.dart';
 import '../panel/realtime.dart';
+import '../state/battery_prompt.dart';
 import '../state/connection.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
@@ -47,6 +48,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<bool> _initSub;
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
+  late final ProviderSubscription<bool> _batterySub;
   RealtimeClient? _realtime;
 
   @override
@@ -91,6 +93,12 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       },
       fireImmediately: true,
     );
+    // Android：第一次连上之后提示一次「忽略电池优化」（连上 2 秒后再弹，不挡连接过程）
+    _batterySub = ref.listenManual(isRunningProvider, (prev, next) {
+      if (prev == false && next) {
+        unawaited(Future<void>.delayed(const Duration(seconds: 2), maybePromptBatteryOptimization));
+      }
+    });
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {
@@ -156,6 +164,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _initSub.close();
     _realtimeSub.close();
     _po0Sub.close();
+    _batterySub.close();
     _realtime?.stop();
     super.dispose();
   }
