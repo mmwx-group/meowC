@@ -327,6 +327,7 @@ func quickStart(initParamsChar *C.char, paramsChar *C.char, stateParamsChar *C.c
 		res := handleInitClash(paramsString)
 		if res == false {
 			bridge.SendToPort(i, "init error")
+			return // 上游 Bettbox 60c9862e：初始化失败后不再接着套配置
 		}
 		handleSetState(stateParams)
 		bridge.SendToPort(i, handleSetupConfig(bytes))

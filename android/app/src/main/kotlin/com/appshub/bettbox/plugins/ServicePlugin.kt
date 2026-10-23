@@ -107,18 +107,8 @@ class ServicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(true)
             }
             "restoreNotification" -> {
-                val context = com.appshub.bettbox.BettboxApplication.getAppContext()
-                if (context != null) {
-                    GlobalState.isSpeedNotificationEnabled = false
-
-                    val intent = android.content.Intent(
-                        context, 
-                        com.appshub.bettbox.services.BettboxVpnService::class.java
-                    ).apply {
-                        action = "RESTORE_NOTIFICATION"
-                    }
-                    runCatching { context.startService(intent) }
-                }
+                GlobalState.isSpeedNotificationEnabled = false
+                VpnPlugin.restoreNotification()
                 result.success(true)
             }
             "setHighPriorityNotification" -> {

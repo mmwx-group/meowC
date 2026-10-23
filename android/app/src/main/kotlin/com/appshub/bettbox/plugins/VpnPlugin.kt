@@ -496,6 +496,16 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
+    fun restoreNotification() {
+        scope.launch {
+            runCatching {
+                (bettBoxService as? BettboxVpnService)?.restoreNotification()
+            }.onFailure {
+                android.util.Log.e("VpnPlugin", "restoreNotification error: ${it.message}")
+            }
+        }
+    }
+
     fun setHighPriorityNotification(enabled: Boolean) {
         GlobalState.isNotificationHighPriority = enabled
         (bettBoxService as? BettboxService)?.resetNotificationBuilder()
@@ -623,7 +633,10 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 Core.stopTun()
                 return@withLock
             }
-            scope.launch { startForeground() }
+            scope.launch {
+                startForeground()
+                startStickyService()
+            }
             if (currentOptions.dozeSuspend) {
                 suspendModule?.uninstall()
                 suspendModule = SuspendModule(BettboxApplication.getAppContext())
@@ -631,6 +644,22 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
         }
         onUpdateNetwork()
+    }
+
+    // 上游 Bettbox 60c9862e：VPN 服务原来只有 bindService，START_STICKY 不生效——进程被系统（如三星省电）杀掉后
+    // 不会被拉起。这里再 startService 一次，让它成为 started 服务；被杀后系统重启它，onCreate 里 initServiceEngine 会重连。
+    // stop() 里的 stopSelf() 照旧结束它。
+    private fun startStickyService() {
+        GlobalState.runLock.withLock {
+            if (GlobalState.currentRunState != RunState.START) return
+            if (bettBoxService !is BettboxVpnService) return
+            val context = BettboxApplication.getAppContext()
+            runCatching {
+                context.startService(Intent(context, BettboxVpnService::class.java))
+            }.onFailure {
+                android.util.Log.w("VpnPlugin", "startService error: ${it.message}")
+            }
+        }
     }
 
     private fun protect(fd: Int): Boolean {
