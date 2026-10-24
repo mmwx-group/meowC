@@ -16,6 +16,7 @@ import android.util.Base64
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.core.content.getSystemService
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
@@ -237,6 +238,9 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
             }
             "isIgnoringBatteryOptimizations" -> {
                 result.success(isIgnoringBatteryOptimizations())
+            }
+            "installApk" -> {
+                result.success(installApk(call.argument<String>("path") ?: ""))
             }
             "requestIgnoreBatteryOptimizations" -> {
                 requestIgnoreBatteryOptimizations()
@@ -537,6 +541,29 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
             val powerManager = BettboxApplication.getAppContext().getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
             powerManager?.isIgnoringBatteryOptimizations(BettboxApplication.getAppContext().packageName) ?: false
         } else true
+
+    // MeowX：App 内更新——把 Dart 侧下载、校验过的 APK 交给系统安装器。返回 ok / permission / error：
+    // Android 8+ 要先允许本 App「安装未知应用」，没允许时打开对应设置页、返回 permission，用户开完开关回来再调一次
+    private fun installApk(path: String): String {
+        val context = BettboxApplication.getAppContext()
+        val file = java.io.File(path)
+        if (!file.isFile) return "error"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+            val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(intent) }
+            return "permission"
+        }
+        return runCatching {
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.update", file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            "ok"
+        }.getOrElse { "error" }
+    }
 
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return

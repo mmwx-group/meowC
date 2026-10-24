@@ -1203,9 +1203,9 @@ class AppController {
       final body = data['body'];
       final submits = utils.parseReleaseBody(body);
       final textTheme = context.textTheme;
-      // MeowX：Windows 有选中的包条目就走 App 内一键更新；Android / 匹配不到包时仍打开下载地址
+      // MeowX：Windows / Android 有选中的包条目就走 App 内更新（Android 下载校验后交给系统安装器）；匹配不到包时仍打开下载地址
       final file = UpdateFile.fromJson(data['file']);
-      final updateFile = system.isWindows ? file : null;
+      final updateFile = system.isWindows || (system.isAndroid && file?.kind == 'apk') ? file : null;
       // 版本号下面写清楚当前版本和要下的包（文件名 · 大小）；Android 有匹配的包时按钮直接叫「下载 APK」
       final summary = updateSummaryLines(current: globalState.packageInfo.version, file: file);
       final res = await globalState.showMessage(
@@ -1229,7 +1229,7 @@ class AppController {
         return;
       }
       if (updateFile != null) {
-        await runWindowsUpdate(updateFile);
+        await (system.isAndroid ? runAndroidUpdate(updateFile) : runWindowsUpdate(updateFile));
         return;
       }
       // html_url 由 checkForUpdate 按本机平台 / 架构从 latest.json 选好，直接就是包的下载地址

@@ -349,7 +349,7 @@ class AboutRows extends ConsumerWidget {
         MeRow(label: S.version, value: globalState.packageInfo.version, mono: true),
         MeRow(
           label: S.checkUpdate,
-          subtitle: system.isWindows ? '有新版本时可在 App 内直接更新' : (system.isAndroid ? '有新版本时提示下载对应的 APK' : null),
+          subtitle: system.isWindows || system.isAndroid ? '有新版本时可在 App 内直接更新' : null,
           value: available == null ? null : S.newVersionAvailable(available),
           chevron: true,
           // 与 Bettbox 关于页同一条链路：有新版弹下载 / 更新，已是最新和检查失败分别提示

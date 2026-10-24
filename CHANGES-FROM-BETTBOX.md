@@ -41,7 +41,7 @@
 - `lib/manager/app_manager.dart`：关掉 Bettbox 桌面侧栏（MeowX 壳自带侧栏）；去掉右上角的 DEBUG / PRE 斜角标。
 - `lib/manager/window_manager.dart`：窗口标题栏底色并进页面底（不再是一条色带）；`lib/models/config.dart`：新装默认窗口 1100×720（放得下完整侧栏）。
 - `lib/common/tray.dart`：托盘菜单按设计稿重排（显示 / 启停 → 模式 → TUN / 系统代理 → 代理组 → 开机启动 / 终端代理命令 / 重启内核 → 更多 → 退出）。
-- `lib/common/request.dart`、`lib/controller.dart`：手动检查更新区分「已是最新」与「检查失败」（`manualCheckUpdate`）；新版本弹窗写明当前版本与安装包（文件名 · 大小），Android 按钮为「下载 APK」。
+- `lib/common/request.dart`、`lib/controller.dart`：手动检查更新区分「已是最新」与「检查失败」（`manualCheckUpdate`）；新版本弹窗写明当前版本与安装包（文件名 · 大小）。Android 匹配到安装包时按钮为「立即更新」：App 内下载到 cacheDir/meowx-update/、按清单 size + sha256 校验后交给系统安装器（`lib/meowx/update/android_updater.dart`；以前只打开下载地址，用户下到半截的包小米安装器报「packageInfo is null」）。底层配套：`AndroidManifest.xml` 加 `REQUEST_INSTALL_PACKAGES` 与 `androidx.core.content.FileProvider`（`${applicationId}.update`，`res/xml/update_paths.xml`），`AppPlugin.kt` 加 `installApk`（Android 8+ 没允许「安装未知应用」时打开设置页、返回 permission），`lib/plugins/app.dart` 加对应调用。
 - 首页（仅 Windows）：网速图位置换成「接管方式」卡（TUN / 系统代理，开关沿用 Bettbox 的 provider）。
 
 ## 2026-09-27 · 悬空规则引用不再废掉整份配置

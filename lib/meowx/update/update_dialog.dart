@@ -1,10 +1,12 @@
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/state.dart';
 import 'package:bett_box/widgets/dialog.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../app/strings.dart';
+import 'android_updater.dart';
 import 'update_manifest.dart';
 import 'windows_updater.dart';
 
@@ -18,10 +20,51 @@ Future<void> runWindowsUpdate(UpdateFile file) async {
   );
   final error = await globalState.showCommonDialog<Object>(
     dismissible: false,
-    child: _UpdateProgressDialog(file: file, updater: updater),
+    child: _UpdateProgressDialog(
+      file: file,
+      run: (progress, cancel) => updater.run(file, progress: progress, cancelToken: cancel),
+    ),
   );
   if (error == null) return; // 脚本已拉起、App 正在退出；或用户取消
-  commonPrint.log('Windows update failed: ${error.formatErrorLog}');
+  await _showUpdateFailed('Windows', error);
+}
+
+/// Android App 内更新入口：进度弹窗下载并校验 APK → 交给系统安装器（弹窗随即收起）。
+/// 还没允许「安装未知应用」时原生那边已打开设置页，这里留一个「继续安装」，开完开关回来点它直接装下好的包。
+Future<void> runAndroidUpdate(UpdateFile file) async {
+  final updater = AndroidUpdater(
+    workRoot: await appPath.tempPath,
+    install: (path) async => ApkInstallResult.parse(await app.installApk(path)),
+  );
+  Object? error = await globalState.showCommonDialog<Object>(
+    dismissible: false,
+    child: _UpdateProgressDialog(
+      file: file,
+      closeOnDone: true,
+      run: (progress, cancel) => updater.run(file, progress: progress, cancelToken: cancel),
+    ),
+  );
+  while (error is ApkInstallPermissionNeeded) {
+    final apk = error.apk;
+    final go = await globalState.showMessage(
+      title: S.updateInstallPermissionTitle,
+      message: TextSpan(text: S.updateInstallPermissionHint),
+      confirmText: S.updateContinueInstall,
+    );
+    if (go != true) return;
+    try {
+      await updater.launch(apk);
+      return;
+    } catch (e) {
+      error = e;
+    }
+  }
+  if (error == null) return; // 已交给安装器；或用户取消
+  await _showUpdateFailed('Android', error);
+}
+
+Future<void> _showUpdateFailed(String platform, Object error) async {
+  commonPrint.log('$platform update failed: ${error.formatErrorLog}');
   final go = await globalState.showMessage(
     title: S.updateFailed,
     message: TextSpan(text: error is UpdateError ? error.message : error.formatError),
@@ -31,10 +74,13 @@ Future<void> runWindowsUpdate(UpdateFile file) async {
 }
 
 class _UpdateProgressDialog extends StatefulWidget {
-  const _UpdateProgressDialog({required this.file, required this.updater});
+  const _UpdateProgressDialog({required this.file, required this.run, this.closeOnDone = false});
 
   final UpdateFile file;
-  final WindowsUpdater updater;
+  final Future<void> Function(ValueNotifier<UpdateProgress> progress, CancelToken cancel) run;
+
+  /// 跑完就收起（Android：安装器已调起，App 不退出）；Windows 跑完 App 正在退出，弹窗留到进程结束
+  final bool closeOnDone;
 
   @override
   State<_UpdateProgressDialog> createState() => _UpdateProgressDialogState();
@@ -61,8 +107,8 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
   Future<void> _run() async {
     Object? error;
     try {
-      await widget.updater.run(widget.file, progress: progress, cancelToken: cancel);
-      return; // 脚本已拉起、App 正在退出，弹窗留到进程结束
+      await widget.run(progress, cancel);
+      if (!widget.closeOnDone) return; // 脚本已拉起、App 正在退出，弹窗留到进程结束
     } on UpdateCancelled {
       // 用户取消：半成品已删，静默收起
     } catch (e) {
@@ -81,7 +127,11 @@ class _UpdateProgressDialogState extends State<_UpdateProgressDialog> {
         final label = switch (value.stage) {
           UpdateStage.downloading => S.updateDownloading,
           UpdateStage.extracting => S.updateExtracting,
-          UpdateStage.launching => widget.file.kind == 'portable' ? S.updateReplacing : S.updateLaunching,
+          UpdateStage.launching => switch (widget.file.kind) {
+            'portable' => S.updateReplacing,
+            'apk' => S.updateOpeningInstaller,
+            _ => S.updateLaunching,
+          },
         };
         return CommonDialog(
           title: S.updateTitle,

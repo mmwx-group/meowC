@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MeowX：App 内更新下载、校验过的安装包（Dart 侧 AndroidUpdater 写在 cacheDir/meowx-update/），交给系统安装器时经 FileProvider 授权读取 -->
+<paths>
+    <cache-path name="update" path="meowx-update/" />
+</paths>

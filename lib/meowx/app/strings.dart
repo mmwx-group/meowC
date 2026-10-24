@@ -59,7 +59,7 @@ class S {
   static const version = '版本';
   static const openSourceLicense = '开源许可';
 
-  // 更新（Windows 一键更新；Android 仍打开下载地址）
+  // 更新（Windows 一键更新；Android App 内下载、校验后交给系统安装器）
   static const checkUpdate = '检查更新';
   static const checkUpdateFailed = '检查更新失败';
   static const checkUpdateFailedHint = '连不上更新服务器，请检查网络后再试。';
@@ -71,6 +71,11 @@ class S {
   static const updateExtracting = '正在解压…';
   static const updateLaunching = '正在启动安装，MeowX 将自动重启…';
   static const updateReplacing = '正在替换文件，MeowX 将自动重启…';   // 便携版：不跑安装器，换完文件就重启
+  static const updateOpeningInstaller = '正在打开系统安装器…';
+  static const updateInstallPermissionTitle = '允许安装更新';
+  static const updateInstallPermissionHint =
+      '安装包已下载并校验完成。请在刚打开的设置页里允许 MeowX「安装未知应用」，返回后点「继续安装」。';
+  static const updateContinueInstall = '继续安装';
   static const updateFailed = '更新失败';
   static const goDownloadPage = '去下载页';
 

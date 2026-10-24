@@ -135,6 +135,11 @@ class App {
     await methodChannel.invokeMethod<void>('requestIgnoreBatteryOptimizations');
   }
 
+  /// MeowX：把校验过的 APK 交给系统安装器。返回 ok / permission（已打开「安装未知应用」设置页）/ error
+  Future<String?> installApk(String path) {
+    return methodChannel.invokeMethod<String>('installApk', {'path': path});
+  }
+
   Future<bool> setLauncherIcon(bool useDarkIcon) async {
     final result = await methodChannel.invokeMethod<bool>('setLauncherIcon', {
       'useDarkIcon': useDarkIcon,
