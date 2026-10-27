@@ -9,6 +9,7 @@ import '../glass/liquid_glass.dart';
 import '../state/meow_settings.dart';
 import '../state/status.dart';
 import '../theme/glass.dart';
+import 'backdrop_host.dart';
 
 /// 全 App 唯一的玻璃宿主：包在 Navigator 外面（application.dart 的 MaterialApp.builder），
 /// 这样底栏、页面右上角的圆钮、从根 Navigator 弹出的菜单与「我的」设置卡片都在同一个宿主里——
@@ -47,7 +48,8 @@ class _MeowGlassHostState extends ConsumerState<MeowGlassHost> {
       child: LiquidGlassScope(
         enabled: host,
         quality: LiquidGlassQuality.standard,
-        child: LiquidGlassHost(enabled: host, child: widget.child),
+        // 液态玻璃主题的背景（光斑 / 插画）与磨砂卡片用的预模糊图也在这里渲染（经典主题下它什么都不做）
+        child: LiquidGlassHost(enabled: host, child: MeowBackdropHost(child: widget.child)),
       ),
     );
   }

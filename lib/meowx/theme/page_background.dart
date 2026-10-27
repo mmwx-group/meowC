@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import 'backdrop.dart';
 import 'tokens.dart';
 
 /// 页面底怎么画：经典与液态玻璃选「白」时是平涂 [color]；液态玻璃的其它底色是渐层 [gradient]，按**整屏**铺（[size] = 屏幕尺寸）：
@@ -13,17 +14,20 @@ import 'tokens.dart';
 /// 页面路由与 Tab 平推都把底画在 RepaintBoundary 外面，见 page_route.dart / tab_stack.dart）。
 @immutable
 class MeowBgFill {
-  const MeowBgFill(this.color, this.gradient, this.size, {this.diagonal = false});
+  const MeowBgFill(this.color, this.gradient, this.size, {this.diagonal = false, this.images});
 
   factory MeowBgFill.of(BuildContext context) {
     final mm = context.mm;
     final gradient = mm.bgGradient;
     // 没有渐层时不依赖屏幕尺寸（经典主题不因窗口改尺寸多重建）
+    final backdrop = mm.backdrop;
     return MeowBgFill(
       mm.bg,
       gradient,
       gradient == null ? Size.zero : MediaQuery.sizeOf(context),
       diagonal: gradient != null && mm.bgDiagonal,
+      // 光斑 / 插画背景：画渲染好的整屏背景图（见 ../app/backdrop_host.dart）；还没渲染好时先画底色渐层
+      images: backdrop != null && backdrop.textured ? MeowBackdropScope.of(context) : null,
     );
   }
 
@@ -31,6 +35,9 @@ class MeowBgFill {
   final List<Color>? gradient;
   final Size size;
   final bool diagonal;
+
+  /// 光斑 / 插画背景渲染好的图（[MeowBackdropImages.sharp]，屏幕坐标 × sharpScale）
+  final MeowBackdropImages? images;
 
   bool get flat => gradient == null;
 
@@ -43,6 +50,19 @@ class MeowBgFill {
       return;
     }
     if (opacity <= 0) return;
+    final img = images;
+    if (img != null) {
+      final k = img.sharpScale;
+      canvas.drawImageRect(
+        img.sharp,
+        Rect.fromLTWH(origin.dx * k, origin.dy * k, rect.width * k, rect.height * k),
+        rect,
+        Paint()
+          ..filterQuality = FilterQuality.low
+          ..color = Color.fromRGBO(0, 0, 0, opacity),
+      );
+      return;
+    }
     // 屏幕左上角在这块画布上的位置
     final screen = rect.topLeft - origin;
     canvas.drawRect(
@@ -62,6 +82,7 @@ class MeowBgFill {
       other.color == color &&
       other.size == size &&
       other.diagonal == diagonal &&
+      identical(other.images, images) &&
       (identical(other.gradient, gradient) ||
           (other.gradient != null &&
               gradient != null &&
@@ -69,7 +90,8 @@ class MeowBgFill {
               Iterable.generate(gradient!.length).every((i) => other.gradient![i] == gradient![i])));
 
   @override
-  int get hashCode => Object.hash(color, size, diagonal, gradient == null ? null : Object.hashAll(gradient!));
+  int get hashCode =>
+      Object.hash(color, size, diagonal, images, gradient == null ? null : Object.hashAll(gradient!));
 }
 
 /// 页面底（替原来的 `ColoredBox(color: mm.bg)`）：平涂时画出来与那个 [ColoredBox] 一样；有渐层时按屏幕位置画渐层。

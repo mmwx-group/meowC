@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:bett_box/models/meow.dart';
 import 'package:flutter/material.dart';
 
+import 'backdrop.dart';
+
 /// MeowX 颜色 token：与 iOS / iPad 改版同一套——奶白底、白卡片、樱粉主卡、墨色强调
 /// （设计稿 design/ui-redesign/boards 里的 --bg / --card / --card2 / --hero / --btnon / --ink / --ink2 / --soft / --rose …）。
 @immutable
@@ -44,6 +46,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     Color? elevSolid,
     this.bgGradient,
     this.bgDiagonal = false,
+    this.backdrop,
+    this.backdropScrim = 0,
     this.cardRim,
     this.cardSheen = const Color(0x00000000),
     this.cardShadow = const Color(0x00000000),
@@ -105,6 +109,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
 
   /// [bgGradient] 是左上 → 右下的斜向渐变（液态玻璃选了「渐变」底色）；否则自上而下
   final bool bgDiagonal;
+
+  /// 液态玻璃主题的整屏背景（平涂 / 光斑 / 插画）与内容卡片的磨砂参数（见 backdrop.dart）；经典主题 = null
+  final MeowBackdrop? backdrop;
+
+  /// 玻璃卡片统一的对比度垫层（正文 ≥ 7 用，见 [MeowBackdrop.scrim]）
+  final double backdropScrim;
 
   /// 液态玻璃主题的内容卡片（见 card_surface.dart）：1px 亮边、顶边内高光、很淡的同色相投影（只画在卡片外面）。
   /// 经典 = null（卡片照原来的实色画，一个像素不变）
@@ -197,22 +207,38 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       final s = look.bgStyle == MeowBgStyle.gradient
           ? glassGradientShades(Color(look.gradientFrom), Color(look.gradientTo), dark: isDark, tinted: tinted)
           : glassShades(Color(look.cardColor), dark: isDark, tinted: tinted);
-      final solid = Color.alphaBlend(s.card, s.bg);
-      // 字要在底色、玻璃卡片、卡片里的次级底上都读得清：渐层上取一串位置（两端与中间），逐个叠出来比
-      pageBgs = glassSurfaces(s);
+      // 背景（平涂 / 光斑 / 插画）与磨砂卡片（见 backdrop.dart）：页面底的渐层取背景的底色渐层，
+      // 内容卡片由 card_surface.dart 的 MeowFrostBox 画（预模糊的背景 + 白色填充 + 高光）；这里的 elev 是填充的中间值，
+      // 给直接拿卡片底色画小块的地方用
+      final backdrop = MeowBackdrop.of(look, dark: isDark);
+      final fill = backdrop.fill;
+      final bgMid = Color.lerp(backdrop.base.first, backdrop.base.last, 0.5)!;
+      final elev = Colors.white.withValues(alpha: (fill.top + fill.bottom) / 2);
+      final solid = Color.alphaBlend(elev, bgMid);
+      // 直接写在背景上的字（页标题、小标题）：在底色渐层沿途与光斑上都要读得清。插画背景明暗跨度太大（深色底的画），
+      // 文字色修不过来，只按底色渐层算；卡片上的字由每张卡自己的对比度垫层保证（MeowBackdrop.scrimFor）
+      pageBgs = backdrop.pattern == MeowBgPattern.art
+          ? glassSurfaces(s)
+          : backdrop.worstBackgrounds(saturated: false);
+      final t1 = isDark ? ensureContrast(base.t1, pageBgs, lighten: true) : base.t1;
+      final scrim = backdrop.scrim(t1);
       tokens = base.copyWith(
-        bg: s.bg,
-        bgGradient: s.gradient,
-        bgDiagonal: s.diagonal,
-        elev: s.card,
+        bg: bgMid,
+        bgGradient: backdrop.base,
+        bgDiagonal: backdrop.diagonal,
+        backdrop: backdrop,
+        elev: elev,
         elevSolid: solid,
-        card2: s.card2,
+        card2: MeowFrostStyle.card2(isDark),
         cardRim: s.rim,
         cardSheen: s.sheen,
         cardShadow: s.shadow,
         glassTint: isDark ? solid : null,
-        // 次级字在最不利的那一处也要 ≥ 4.5:1（饱和一点的底色比原来的页面底深，原来的 #665A69 差一点点）
-        t2: ensureContrast(base.t2, pageBgs, lighten: isDark),
+        // 正文：深色下在亮一点的光斑上也要 ≥ 4.5:1；卡片上的 ≥ 7 靠整套卡片统一的垫层（backdropScrim）。
+        // 次级字（与下面的强调色）在背景上、在垫好的卡片上都要 ≥ 4.5:1，不够就压暗 / 提亮
+        t1: t1,
+        backdropScrim: scrim,
+        t2: ensureContrast(base.t2, [...pageBgs, ...backdrop.cardSurfaces(scrim)], lighten: isDark),
         glass: true,
         glassTinted: look.glassTint == MeowGlassTint.tinted,
         heroGradient: heroGradient,
@@ -233,7 +259,11 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         glassPanel: shades.card,
       );
     }
-    final accent = accentShades(Color(look.accentColor), dark: isDark, backgrounds: pageBgs);
+    final accent = accentShades(
+      Color(look.accentColor),
+      dark: isDark,
+      backgrounds: [...pageBgs, ...?tokens.backdrop?.cardSurfaces(tokens.backdropScrim)],
+    );
     return tokens._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
   }
 
@@ -377,6 +407,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     elevSolid: elevSolid,
     bgGradient: bgGradient,
     bgDiagonal: bgDiagonal,
+    backdrop: backdrop,
+    backdropScrim: backdropScrim,
     cardRim: cardRim,
     cardSheen: cardSheen,
     cardShadow: cardShadow,
@@ -522,9 +554,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     Color? elevSolid,
     List<Color>? bgGradient,
     bool? bgDiagonal,
+    MeowBackdrop? backdrop,
+    double? backdropScrim,
     Color? cardRim,
     Color? cardSheen,
     Color? cardShadow,
+    Color? t1,
     Color? t2,
   }) => MeowTokens(
     bg: bg ?? this.bg,
@@ -536,7 +571,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     soft: soft,
     pink: pink,
     line: line,
-    t1: t1,
+    t1: t1 ?? this.t1,
     t2: t2 ?? this.t2,
     t3: t2 ?? t3,
     accent: accent,
@@ -564,6 +599,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     elevSolid: elevSolid ?? elev ?? this.elevSolid,
     bgGradient: bgGradient ?? this.bgGradient,
     bgDiagonal: bgDiagonal ?? this.bgDiagonal,
+    backdrop: backdrop ?? this.backdrop,
+    backdropScrim: backdropScrim ?? this.backdropScrim,
     cardRim: cardRim ?? this.cardRim,
     cardSheen: cardSheen ?? this.cardSheen,
     cardShadow: cardShadow ?? this.cardShadow,
@@ -612,6 +649,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       // 渐层与卡片的玻璃画法同主题风格一样不插值
       bgGradient: t < 0.5 ? bgGradient : other.bgGradient,
       bgDiagonal: t < 0.5 ? bgDiagonal : other.bgDiagonal,
+      backdrop: t < 0.5 ? backdrop : other.backdrop,
+      backdropScrim: t < 0.5 ? backdropScrim : other.backdropScrim,
       cardRim: t < 0.5 ? cardRim : other.cardRim,
       cardSheen: c(cardSheen, other.cardSheen),
       cardShadow: c(cardShadow, other.cardShadow),
@@ -645,6 +684,8 @@ class MeowLook {
     this.bgStyle = MeowBgStyle.solid,
     this.gradientFrom = MeowBgGradients.defaultFrom,
     this.gradientTo = MeowBgGradients.defaultTo,
+    this.bgPattern = MeowBgPattern.blobs,
+    this.glassFrost = 0.5,
   });
 
   /// 从设置里取（经典主题下玻璃样式、底色样式不影响任何东西，一律记成缺省，切样式时不白建主题；单色底色时渐变两色同理）
@@ -660,6 +701,8 @@ class MeowLook {
       bgStyle: gradient ? MeowBgStyle.gradient : MeowBgStyle.solid,
       gradientFrom: gradient ? s.bgGradientFrom : MeowBgGradients.defaultFrom,
       gradientTo: gradient ? s.bgGradientTo : MeowBgGradients.defaultTo,
+      bgPattern: glass ? s.bgPattern : MeowBgPattern.blobs,
+      glassFrost: glass ? s.glassFrost : 0.5,
     );
   }
 
@@ -676,6 +719,10 @@ class MeowLook {
   final MeowBgStyle bgStyle;
   final int gradientFrom, gradientTo;
 
+  /// 液态玻璃的背景（平涂 / 光斑 / 插画）与卡片的磨砂强度（0–1）
+  final MeowBgPattern bgPattern;
+  final double glassFrost;
+
   bool get glass => style == MeowThemeStyle.glass;
 
   @override
@@ -688,11 +735,13 @@ class MeowLook {
       other.accentColor == accentColor &&
       other.bgStyle == bgStyle &&
       other.gradientFrom == gradientFrom &&
-      other.gradientTo == gradientTo;
+      other.gradientTo == gradientTo &&
+      other.bgPattern == bgPattern &&
+      other.glassFrost == glassFrost;
 
   @override
   int get hashCode =>
-      Object.hash(style, glassTint, cardColor, heroColor, accentColor, bgStyle, gradientFrom, gradientTo);
+      Object.hash(style, glassTint, cardColor, heroColor, accentColor, bgStyle, gradientFrom, gradientTo, bgPattern, glassFrost);
 }
 
 /// 卡片颜色的预设（「我的 › 外观 › 卡片颜色」，与设计稿同一组）；预设以外的就是自定义取色。

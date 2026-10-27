@@ -26,17 +26,21 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final body = Container(
-      decoration: mm.cardRim != null && border == null
-          ? mm.card(BorderRadius.circular(radius), color: color)
-          : BoxDecoration(
+    final Widget body = mm.backdrop != null && border == null
+        ? MeowFrostBox(
+            radius: BorderRadius.circular(radius),
+            tint: color,
+            child: Padding(padding: padding, child: child),
+          )
+        : Container(
+            decoration: BoxDecoration(
               color: color ?? mm.elev,
               borderRadius: BorderRadius.circular(radius),
               border: border ?? Border.all(color: mm.cardEdge),
             ),
-      padding: padding,
-      child: child,
-    );
+            padding: padding,
+            child: child,
+          );
     if (onTap == null) return body;
     return Material(
       color: Colors.transparent,

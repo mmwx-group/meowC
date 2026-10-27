@@ -80,9 +80,9 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
             ),
           ],
           children: [
-            Container(
+            MeowCard(
               padding: const EdgeInsets.all(18),
-              decoration: mm.card(BorderRadius.circular(24)),
+              radius: BorderRadius.circular(24),
               child: Column(
                 children: [
                   // 测速节点 + 出口（ASN · 运营商 · IP）；测的时候不能换
@@ -119,9 +119,9 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
                 opacity: running ? 0.5 : 1,
-                child: Container(
+                child: MeowCard(
                   padding: const EdgeInsets.all(16),
-                  decoration: mm.card(BorderRadius.circular(18)),
+                  radius: BorderRadius.circular(18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

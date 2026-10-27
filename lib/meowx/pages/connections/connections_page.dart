@@ -598,10 +598,10 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return Container(
+    return MeowCard(
       constraints: BoxConstraints(minHeight: height),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: mm.card(BorderRadius.circular(height / 2)),
+      radius: BorderRadius.circular(height / 2),
       child: Row(
         children: [
           Icon(Icons.search_rounded, size: 18, color: mm.t2),
@@ -712,13 +712,11 @@ class _CardSlice extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     const r = Radius.circular(24);
-    return Container(
+    return MeowCard(
       padding: EdgeInsets.fromLTRB(14, first ? edge : 0, 14, last ? edge : 0),
-      decoration: mm.card(
-        BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
-        openTop: !first,
-        openBottom: !last,
-      ),
+      radius: BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
+      openTop: !first,
+      openBottom: !last,
       child: first
           ? child
           : DecoratedBox(
@@ -923,10 +921,10 @@ class _ConnTable extends StatelessWidget {
     final ageW = _auxWidth(context, 52);
     Widget cell(String s, {TextAlign align = TextAlign.start}) =>
         Text(s, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: align, style: head);
-    return Container(
+    return MeowCard(
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
       clipBehavior: Clip.antiAlias,
-      decoration: mm.card(BorderRadius.circular(22)),
+      radius: BorderRadius.circular(22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1054,11 +1052,10 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return Container(
+    return MeowCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: hero
-          ? BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(20))
-          : mm.card(BorderRadius.circular(20)),
+      radius: BorderRadius.circular(20),
+      color: hero ? mm.hero : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1087,9 +1084,9 @@ class _StatPair extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     Widget cell(String label, int bytes) => Expanded(
-      child: Container(
+      child: MeowCard(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: mm.card(BorderRadius.circular(18)),
+        radius: BorderRadius.circular(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1136,9 +1133,9 @@ class _ConnDetail extends StatelessWidget {
         const SizedBox(height: 10),
         _StatPair(up: c.upload, down: c.download),
         const SizedBox(height: 10),
-        Container(
+        MeowCard(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: mm.card(BorderRadius.circular(20)),
+          radius: BorderRadius.circular(20),
           child: Column(
             children: [
               for (final (i, f) in facts.indexed)
