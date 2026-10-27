@@ -9,6 +9,7 @@ import '../../panel/client.dart';
 import '../../state/connection.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
+import '../../state/wifi_switch.dart';
 import '../../theme/glass_card.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
@@ -16,6 +17,7 @@ import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
 import '../../update/update_state.dart';
 import '../settings/proxy_apps_page.dart';
+import '../settings/wifi_switch_page.dart';
 import 'account_card.dart';
 import 'me_kit.dart';
 import 'me_sheet.dart';
@@ -102,7 +104,10 @@ class _MePageState extends ConsumerState<MePage> {
         MeSection(title: '接管方式', accent: true, children: [TakeoverRows()]),
         MeSection(title: '全局快捷键', accent: true, children: [HotkeyRows()]),
       ],
-      if (system.isAndroid) const MeSection(title: 'VPN 与系统', accent: true, children: [VpnSystemRows()]),
+      if (system.isAndroid) ...const [
+        MeSection(title: 'VPN 与系统', accent: true, children: [VpnSystemRows()]),
+        MeSection(title: 'Wi-Fi 智能开关', accent: true, children: [WifiSwitchRows()]),
+      ],
     ];
     const rest = <Widget>[
       MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
@@ -181,6 +186,7 @@ enum _Glyph {
   traffic('M6 3v6a6 6 0 0 0 6 6v6M18 3v6a6 6 0 0 1-6 6'),
   apps('M5 4h5v5H5zM14 4h5v5h-5zM5 13h5v5H5zM14 17l2 2 4-4'),
   shield('M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z'),
+  wifi('M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01'),
   window('M4 5h16v14H4zM4 9h16'),
   keyboard('M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8'),
   server('M4 6h16v5H4zM4 13h16v5H4zM7 8.5h.01M7 15.5h.01'),
@@ -271,6 +277,13 @@ class _EntryList extends ConsumerWidget {
             'VPN 与系统',
             _join([if (app.autoRun) '自动连接', if (vpn.networkSpeedNotification) '网速通知']),
             page('VPN 与系统', const VpnSystemRows()),
+            platform: true,
+          ),
+          entry(
+            _Glyph.wifi,
+            'Wi-Fi 智能开关',
+            wifiSwitchSummary(meow, paused: ref.watch(wifiPausedProvider)),
+            () => BaseNavigator.push(context, const WifiSwitchPage()),
             platform: true,
           ),
         ],

@@ -771,7 +771,7 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             startForeground()
         }
         scope.launch(Dispatchers.Main) {
-            Toast.makeText(BettboxApplication.getAppContext(), "Bettbox Suspended", Toast.LENGTH_SHORT).show()
+            Toast.makeText(BettboxApplication.getAppContext(), "MeowX 已暂停代理", Toast.LENGTH_SHORT).show()
         }
         ServicePlugin.notifyNetworkChanged()
     }

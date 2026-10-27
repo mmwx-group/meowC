@@ -169,6 +169,34 @@ abstract class MeowCustomRule with _$MeowCustomRule {
       _$MeowCustomRuleFromJson(json);
 }
 
+/// Wi-Fi 智能开关的动作。断开 = 暂停代理（VPN 服务留着、通知栏显示已挂起），连接 = 恢复被规则暂停的代理；
+/// 用户自己关掉的代理不会被规则打开。规则逻辑在 `lib/meowx/state/wifi_switch.dart`。
+enum MeowWifiAction {
+  ignore,
+  connect,
+  disconnect;
+
+  String get label => switch (this) {
+    MeowWifiAction.ignore => '不变',
+    MeowWifiAction.connect => '连接代理',
+    MeowWifiAction.disconnect => '断开代理',
+  };
+}
+
+/// 一条 Wi-Fi 规则：连上名字是 [ssid] 的 Wi-Fi 时执行 [action]（名字区分大小写，与系统里显示的一致）。
+@freezed
+abstract class MeowWifiRule with _$MeowWifiRule {
+  const factory MeowWifiRule({
+    @Default('') String ssid,
+    @JsonKey(unknownEnumValue: MeowWifiAction.disconnect)
+    @Default(MeowWifiAction.disconnect)
+    MeowWifiAction action,
+  }) = _MeowWifiRule;
+
+  factory MeowWifiRule.fromJson(Map<String, Object?> json) =>
+      _$MeowWifiRuleFromJson(json);
+}
+
 /// 本地代理（HTTP/SOCKS5 混合端口）设置。
 @freezed
 abstract class MeowLocalProxy with _$MeowLocalProxy {
@@ -279,6 +307,13 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// 强调色（ARGB，缺省玫红 #B02E63）：强调文字 / 图标、选中态的描边与淡底、底栏选中项、进度条；对比度不够时自动压暗 / 提亮
     @Default(0xFFB02E63) int accentColor,
+
+    /// Wi-Fi 智能开关（只 Android）：总开关、按 SSID 的规则（从上往下第一条命中）、其它网络（别的 Wi-Fi / 蜂窝 / 有线）的动作
+    @Default(false) bool wifiSwitchEnabled,
+    @Default([]) List<MeowWifiRule> wifiRules,
+    @JsonKey(unknownEnumValue: MeowWifiAction.connect)
+    @Default(MeowWifiAction.connect)
+    MeowWifiAction wifiOtherAction,
 
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,
