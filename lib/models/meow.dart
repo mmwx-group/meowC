@@ -124,6 +124,20 @@ enum MeowBgStyle {
   };
 }
 
+/// 液态玻璃主题的背景：平涂 = 只有底色（单色的轻渐层 / 渐变）；光斑 = 斜向渐变上几团大光斑（缺省）；插画 = 品牌插画压一层底色。
+/// 内容卡片在光斑 / 插画上透出磨砂后的背景（见 `lib/meowx/theme/backdrop.dart`）。
+enum MeowBgPattern {
+  flat,
+  blobs,
+  art;
+
+  String get label => switch (this) {
+    MeowBgPattern.flat => '平涂',
+    MeowBgPattern.blobs => '光斑',
+    MeowBgPattern.art => '插画',
+  };
+}
+
 /// 液态玻璃的样式（照 iOS 26.1 系统设置的同名选项）：透明 = 高透；着色 = 更厚、更不透明、对比度更高。只在液态玻璃下生效。
 enum MeowGlassTint {
   clear,
@@ -332,6 +346,12 @@ abstract class MeowSettings with _$MeowSettings {
     MeowBgStyle bgStyle,
     @Default(0xFFF7CDDB) int bgGradientFrom,
     @Default(0xFFDED4F5) int bgGradientTo,
+
+    /// 液态玻璃主题的背景（缺省光斑：新老用户切到液态玻璃都是它）与内容卡片的磨砂强度（0–1，缺省 0.5 =「适中」）。经典主题不用
+    @JsonKey(unknownEnumValue: MeowBgPattern.blobs)
+    @Default(MeowBgPattern.blobs)
+    MeowBgPattern bgPattern,
+    @Default(0.5) double glassFrost,
 
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,

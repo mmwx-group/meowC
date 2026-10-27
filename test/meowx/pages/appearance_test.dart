@@ -161,6 +161,8 @@ void main() {
     expect(_settings(tester).accentColor, 0xFF2F6FD0);
     expect(find.text('雾蓝'), findsOneWidget);
 
+    await tester.ensureVisible(find.text('经典'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('经典'));
     await tester.pumpAndSettle();
     expect(_settings(tester).themeStyle, MeowThemeStyle.classic);

@@ -69,9 +69,9 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
       updateCustomRules(ref, (list) => promoteCustomRule(list, MeowCustomRule(value: t.value, match: match, action: action)));
     }
 
-    return Container(
+    return MeowCard(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: mm.card(BorderRadius.circular(20)),
+      radius: BorderRadius.circular(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

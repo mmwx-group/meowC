@@ -595,9 +595,9 @@ class SpeedTestRecordDetail extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         if (r.error != null)
-          Container(
+          MeowCard(
             padding: const EdgeInsets.all(16),
-            decoration: mm.card(BorderRadius.circular(18)),
+            radius: BorderRadius.circular(18),
             child: Text(
               '测速失败：${r.error}',
               textAlign: TextAlign.center,
@@ -614,9 +614,9 @@ class SpeedTestRecordDetail extends StatelessWidget {
           ),
           if (hasChart) ...[
             const SizedBox(height: 10),
-            Container(
+            MeowCard(
               padding: const EdgeInsets.all(18),
-              decoration: mm.card(BorderRadius.circular(24)),
+              radius: BorderRadius.circular(24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -648,9 +648,9 @@ class SpeedTestRecordDetail extends StatelessWidget {
           ],
         ],
         const SizedBox(height: 10),
-        Container(
+        MeowCard(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-          decoration: mm.card(BorderRadius.circular(24)),
+          radius: BorderRadius.circular(24),
           child: Column(
             children: [
               _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms'),
@@ -668,9 +668,9 @@ class SpeedTestRecordDetail extends StatelessWidget {
   static double _peak(List<double> values) => values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b);
 
   Widget _big(MeowTokens mm, String title, Color tint, double? value, double? peak) => Expanded(
-    child: Container(
+    child: MeowCard(
       padding: const EdgeInsets.all(14),
-      decoration: mm.card(BorderRadius.circular(18)),
+      radius: BorderRadius.circular(18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

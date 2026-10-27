@@ -302,6 +302,76 @@ class _AppIconChoice extends StatelessWidget {
   }
 }
 
+/// 液态玻璃的背景：平涂 / 光斑 / 插画 三选一（缺省光斑）。颜色仍来自「底色」。
+class GlassPatternRow extends ConsumerWidget {
+  const GlassPatternRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pattern = ref.watch(meowSettingProvider.select((s) => s.bgPattern));
+    final dense = MeDense.of(context);
+    return _StackedRow(
+      label: '背景',
+      caption: switch (pattern) {
+        MeowBgPattern.flat => '只有底色，卡片照样磨砂（底下没有东西可模糊）。',
+        MeowBgPattern.blobs => '底色化成几团大光斑铺在整屏，卡片透出模糊后的光斑。',
+        MeowBgPattern.art => '品牌插画铺满整屏、压一层底色，卡片透出模糊后的插画。',
+      },
+      child: MeowSegment<MeowBgPattern>(
+        items: [for (final v in MeowBgPattern.values) (v, v.label)],
+        value: pattern,
+        onCard: true,
+        height: dense ? 32 : 38,
+        fontSize: dense ? 12 : 13,
+        onChanged: (v) => _update(ref, (s) => s.copyWith(bgPattern: v)),
+      ),
+    );
+  }
+}
+
+/// 卡片的磨砂强度（0 通透 – 1 厚，缺省 0.5）：拖动时只改这一行的数，松手才存（存了才重画背景与主题）。
+class GlassFrostRow extends ConsumerStatefulWidget {
+  const GlassFrostRow({super.key});
+
+  @override
+  ConsumerState<GlassFrostRow> createState() => _GlassFrostRowState();
+}
+
+class _GlassFrostRowState extends ConsumerState<GlassFrostRow> {
+  double? _dragging;
+
+  static String _label(double v) => v < 0.34 ? '通透' : (v < 0.67 ? '适中' : '厚');
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final saved = ref.watch(meowSettingProvider.select((s) => s.glassFrost));
+    final value = (_dragging ?? saved).clamp(0.0, 1.0);
+    return _StackedRow(
+      label: '磨砂强度',
+      value: '${_label(value)} · ${(value * 100).round()}%',
+      caption: '越厚卡片越白、背后越模糊；对比度不够时卡片会自动加厚一点。',
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          activeTrackColor: mm.accent,
+          inactiveTrackColor: mm.card2,
+          thumbColor: mm.accent,
+          overlayColor: mm.accent.withValues(alpha: 0.12),
+          trackHeight: 4,
+        ),
+        child: Slider(
+          value: value,
+          onChanged: (v) => setState(() => _dragging = v),
+          onChangeEnd: (v) {
+            _update(ref, (s) => s.copyWith(glassFrost: v));
+            setState(() => _dragging = null);
+          },
+        ),
+      ),
+    );
+  }
+}
+
 /// 玻璃样式：透明 / 着色（只在液态玻璃下出现）。
 class GlassTintRow extends ConsumerWidget {
   const GlassTintRow({super.key});

@@ -47,12 +47,13 @@ class HomeHeroCard extends ConsumerWidget {
     final radius = mm.glass
         ? (dense ? MeowGlassMetrics.heroRadiusDense : MeowGlassMetrics.heroRadius)
         : (dense ? 24.0 : 28.0);
-    return AnimatedContainer(
+    // 液态玻璃：没连上时是一张磨砂玻璃卡片，连上换成主卡的斜向渐变实色（玻璃卡片那层一直在，连上时不画，开关不重建子树）
+    final glass = mm.backdrop != null;
+    final card = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: EdgeInsets.all(dense ? 16 : 18),
-      // 液态玻璃：没连上时是一张玻璃卡片（次级底那档半透明 + 亮边），连上换成主卡的斜向渐变实色
-      decoration: mm.cardRim != null && !on
-          ? mm.card(BorderRadius.circular(radius), color: mm.card2)
+      decoration: glass && !on
+          ? BoxDecoration(borderRadius: BorderRadius.circular(radius))
           : BoxDecoration(
               color: gradient != null ? null : (on ? mm.hero : mm.card2),
               gradient: gradient,
@@ -127,6 +128,8 @@ class HomeHeroCard extends ConsumerWidget {
         ],
       ),
     );
+    if (!glass) return card;
+    return MeowFrostBox(radius: BorderRadius.circular(radius), enabled: !on, child: card);
   }
 }
 

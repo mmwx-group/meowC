@@ -281,19 +281,16 @@ class _NodeCell extends ConsumerWidget {
       'PASS',
     }.contains(proxy.name.toUpperCase());
 
-    final glass = mm.cardRim != null;
+    final glass = mm.backdrop != null;
     final radius = BorderRadius.circular(s.radius);
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: Container(
+    final cell = Container(
         // 描边的 2 算在内边距里：选中 / 未选中内容不位移
         padding: glass
             ? EdgeInsets.symmetric(horizontal: s.padH, vertical: s.padV)
             : EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
         // 深色主题的 soft 是半透明的，先叠到卡片底上，不然透出的是页面底、比没选中的格子还暗
         decoration: glass
-            ? mm.card(radius, color: selected ? Color.alphaBlend(mm.soft, mm.elev) : null)
+            ? null
             : BoxDecoration(
                 color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
                 borderRadius: radius,
@@ -367,7 +364,14 @@ class _NodeCell extends ConsumerWidget {
             ),
           ],
         ),
-      ),
+      );
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      // 液态玻璃：磨砂玻璃格子（选中 = 淡粉叠在填充上 + 强调色描边）
+      child: glass
+          ? MeowFrostBox(radius: radius, tint: selected ? Color.alphaBlend(mm.soft, mm.elev) : null, child: cell)
+          : cell,
     );
   }
 }

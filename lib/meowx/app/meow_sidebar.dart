@@ -40,10 +40,10 @@ class MeowSidebar extends StatelessWidget {
         ),
     ];
 
-    return Container(
+    return MeowCard(
       width: compact ? compactWidth - 12 : fullWidth - 12,
       padding: EdgeInsets.all(compact ? 10 : 12),
-      decoration: mm.card(BorderRadius.circular(22)),
+      radius: BorderRadius.circular(22),
       // 矮窗口（手机横屏、缩到最小的窗口）放不下时栏内滚动，保证电源键不画到栏外
       child: LayoutBuilder(
         builder: (context, c) => SingleChildScrollView(

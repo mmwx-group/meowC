@@ -182,3 +182,8 @@
 ## 2026-10-27 · 液态玻璃主题：选底色，内容卡片变玻璃
 - 只改 `lib/meowx/`，Bettbox 底层不动。液态玻璃主题下「卡片颜色」改叫「底色」（仍存在 `MeowSettings.cardColor`，旧配置照常生效）：铺成整页的底（浅色同色相饱和度 ≤ 0.6、亮度 0.925 → 0.885 的轻渐层，深色饱和度 ≤ 0.32、亮度 0.12 → 0.07；选「白」保持 #F5F1EC / 纯黑）；内容卡片变成半透明 + 亮边 + 顶边内高光的玻璃（`theme/card_surface.dart`，不挂实时模糊），页面底按整屏位置画渐层（`theme/page_background.dart`，转场与展开代理组时盖的那层底色同一套）。对话框、弹出菜单、Bettbox 原页面的 Material 用叠好的不透明卡片底（`MeowTokens.elevSolid`）。经典主题不变。
 - 同日补充：底色可选「渐变」——两种颜色左上 → 右下的斜向渐变（6 组预设 + 自定义起始色 / 结束色），整屏连续（转场与 Tab 平推时页面底画在 RepaintBoundary 外面、按屏幕位置取色）。`lib/models/meow.dart MeowSettings` 增加 `bgStyle`（单色 / 渐变，缺省单色、认不出的值回到单色）、`bgGradientFrom`、`bgGradientTo`；老配置没有这几项时照旧是单色底色。
+
+## 2026-10-27 · 液态玻璃：光斑 / 插画背景 + 磨砂玻璃卡片
+- `lib/models/meow.dart MeowSettings`：增加 `bgPattern`（平涂 / 光斑 / 插画，缺省光斑，认不出的值回到光斑）与 `glassFrost`（磨砂强度 0–1，缺省 0.5）；老配置缺这两项按缺省。
+- `assets/images/glass_art_light.jpg` / `glass_art_dark.jpg`：插画背景用的品牌插画（design/brand/icon-art-*.png 缩到 900px）。
+- 其余在 `lib/meowx/`：背景与磨砂参数（`theme/backdrop.dart`），背景宿主（`app/backdrop_host.dart`：换设置 / 改尺寸时防抖、一次性渲染整屏清晰背景与 1/4 分辨率的预模糊图，挂在 `app/glass_host.dart` 里），磨砂玻璃卡片（`theme/card_surface.dart` 的 `MeowFrostBox` / `MeowCard`：按卡片在屏幕上的位置裁预模糊图当底，不逐帧实时模糊），外观设置的「背景」与「磨砂强度」两行。经典主题与底栏玻璃不变。
