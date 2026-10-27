@@ -274,7 +274,7 @@ class SyncRows extends ConsumerWidget {
         // 开关与自定义条目的变化由 MeowRoot 统一处理：打开 / 增删立刻拉列表上报，关闭停表清空
         MeSwitchRow(
           label: 'po0 加白',
-          subtitle: '把本机出口 IP 上报到 po0 服务器（主控登记的与自己添加的），每 10 分钟及网络变化时自动加白',
+          subtitle: '把本机出口 IP 上报到 po0 的加白服务器（主控登记的与自己添加的），每 10 分钟及网络变化时自动加白',
           value: po0,
           onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(po0Enabled: v)),
         ),

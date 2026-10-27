@@ -58,7 +58,7 @@ final List<String> debugPo0Urls = kDebugMode
 
 // ---- 自定义 po0 服务器（地址 + token，三端同一套规则：iOS / macOS / meowC） ----
 
-const po0AddressEmptyMessage = '请填写地址';
+const po0AddressEmptyMessage = '请填写加白服务器地址';
 const po0AddressInvalidMessage = '地址格式不合法（示例：1.2.3.4、1.2.3.4:8443、[2001:db8::1]:8443、fw.example.com）';
 const po0AddressPathMessage = '只填主机与端口，不要带路径、查询串或用户名';
 const po0AddressPortMessage = '端口范围 1–65535';

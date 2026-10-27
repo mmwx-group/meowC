@@ -26,7 +26,7 @@ class Po0ServersPage extends ConsumerWidget {
         MeItemsCard(
           items: [for (final c in list) c.address],
           subtitles: [for (final c in list) maskPo0Token(c.token)],
-          empty: '添加 po0 服务器的地址与 token，本机出口 IP 会上报给它加白。点右上角「+」添加',
+          empty: '添加 po0 的加白服务器地址与 token，本机出口 IP 会上报给它加白。点右上角「+」添加',
           onDelete: (i) => ref
               .read(meowSettingProvider.notifier)
               .updateState((s) => s.copyWith(po0Custom: [...s.po0Custom]..removeAt(i))),
@@ -60,8 +60,10 @@ class Po0ServersPage extends ConsumerWidget {
                 autocorrect: false,
                 keyboardType: TextInputType.url,
                 decoration: InputDecoration(
-                  labelText: '地址',
+                  labelText: '加白服务器地址',
                   hintText: '1.2.3.4 或 fw.example.com:8443',
+                  helperText: 'po0 后台里的加白服务器地址，不一定是节点地址',
+                  helperMaxLines: 2,
                   errorText: addressErr,
                   errorMaxLines: 3,
                 ),
