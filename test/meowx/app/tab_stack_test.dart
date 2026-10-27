@@ -1,6 +1,7 @@
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/app/tab_stack.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
+import 'package:bett_box/meowx/theme/page_background.dart';
 import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -381,8 +382,9 @@ void main() {
         );
         final inStack = find.descendant(of: find.byType(MeowTabStack), matching: fades);
         expect(inStack, findsNothing);
-        final box = tester.widget<ColoredBox>(find.ancestor(of: page, matching: find.byType(ColoredBox)).first);
-        expect(box.color, MeowTokens.light.bg);
+        final box = tester.widget<MeowBgBox>(find.ancestor(of: page, matching: find.byType(MeowBgBox)).first);
+        expect(box.fill.color, MeowTokens.light.bg);
+        expect(box.fill.flat, isTrue);
       }
       // 点两页重叠的地方：命中的是新页
       final hit = tester.hitTestOnBinding(const Offset(width - 10, 10));

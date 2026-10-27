@@ -178,3 +178,7 @@
 - `android/.../plugins/VpnPlugin.kt handleSmartStop`：暂停时的 Toast 由「Bettbox Suspended」改成「MeowX 已暂停代理」（Wi-Fi 规则断开时用户会看到它）。
 - `lib/models/meow.dart MeowSettings`：`wifiSwitchEnabled`、`wifiRules`（`MeowWifiRule{ssid, action}`）、`wifiOtherAction`（`MeowWifiAction`：不变 / 连接代理 / 断开代理，缺省连接）。
 - 其余在 `lib/meowx/`：规则判定与执行（`state/wifi_switch.dart`）、「我的 › Wi-Fi 智能开关」页（`pages/settings/wifi_switch_page.dart`，手机是入口行、宽屏是一个分组）、`app/meow_root.dart` 接线、首页主卡的「已暂停」、电源键在暂停中点 = 恢复（`state/connection.dart`）。断开 / 连接复用 Bettbox 已有的智能启停（`smartStop` / `smartResume`，VPN 服务留着、核心挂起）：规则只暂停 / 恢复正在用的代理，不打开用户自己关掉的；打开本功能时关掉「高级」里 Bettbox 按 IP / 网关的「智能启停」（两者共用一个暂停状态）。与 iOS / macOS 的 Wi-Fi 规则同一思路：SSID 第一条命中，其余走「其它网络」，只在网络变化时触发，手动开关后换网前不再干预；读不到 SSID 时不切换并写明原因。
+
+## 2026-10-27 · 液态玻璃主题：选底色，内容卡片变玻璃
+- 只改 `lib/meowx/`，Bettbox 底层不动。液态玻璃主题下「卡片颜色」改叫「底色」（仍存在 `MeowSettings.cardColor`，旧配置照常生效）：铺成整页的底（浅色同色相饱和度 ≤ 0.6、亮度 0.925 → 0.885 的轻渐层，深色饱和度 ≤ 0.32、亮度 0.12 → 0.07；选「白」保持 #F5F1EC / 纯黑）；内容卡片变成半透明 + 亮边 + 顶边内高光的玻璃（`theme/card_surface.dart`，不挂实时模糊），页面底按整屏位置画渐层（`theme/page_background.dart`，转场与展开代理组时盖的那层底色同一套）。对话框、弹出菜单、Bettbox 原页面的 Material 用叠好的不透明卡片底（`MeowTokens.elevSolid`）。经典主题不变。
+- 同日补充：底色可选「渐变」——两种颜色左上 → 右下的斜向渐变（6 组预设 + 自定义起始色 / 结束色），整屏连续（转场与 Tab 平推时页面底画在 RepaintBoundary 外面、按屏幕位置取色）。`lib/models/meow.dart MeowSettings` 增加 `bgStyle`（单色 / 渐变，缺省单色、认不出的值回到单色）、`bgGradientFrom`、`bgGradientTo`；老配置没有这几项时照旧是单色底色。

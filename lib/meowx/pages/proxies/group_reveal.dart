@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 import '../../theme/motion.dart';
-import '../../theme/tokens.dart';
+import '../../theme/page_background.dart';
 
 /// 列表布局里一个组正在展开 / 收起的那一段动画（只在用户点组卡时建，播完就扔；滚动回来、重建都不重播）。
 /// - [height]：容器露出的比例。展开 = soft 弹簧到 1（微回弹）；收起 = 延后 60ms、240ms 收到 0。
@@ -82,7 +82,7 @@ class StaggeredItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final r = reveal;
-    final bg = context.mm.bg;
+    final bg = MeowBgFill.of(context);
     return AnimatedBuilder(
       animation: r?.items ?? kAlwaysCompleteAnimation,
       builder: (_, child) {
@@ -90,7 +90,7 @@ class StaggeredItem extends StatelessWidget {
         final (:opacity, :dy) = r == null ? (opacity: 1.0, dy: 0.0) : r.item(index);
         return Transform.translate(
           offset: Offset(0, dy),
-          child: _BgFade(opacity: opacity, color: bg, child: child),
+          child: _BgFade(opacity: opacity, fill: bg, child: child),
         );
       },
       child: RepaintBoundary(child: child),
@@ -98,29 +98,29 @@ class StaggeredItem extends StatelessWidget {
   }
 }
 
-/// 把子树往 [color]（页面底色）淡：先画子树，再在上面盖一层按 1 − [opacity] 透明度的底色；完全透明时不画子树。
+/// 把子树往 [fill]（页面底）淡：先画子树，再在上面盖一层按 1 − [opacity] 透明度的页面底；完全透明时不画子树。
 class _BgFade extends SingleChildRenderObjectWidget {
-  const _BgFade({required this.opacity, required this.color, super.child});
+  const _BgFade({required this.opacity, required this.fill, super.child});
 
   final double opacity;
-  final Color color;
+  final MeowBgFill fill;
 
   @override
-  RenderObject createRenderObject(BuildContext context) => _RenderBgFade(opacity, color);
+  RenderObject createRenderObject(BuildContext context) => _RenderBgFade(opacity, fill);
 
   @override
   void updateRenderObject(BuildContext context, _RenderBgFade renderObject) {
     renderObject
       ..opacity = opacity
-      ..color = color;
+      ..fill = fill;
   }
 }
 
 class _RenderBgFade extends RenderProxyBox {
-  _RenderBgFade(this._opacity, this._color);
+  _RenderBgFade(this._opacity, this._fill);
 
   double _opacity;
-  Color _color;
+  MeowBgFill _fill;
 
   set opacity(double value) {
     if (value == _opacity) return;
@@ -128,9 +128,9 @@ class _RenderBgFade extends RenderProxyBox {
     markNeedsPaint();
   }
 
-  set color(Color value) {
-    if (value == _color) return;
-    _color = value;
+  set fill(MeowBgFill value) {
+    if (value == _fill) return;
+    _fill = value;
     markNeedsPaint();
   }
 
@@ -139,7 +139,13 @@ class _RenderBgFade extends RenderProxyBox {
     if (child == null || _opacity <= 0) return;
     super.paint(context, offset);
     if (_opacity < 1) {
-      context.canvas.drawRect(offset & size, Paint()..color = _color.withValues(alpha: _color.a * (1 - _opacity)));
+      if (_fill.flat) {
+        final color = _fill.color;
+        context.canvas.drawRect(offset & size, Paint()..color = color.withValues(alpha: color.a * (1 - _opacity)));
+      } else {
+        // 渐层的页面底：按这张卡在屏幕上的位置取色，盖上去与周围的底接得上
+        _fill.paint(context.canvas, offset & size, origin: localToGlobal(Offset.zero), opacity: 1 - _opacity);
+      }
     }
   }
 }

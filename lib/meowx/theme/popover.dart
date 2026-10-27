@@ -58,7 +58,7 @@ class _PopoverRoute<T> extends PopupRoute<T> {
               scale: Tween(begin: 0.96, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
               alignment: below ? Alignment.topCenter : Alignment.bottomCenter,
               child: Material(
-                color: mm.elev,
+                color: mm.elevSolid,
                 elevation: 12,
                 shadowColor: Colors.black.withValues(alpha: 0.35),
                 borderRadius: BorderRadius.circular(14),

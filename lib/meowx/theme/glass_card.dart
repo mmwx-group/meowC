@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'card_surface.dart';
 import 'tokens.dart';
 
 /// 通用卡片：纯色卡片底，圆角默认 24。[MeowTokens.cardEdge] 在新主题里是透明的（白卡配奶白底不需要描边），传 [border] 可覆盖。
+/// 液态玻璃主题下是半透明的玻璃卡片（[MeowCardSurface.card]；传了 [border] 的照旧按实色画）。
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
@@ -23,12 +25,15 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final mm = context.mm;
     final body = Container(
-      decoration: BoxDecoration(
-        color: color ?? context.mm.elev,
-        borderRadius: BorderRadius.circular(radius),
-        border: border ?? Border.all(color: context.mm.cardEdge),
-      ),
+      decoration: mm.cardRim != null && border == null
+          ? mm.card(BorderRadius.circular(radius), color: color)
+          : BoxDecoration(
+              color: color ?? mm.elev,
+              borderRadius: BorderRadius.circular(radius),
+              border: border ?? Border.all(color: mm.cardEdge),
+            ),
       padding: padding,
       child: child,
     );

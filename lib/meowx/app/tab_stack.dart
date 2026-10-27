@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/motion.dart';
-import '../theme/tokens.dart';
+import '../theme/page_background.dart';
 import 'meow_tab.dart';
 
 /// 四个 Tab 页的常驻栈：都留在树上（切回来滚动位置、展开状态、已加载的数据都在），平时只画当前页。
@@ -196,7 +196,7 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final bg = context.mm.bg;
+    final bg = MeowBgFill.of(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, box) => AnimatedBuilder(
@@ -218,8 +218,8 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
             ?warming,
             for (final l in layers) l.tab,
           ];
-          return ColoredBox(
-            color: bg,
+          return MeowBgBox(
+            fill: bg,
             child: ClipRect(
               // 平推时旧页会退到内容区外（宽屏是侧栏那边），只在这时裁
               clipBehavior: sliding ? Clip.hardEdge : Clip.none,
@@ -239,9 +239,11 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
                               snap(onStage[t] ?? 0) + (t == warming ? _warmShifts[_warmStep] / dpr : 0),
                               0,
                             ),
-                            child: RepaintBoundary(
-                              child: ColoredBox(
-                                color: bg,
+                            // 页面底在 RepaintBoundary 外面：平推中它跟着位移每帧重画、按屏幕位置取色（渐变底色整屏不动，
+                            // 页面内容那一层照旧只画一次）；放在里面的话页面第一次画在半路上，停下后底色就错位了
+                            child: MeowBgBox(
+                              fill: bg,
+                              child: RepaintBoundary(
                                 child: ExcludeSemantics(
                                   excluding: t == warming,
                                   child: TickerMode(

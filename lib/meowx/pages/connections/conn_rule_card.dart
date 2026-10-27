@@ -8,6 +8,7 @@ import '../../state/connection.dart';
 import '../../state/custom_rules.dart';
 import '../../state/meow_settings.dart';
 import '../../state/overrides.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../settings/custom_rules_page.dart';
@@ -70,7 +71,7 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(20)),
+      decoration: mm.card(BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

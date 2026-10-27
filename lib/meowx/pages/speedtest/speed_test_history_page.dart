@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../state/format.dart';
 import '../../state/speed_test.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
@@ -259,7 +260,7 @@ class SpeedTestSummaryCard extends StatelessWidget {
             const SizedBox(height: 10),
             SizedBox(
               height: 64,
-              child: CustomPaint(painter: _TrendPainter(trend, mm.down, mm.elev), size: Size.infinite),
+              child: CustomPaint(painter: _TrendPainter(trend, mm.down, mm.elevSolid), size: Size.infinite),
             ),
             const SizedBox(height: 6),
             Row(
@@ -405,8 +406,7 @@ class SpeedTestRecordRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     final r = record;
-    final card = Material(
-      color: mm.elev,
+    final card = MeowCardMaterial(
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -597,7 +597,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
         if (r.error != null)
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(18)),
+            decoration: mm.card(BorderRadius.circular(18)),
             child: Text(
               '测速失败：${r.error}',
               textAlign: TextAlign.center,
@@ -616,7 +616,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(24)),
+              decoration: mm.card(BorderRadius.circular(24)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -650,7 +650,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-          decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(24)),
+          decoration: mm.card(BorderRadius.circular(24)),
           child: Column(
             children: [
               _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms'),
@@ -670,7 +670,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
   Widget _big(MeowTokens mm, String title, Color tint, double? value, double? peak) => Expanded(
     child: Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(18)),
+      decoration: mm.card(BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

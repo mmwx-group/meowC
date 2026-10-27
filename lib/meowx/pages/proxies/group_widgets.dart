@@ -3,6 +3,7 @@ import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/views/proxies/common.dart';
 import 'package:bett_box/widgets/icon.dart';
+import '../../theme/card_surface.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -33,8 +34,7 @@ class GroupPickerButton extends StatelessWidget {
       button: true,
       label: '当前代理组 ${group.name}，${S.pickGroup}',
       excludeSemantics: true,
-      child: Material(
-        color: mm.elev,
+      child: MeowCardMaterial(
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -259,8 +259,7 @@ class AutoSelectToggle extends ConsumerWidget {
       onChanged: (_) => toggle(),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
-    final body = Material(
-      color: mm.elev,
+    final body = MeowCardMaterial(
       shape: pill
           ? const StadiumBorder()
           : const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
@@ -325,9 +324,9 @@ class GroupCard extends ConsumerWidget {
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
     if (list) return _listCard(context, mm, current, delay, open);
-    return Material(
+    return MeowCardMaterial(
       // 深色主题的 soft 是半透明的，先叠到卡片底上
-      color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
+      color: selected ? Color.alphaBlend(mm.soft, mm.elev) : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
@@ -402,8 +401,8 @@ class GroupCard extends ConsumerWidget {
   /// 列表布局的组卡（同 iOS 节点页）：第一行 图标 · 组名 · 类型标签 ……… 成员数 · 延迟测速钮 · 展开钮；
   /// 第二行 当前选中 ……… 奖牌 / 解锁（贴卡片右边，按钮只占第一行）。延迟在测速钮上，第二行不再重复。
   Widget _listCard(BuildContext context, MeowTokens mm, String current, int? delay, bool open) {
-    return Material(
-      color: open ? mm.hero : mm.elev,
+    return MeowCardMaterial(
+      color: open ? mm.hero : null,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22))),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

@@ -2,6 +2,7 @@ import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../theme/page_background.dart';
 import '../theme/tokens.dart';
 
 /// Windows：窗口按钮（钉住 / 最小化 / 最大化 / 关闭）并进页面标题那一行（参考 Clash Party），不再单占顶上一条 40 高的标题栏。
@@ -54,8 +55,7 @@ class WindowPageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!windowControlsMerged) return child;
-    return ColoredBox(
-      color: context.mm.bg,
+    return MeowPageBackground(
       child: Column(
         children: [
           WindowDragArea(

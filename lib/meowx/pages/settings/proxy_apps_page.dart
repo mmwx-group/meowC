@@ -1,3 +1,4 @@
+import '../../theme/card_surface.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -321,7 +322,7 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
     return SliverPadding(
       padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
       sliver: DecoratedSliver(
-        decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(24)),
+        decoration: mm.card(BorderRadius.circular(24)),
         sliver: SliverPadding(
           padding: const EdgeInsets.all(6),
           sliver: SliverList.separated(
