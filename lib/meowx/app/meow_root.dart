@@ -25,6 +25,7 @@ import '../state/connection.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
+import '../theme/page_background.dart';
 import '../theme/tokens.dart';
 import 'frame_log.dart';
 import 'meow_dock.dart';
@@ -255,32 +256,35 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     // 菜单、设置卡片这些从根 Navigator 弹出来的玻璃也要和底栏共用它
     return MeSheetBackdrop(
       child: MeowBackScope(
-        child: Scaffold(
-          backgroundColor: mm.bg,
-          // 手机：底栏是悬浮的液态玻璃胶囊，内容从它下面滚过去（extendBody），各页自己把 MediaQuery.padding.bottom 加进底部留白
-          extendBody: !wide,
-          // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
-          resizeToAvoidBottomInset: false,
-          body: SafeArea(
-            bottom: wide,
-            // 模拟器上预览桌面布局时画一排假的窗口按钮看对齐（Windows 上真的按钮由 WindowHeaderContainer 画）
-            child: windowControlsShown && !windowControlsMerged ? Stack(children: [body, const PreviewWindowControls()]) : body,
-          ), // 状态栏下留白
-          // 悬浮胶囊底栏（移植自 FlClash 0.9.1，见 meow_dock.dart）：选中项是一块透镜，按住鼓起、拖动跟手带果冻形变。
-          // 玻璃由 Navigator 外面的 LiquidGlassHost 统一取背景：每帧把底栏背后的画面缩小后截一次、在小图上模糊，
-          // 不再像原来的 liquid_glass_widgets 那样每帧对全分辨率背景做一次大半径模糊（切页、展开代理组时整屏掉帧的原因）。
-          bottomNavigationBar: wide
-              ? null
-              : NavigationDock(
-                  destinations: [
-                    for (final t in MeowTab.values) NavigationDockDestination(glyph: t.glyph, label: t.label),
-                  ],
-                  selectedIndex: tab.index,
-                  onSelected: (i) {
-                    HapticFeedback.selectionClick();
-                    _select(MeowTab.values[i]);
-                  },
-                ),
+        // 液态玻璃选了底色时页面底是整屏的轻渐层：画在 Scaffold 下面，Scaffold 本身透明（经典主题照旧平涂，底下这层被盖住）
+        child: MeowPageBackground(
+          child: Scaffold(
+            backgroundColor: mm.bgGradient == null ? mm.bg : Colors.transparent,
+            // 手机：底栏是悬浮的液态玻璃胶囊，内容从它下面滚过去（extendBody），各页自己把 MediaQuery.padding.bottom 加进底部留白
+            extendBody: !wide,
+            // 键盘不改 body 的尺寸（否则键盘动画的每一帧四个常驻页一起重排），要让开键盘的部分自己包 KeyboardInset
+            resizeToAvoidBottomInset: false,
+            body: SafeArea(
+              bottom: wide,
+              // 模拟器上预览桌面布局时画一排假的窗口按钮看对齐（Windows 上真的按钮由 WindowHeaderContainer 画）
+              child: windowControlsShown && !windowControlsMerged ? Stack(children: [body, const PreviewWindowControls()]) : body,
+            ), // 状态栏下留白
+            // 悬浮胶囊底栏（移植自 FlClash 0.9.1，见 meow_dock.dart）：选中项是一块透镜，按住鼓起、拖动跟手带果冻形变。
+            // 玻璃由 Navigator 外面的 LiquidGlassHost 统一取背景：每帧把底栏背后的画面缩小后截一次、在小图上模糊，
+            // 不再像原来的 liquid_glass_widgets 那样每帧对全分辨率背景做一次大半径模糊（切页、展开代理组时整屏掉帧的原因）。
+            bottomNavigationBar: wide
+                ? null
+                : NavigationDock(
+                    destinations: [
+                      for (final t in MeowTab.values) NavigationDockDestination(glyph: t.glyph, label: t.label),
+                    ],
+                    selectedIndex: tab.index,
+                    onSelected: (i) {
+                      HapticFeedback.selectionClick();
+                      _select(MeowTab.values[i]);
+                    },
+                  ),
+          ),
         ),
       ),
     );

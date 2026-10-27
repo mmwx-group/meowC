@@ -333,7 +333,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       // 玻璃上直接用淡粉（深色下它本身是半透明的），不垫卡片底
-                      color: glass ? mm.soft : Color.alphaBlend(mm.soft, mm.elev),
+                      color: glass ? mm.soft : Color.alphaBlend(mm.soft, mm.elevSolid),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -396,7 +396,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
               rect: r,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Color.lerp(route.fromColor, mm.elev, pc),
+                  color: Color.lerp(route.fromColor, mm.elevSolid, pc),
                   borderRadius: radius,
                   // 阴影只淡入、半径不变
                   boxShadow: [

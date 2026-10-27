@@ -18,6 +18,7 @@ import '../../state/meow_settings.dart';
 import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'group_reveal.dart';
@@ -280,18 +281,28 @@ class _NodeCell extends ConsumerWidget {
       'PASS',
     }.contains(proxy.name.toUpperCase());
 
+    final glass = mm.cardRim != null;
+    final radius = BorderRadius.circular(s.radius);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Container(
         // 描边的 2 算在内边距里：选中 / 未选中内容不位移
-        padding: EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
-        decoration: BoxDecoration(
-          // 深色主题的 soft 是半透明的，先叠到卡片底上，不然透出的是页面底、比没选中的格子还暗
-          color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
-          borderRadius: BorderRadius.circular(s.radius),
-          border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
-        ),
+        padding: glass
+            ? EdgeInsets.symmetric(horizontal: s.padH, vertical: s.padV)
+            : EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
+        // 深色主题的 soft 是半透明的，先叠到卡片底上，不然透出的是页面底、比没选中的格子还暗
+        decoration: glass
+            ? mm.card(radius, color: selected ? Color.alphaBlend(mm.soft, mm.elev) : null)
+            : BoxDecoration(
+                color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
+                borderRadius: radius,
+                border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
+              ),
+        // 玻璃卡片：选中的描边盖在亮边上面（不占内边距，所以上面的内边距不减 2）
+        foregroundDecoration: glass && selected
+            ? BoxDecoration(borderRadius: radius, border: Border.all(color: mm.accent, width: 2))
+            : null,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,

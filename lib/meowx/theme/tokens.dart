@@ -41,7 +41,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     required this.heroTrack,
     required this.glassPanel,
     required this.fill,
-  });
+    Color? elevSolid,
+    this.bgGradient,
+    this.cardRim,
+    this.cardSheen = const Color(0x00000000),
+    this.cardShadow = const Color(0x00000000),
+  }) : elevSolid = elevSolid ?? elev;
 
   /// 页面底 / 卡片底 / 卡片里的次级底（徽标、未选分段、进度槽）
   final Color bg, elev, card2;
@@ -71,8 +76,9 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 卡片描边：新主题白卡放在奶白底上自带对比，不描边（透明）；保留字段给旧调用点
   final Color cardEdge;
 
-  /// 液态玻璃主题（[glassTinted] = 玻璃样式选了「着色」）。玻璃只画在浮在内容上面的控件层（右上角圆钮、菜单、底部卡片、
-  /// 电源键、首页模式分段的滑块），真正画不画还要看外层的玻璃宿主（见 glass.dart 的 [meowGlassOn]）；内容卡片两种主题都是实色。
+  /// 液态玻璃主题（[glassTinted] = 玻璃样式选了「着色」）。真正的液态玻璃只画在浮在内容上面的控件层（右上角圆钮、菜单、底部卡片、
+  /// 电源键、首页模式分段的滑块），画不画还要看外层的玻璃宿主（见 glass.dart 的 [meowGlassOn]）；
+  /// 内容卡片是半透明 + 高光的「静态玻璃」（[cardRim] 等，见 card_surface.dart），不取背景。
   final bool glass, glassTinted;
 
   /// 连接主卡（已连接时）的斜向渐变：只有液态玻璃主题有，经典是平涂 [hero]
@@ -87,6 +93,19 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 进度条之类的强调填充（订阅用量）：跟着强调色走；缺省就是原来的粉 #F3A6BF。
   /// [pink] 仍是跟连接主卡 / 电源键绑定的那份粉（电源键连上时的光晕），随启动卡片颜色变
   final Color fill;
+
+  /// 浮层（对话框、弹出菜单、系统底部弹层、Bettbox 原页面的 Material 卡片）用的不透明卡片底：
+  /// 经典 = [elev]；液态玻璃下 [elev] 是半透明的，这里是它叠在页面底上的实色
+  final Color elevSolid;
+
+  /// 液态玻璃主题选了「白」以外的底色时，页面底是自上而下的轻渐层（按整屏高度铺，见 page_background.dart）；
+  /// 经典与「白」= null，页面底就是平涂的 [bg]（有渐层时 [bg] 是它的中间色，给浮层、文字底色这些只要一个颜色的地方用）
+  final List<Color>? bgGradient;
+
+  /// 液态玻璃主题的内容卡片（见 card_surface.dart）：1px 亮边、顶边内高光、很淡的同色相投影（只画在卡片外面）。
+  /// 经典 = null（卡片照原来的实色画，一个像素不变）
+  final Color? cardRim;
+  final Color cardSheen, cardShadow;
 
   static const light = MeowTokens(
     bg: Color(0xFFEFE8DF),
@@ -161,26 +180,52 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     final base = isDark ? dark : light;
     if (look == MeowLook.classic) return base;
     final glass = look.glass;
-    final shades = cardShades(Color(look.cardColor), dark: isDark, glass: glass);
     final hero = heroShades(Color(look.heroColor), dark: isDark);
-    final accent = accentShades(Color(look.accentColor), dark: isDark);
     final g = MeowGlassSpec.of(isDark);
-    return base
-        .copyWith(
-          bg: glass ? g.bg : null,
-          elev: shades.card,
-          card2: shades.card2,
-          glassTint: isDark ? shades.card : null,
-          glass: glass,
-          glassTinted: glass && look.glassTint == MeowGlassTint.tinted,
-          heroGradient: glass
-              ? LinearGradient(begin: const Alignment(-0.5, -1), end: const Alignment(0.5, 1), colors: hero.gradient)
-              : null,
-          onHero: glass ? g.onHero : shades.card,
-          heroTrack: glass ? g.heroTrack : shades.card,
-          glassPanel: glass ? g.panel : shades.card,
-        )
-        ._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
+    final heroGradient = glass
+        ? LinearGradient(begin: const Alignment(-0.5, -1), end: const Alignment(0.5, 1), colors: hero.gradient)
+        : null;
+    final MeowTokens tokens;
+    final List<Color> pageBgs;
+    if (glass) {
+      // 液态玻璃：「卡片颜色」改当「底色」铺满页面，内容卡片是半透明的玻璃（见 [glassShades]）
+      final s = glassShades(Color(look.cardColor), dark: isDark, tinted: look.glassTint == MeowGlassTint.tinted);
+      final solid = Color.alphaBlend(s.card, s.bg);
+      pageBgs = [s.bg, ...?s.gradient];
+      tokens = base.copyWith(
+        bg: s.bg,
+        bgGradient: s.gradient,
+        elev: s.card,
+        elevSolid: solid,
+        card2: s.card2,
+        cardRim: s.rim,
+        cardSheen: s.sheen,
+        cardShadow: s.shadow,
+        glassTint: isDark ? solid : null,
+        // 次级字在最深的那截底色上也要 ≥ 4.5:1（饱和一点的底色比原来的页面底深，原来的 #665A69 差一点点）
+        t2: isDark ? null : ensureContrast(base.t2, pageBgs, lighten: false),
+        glass: true,
+        glassTinted: look.glassTint == MeowGlassTint.tinted,
+        heroGradient: heroGradient,
+        onHero: g.onHero,
+        heroTrack: g.heroTrack,
+        glassPanel: g.panel,
+      );
+    } else {
+      final shades = cardShades(Color(look.cardColor), dark: isDark);
+      pageBgs = const [];
+      tokens = base.copyWith(
+        elev: shades.card,
+        elevSolid: shades.card,
+        card2: shades.card2,
+        glassTint: isDark ? shades.card : null,
+        onHero: shades.card,
+        heroTrack: shades.card,
+        glassPanel: shades.card,
+      );
+    }
+    final accent = accentShades(Color(look.accentColor), dark: isDark, backgrounds: isDark ? const [] : pageBgs);
+    return tokens._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
   }
 
   /// 启动卡片颜色 → 主卡底、电源键填充（同色相更饱和的一档）、电源键光晕的粉、液态玻璃下的斜向渐变（稍亮 → 稍深）。
@@ -223,15 +268,28 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 强调色 → 强调字色（对比度自动修正）、选中态淡底、进度条填充。
   /// 浅色：在页面底与白卡上都 ≥ 4.5:1，不够就压暗；淡底是同色相很淡的实色。
   /// 深色：在深色底与卡片上 ≥ 4.5:1，不够就提亮（起点至少 78% 亮度，与原来的 #F7B6CB 一族）；淡底是半透明。缺省玫红给回原来的值。
-  static ({Color accent, Color soft, Color fill}) accentShades(Color pick, {required bool dark}) {
+  /// [backgrounds] = 另外还要读得清的底色（液态玻璃的浅色底色，比原来的页面底深）。
+  static ({Color accent, Color soft, Color fill}) accentShades(
+    Color pick, {
+    required bool dark,
+    List<Color> backgrounds = const [],
+  }) {
     final base = dark ? MeowTokens.dark : light;
-    if (pick.toARGB32() == MeowAccentColors.rose) return (accent: base.accent, soft: base.soft, fill: base.fill);
+    if (pick.toARGB32() == MeowAccentColors.rose) {
+      // 原来的玫红在额外的底色上不够时照样压暗（只动字色，淡底与进度条不变）
+      final accent = backgrounds.isEmpty ? base.accent : ensureContrast(base.accent, backgrounds, lighten: dark);
+      return (accent: accent, soft: base.soft, fill: base.fill);
+    }
     final hsl = HSLColor.fromColor(pick.withValues(alpha: 1));
     final h = hsl.hue, s = hsl.saturation.clamp(0.0, 0.8);
     final fill = HSLColor.fromAHSL(1, h, s, dark ? 0.75 : 0.80).toColor();
     if (!dark) {
       return (
-        accent: ensureContrast(pick.withValues(alpha: 1), const [Color(0xFFEFE8DF), Color(0xFFFFFFFF)], lighten: false),
+        accent: ensureContrast(
+          pick.withValues(alpha: 1),
+          [const Color(0xFFEFE8DF), const Color(0xFFFFFFFF), ...backgrounds],
+          lighten: false,
+        ),
         soft: HSLColor.fromAHSL(1, h, s, 0.94).toColor(),
         fill: fill,
       );
@@ -303,18 +361,21 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     heroTrack: heroTrack,
     glassPanel: glassPanel,
     fill: fill,
+    elevSolid: elevSolid,
+    bgGradient: bgGradient,
+    cardRim: cardRim,
+    cardSheen: cardSheen,
+    cardShadow: cardShadow,
   );
 
-  /// 卡片色 → 卡片底（[MeowTokens.elev]）与卡片里的次级底（[MeowTokens.card2]）。
+  /// 卡片色 → 卡片底（[MeowTokens.elev]）与卡片里的次级底（[MeowTokens.card2]）。只用于经典主题（液态玻璃见 [glassShades]）。
   /// 浅色：直接用所选色（亮度低于 88% 的提到 88%、饱和度最多 70%），次级底同色相再深 5%；
   /// 深色：不直接用，取色相压成深色卡（饱和度 ≤ 28%、亮度 14%，次级底 ≤ 26% / 20%）；
-  /// 选「白」时保持原来的两档（液态玻璃的深色是更中性的 #1C1A20 / #2A2730，配纯黑底）。
-  static ({Color card, Color card2}) cardShades(Color pick, {required bool dark, bool glass = false}) {
+  /// 选「白」时保持原来的两档。
+  static ({Color card, Color card2}) cardShades(Color pick, {required bool dark}) {
     if (pick.toARGB32() == MeowCardColors.white) {
       if (!dark) return (card: light.elev, card2: light.card2);
-      return glass
-          ? (card: const Color(0xFF1C1A20), card2: const Color(0xFF2A2730))
-          : (card: MeowTokens.dark.elev, card2: MeowTokens.dark.card2);
+      return (card: MeowTokens.dark.elev, card2: MeowTokens.dark.card2);
     }
     final opaque = pick.withValues(alpha: 1);
     final hsl = HSLColor.fromColor(opaque);
@@ -333,6 +394,58 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     );
   }
 
+  /// 液态玻璃主题：「底色」（存的仍是 cardColor）→ 页面底与玻璃卡片的几样颜色。
+  ///
+  /// 页面底：预设色都很浅，原样铺的话半透明白卡和底分不出来，所以取所选色的色相，
+  /// 浅色 = 饱和度 ≤ 0.6、亮度 0.925 → 0.885 自上而下的轻渐层；深色 = 饱和度 ≤ 0.32、亮度 0.12 → 0.07。
+  /// 选「白」时浅色仍是原来的 #F5F1EC、深色纯黑，都是平涂（[gradient] = null）；有渐层时 [bg] 是中间色。
+  ///
+  /// 卡片（不挂实时模糊，底下是平涂 / 柔和渐层，半透明 + 高光就够）：
+  /// 浅色 = 白 52% + 1px 白 75% 亮边 + 顶边白 90% 内高光 + 很淡的同色相投影；深色 = 白 7% + 白 12% 亮边 + 顶边白 10% 内高光、不投影。
+  /// 「着色」时卡片底换成所选色相：浅色 = 极浅的同色相 62%，深色 = 同色相 12%。
+  /// 卡片里的次级底（未选分段、进度槽、徽标）：浅色白 55%、深色白 6%。
+  static MeowGlassShades glassShades(Color pick, {required bool dark, bool tinted = false}) {
+    final white = pick.toARGB32() == MeowCardColors.white;
+    final hsl = HSLColor.fromColor(white ? MeowGlassSpec.light.bg : pick.withValues(alpha: 1));
+    final h = hsl.hue, s = hsl.saturation;
+    if (!dark) {
+      final bs = math.min(s, 0.6);
+      final gradient = white
+          ? null
+          : [HSLColor.fromAHSL(1, h, bs, 0.925).toColor(), HSLColor.fromAHSL(1, h, bs, 0.885).toColor()];
+      return (
+        bg: gradient == null ? MeowGlassSpec.light.bg : HSLColor.fromAHSL(1, h, bs, 0.905).toColor(),
+        gradient: gradient,
+        card: !tinted
+            ? const Color(0x85FFFFFF) // 白 52%
+            : white
+            ? const Color(0x9EFFFFFF) // 白 62%
+            : HSLColor.fromAHSL(0.62, h, bs, 0.97).toColor(),
+        card2: const Color(0x8CFFFFFF), // 白 55%
+        rim: const Color(0xBFFFFFFF), // 白 75%
+        sheen: const Color(0xE6FFFFFF), // 白 90%
+        shadow: HSLColor.fromAHSL(0.10, h, math.min(s, 0.5), 0.30).toColor(),
+      );
+    }
+    final bs = math.min(s, 0.32);
+    final gradient = white
+        ? null
+        : [HSLColor.fromAHSL(1, h, bs, 0.12).toColor(), HSLColor.fromAHSL(1, h, bs, 0.07).toColor()];
+    return (
+      bg: gradient == null ? MeowGlassSpec.dark.bg : HSLColor.fromAHSL(1, h, bs, 0.095).toColor(),
+      gradient: gradient,
+      card: !tinted
+          ? const Color(0x12FFFFFF) // 白 7%
+          : white
+          ? const Color(0x1FFFFFFF) // 白 12%
+          : HSLColor.fromAHSL(0.12, h, math.min(s, 0.6), 0.70).toColor(),
+      card2: const Color(0x0FFFFFFF), // 白 6%
+      rim: const Color(0x1FFFFFFF), // 白 12%
+      sheen: const Color(0x1AFFFFFF), // 白 10%
+      shadow: const Color(0x00000000),
+    );
+  }
+
   @override
   MeowTokens copyWith({
     Color? bg,
@@ -345,6 +458,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     Color? onHero,
     Color? heroTrack,
     Color? glassPanel,
+    Color? elevSolid,
+    List<Color>? bgGradient,
+    Color? cardRim,
+    Color? cardSheen,
+    Color? cardShadow,
+    Color? t2,
   }) => MeowTokens(
     bg: bg ?? this.bg,
     elev: elev ?? this.elev,
@@ -356,8 +475,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     pink: pink,
     line: line,
     t1: t1,
-    t2: t2,
-    t3: t3,
+    t2: t2 ?? this.t2,
+    t3: t2 ?? t3,
     accent: accent,
     onAccent: onAccent,
     pur: pur,
@@ -379,6 +498,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     heroTrack: heroTrack ?? this.heroTrack,
     glassPanel: glassPanel ?? this.glassPanel,
     fill: fill,
+    // 只换卡片底时实色跟着换（经典主题下二者是同一个颜色）
+    elevSolid: elevSolid ?? elev ?? this.elevSolid,
+    bgGradient: bgGradient ?? this.bgGradient,
+    cardRim: cardRim ?? this.cardRim,
+    cardSheen: cardSheen ?? this.cardSheen,
+    cardShadow: cardShadow ?? this.cardShadow,
   );
 
   @override
@@ -420,9 +545,26 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       heroTrack: c(heroTrack, other.heroTrack),
       glassPanel: c(glassPanel, other.glassPanel),
       fill: c(fill, other.fill),
+      elevSolid: c(elevSolid, other.elevSolid),
+      // 渐层与卡片的玻璃画法同主题风格一样不插值
+      bgGradient: t < 0.5 ? bgGradient : other.bgGradient,
+      cardRim: t < 0.5 ? cardRim : other.cardRim,
+      cardSheen: c(cardSheen, other.cardSheen),
+      cardShadow: c(cardShadow, other.cardShadow),
     );
   }
 }
+
+/// [MeowTokens.glassShades] 的结果。
+typedef MeowGlassShades = ({
+  Color bg,
+  List<Color>? gradient,
+  Color card,
+  Color card2,
+  Color rim,
+  Color sheen,
+  Color shadow,
+});
 
 /// 外观设置里决定颜色 token 的几项（见 [MeowTokens.resolve]）。
 @immutable

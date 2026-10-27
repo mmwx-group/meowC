@@ -1,3 +1,4 @@
+import '../../theme/card_surface.dart';
 import 'dart:async';
 import 'package:collection/collection.dart';
 
@@ -221,7 +222,7 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     ].nonNulls.toList();
 
     return Container(
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(compact ? 22 : 24)),
+      decoration: mm.card(BorderRadius.circular(compact ? 22 : 24)),
       padding: compact ? const EdgeInsets.fromLTRB(12, 6, 12, 12) : const EdgeInsets.fromLTRB(16, 8, 16, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

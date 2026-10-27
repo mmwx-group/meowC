@@ -164,3 +164,6 @@
 - 换网重置：新增 `android/.../services/UnderlyingNetworkTracker.kt`（VPN 建好时由 `BettboxVpnService` 启动、stop 时停）跟踪最佳非 VPN 网络，变了就 `setUnderlyingNetworks`，换成另一个网络时去抖 1 秒调 `Core.onUnderlyingNetworkChanged`（`core.cpp` JNI → `core/meow_netreset_android.go` 的 `networkChanged`）：清网卡缓存、DNS 上游连接与缓存、统计表里全部连接、各协议空闲连接池，再重测自动组。以前只有系统 DNS 字符串变了才通知内核，Wi-Fi 与移动数据同时在线时来回切往往不变。新增 `core/Clash.Meta/component/netreset` 钩子，Miu 空闲通道（`transport/miu/client.go`）与 Snell v6 复用池（`transport/snell/v6.go`、`v6_reuse.go` 的 `closeIdle`）接上。
 - 拣选上游 Bettbox `60c9862e`（Improve Android service lifecycle）的一部分：`VpnPlugin.kt` 连上后 `startStickyService`（VPN 服务成为 started + START_STICKY，被系统杀掉后拉起并以 quick 参数重连）、`restoreNotification` 改成直接调服务方法（`ServicePlugin.kt` / `BettboxVpnService.kt`）、`core/lib_android.go` 的 quickStart 初始化失败后 return。MainActivity 的高刷新率改动没拣。
 - `lib/meowx/state/battery_prompt.dart` + `app/meow_root.dart`：Android 第一次连上后，App 不在「忽略电池优化」白名单里就提示一次（附三星「永不休眠的应用」「电池 › 不受限制」的设置位置），只提示一次。
+
+## 2026-10-27 · 液态玻璃主题：选底色，内容卡片变玻璃
+- 只改 `lib/meowx/`，Bettbox 底层不动。液态玻璃主题下「卡片颜色」改叫「底色」（仍存在 `MeowSettings.cardColor`，旧配置照常生效）：铺成整页的底（浅色同色相饱和度 ≤ 0.6、亮度 0.925 → 0.885 的轻渐层，深色饱和度 ≤ 0.32、亮度 0.12 → 0.07；选「白」保持 #F5F1EC / 纯黑）；内容卡片变成半透明 + 亮边 + 顶边内高光的玻璃（`theme/card_surface.dart`，不挂实时模糊），页面底按整屏位置画渐层（`theme/page_background.dart`，转场与展开代理组时盖的那层底色同一套）。对话框、弹出菜单、Bettbox 原页面的 Material 用叠好的不透明卡片底（`MeowTokens.elevSolid`）。经典主题不变。

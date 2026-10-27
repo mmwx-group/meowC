@@ -1,3 +1,4 @@
+import '../../theme/card_surface.dart';
 import 'dart:async';
 
 import 'package:bett_box/clash/clash.dart';
@@ -600,7 +601,7 @@ class _SearchField extends StatelessWidget {
     return Container(
       constraints: BoxConstraints(minHeight: height),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(height / 2)),
+      decoration: mm.card(BorderRadius.circular(height / 2)),
       child: Row(
         children: [
           Icon(Icons.search_rounded, size: 18, color: mm.t2),
@@ -641,8 +642,7 @@ class _PillButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Opacity(
       opacity: onTap == null ? 0.4 : 1,
-      child: Material(
-        color: context.mm.elev,
+      child: MeowCardMaterial(
         shape: const StadiumBorder(),
         child: InkWell(
           customBorder: const StadiumBorder(),
@@ -714,9 +714,10 @@ class _CardSlice extends StatelessWidget {
     const r = Radius.circular(24);
     return Container(
       padding: EdgeInsets.fromLTRB(14, first ? edge : 0, 14, last ? edge : 0),
-      decoration: BoxDecoration(
-        color: mm.elev,
-        borderRadius: BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
+      decoration: mm.card(
+        BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
+        openTop: !first,
+        openBottom: !last,
       ),
       child: first
           ? child
@@ -786,8 +787,7 @@ class _ConnRow extends StatelessWidget {
     final viaColor = leaf == 'DIRECT' ? mm.good : (leaf.startsWith('REJECT') ? mm.slow : mm.accent);
     const shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18)));
     // 不用 clipBehavior 裁剪（每张卡一个圆角裁剪层，列表每 1.5s 重建）：水波纹由 InkWell 的 customBorder 限在圆角里
-    return Material(
-      color: mm.elev,
+    return MeowCardMaterial(
       shape: shape,
       child: InkWell(
         onTap: onTap,
@@ -876,8 +876,8 @@ class _KindFilter extends StatelessWidget {
       child: Row(
         children: [
           for (final k in ActivityKind.values) ...[
-            Material(
-              color: k == value ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
+            MeowCardMaterial(
+              color: k == value ? Color.alphaBlend(mm.soft, mm.elev) : null,
               shape: const StadiumBorder(),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
@@ -926,7 +926,7 @@ class _ConnTable extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
       clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(22)),
+      decoration: mm.card(BorderRadius.circular(22)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1056,7 +1056,9 @@ class _InfoCard extends StatelessWidget {
     final mm = context.mm;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: hero ? mm.hero : mm.elev, borderRadius: BorderRadius.circular(20)),
+      decoration: hero
+          ? BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(20))
+          : mm.card(BorderRadius.circular(20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1087,7 +1089,7 @@ class _StatPair extends StatelessWidget {
     Widget cell(String label, int bytes) => Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(18)),
+        decoration: mm.card(BorderRadius.circular(18)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1136,7 +1138,7 @@ class _ConnDetail extends StatelessWidget {
         const SizedBox(height: 10),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          decoration: BoxDecoration(color: mm.elev, borderRadius: BorderRadius.circular(20)),
+          decoration: mm.card(BorderRadius.circular(20)),
           child: Column(
             children: [
               for (final (i, f) in facts.indexed)
@@ -1179,8 +1181,7 @@ class _CloseConnButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return Material(
-      color: mm.elev,
+    return MeowCardMaterial(
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),

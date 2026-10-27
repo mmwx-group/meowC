@@ -1,8 +1,10 @@
 import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 
+import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
 import '../../theme/morph_menu.dart';
+import '../../theme/page_background.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -40,53 +42,56 @@ class MeSubPage extends StatelessWidget {
     final sheet = MeSheetScope.maybeOf(context);
     if (sheet != null) return _inSheet(context, sheet);
     final mm = context.mm;
-    return Scaffold(
-      backgroundColor: mm.bg,
-      body: SafeArea(
-        bottom: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: maxWidth),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-                  child: Row(
-                    children: [
-                      RoundGlassButton(
-                        icon: Icons.arrow_back_ios_new_rounded,
-                        tooltip: '返回',
-                        onTap: () => Navigator.of(context).maybePop(),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: MeowFont.title2,
-                            fontWeight: FontWeight.w700,
-                            fontFamilyFallback: meowRounded,
-                            color: mm.t1,
+    // 液态玻璃选了底色时页面底是整屏的轻渐层（见 page_background.dart），Scaffold 本身透明
+    return MeowPageBackground(
+      child: Scaffold(
+        backgroundColor: mm.bgGradient == null ? mm.bg : Colors.transparent,
+        body: SafeArea(
+          bottom: false,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: maxWidth),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
+                    child: Row(
+                      children: [
+                        RoundGlassButton(
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          tooltip: '返回',
+                          onTap: () => Navigator.of(context).maybePop(),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: MeowFont.title2,
+                              fontWeight: FontWeight.w700,
+                              fontFamilyFallback: meowRounded,
+                              color: mm.t1,
+                            ),
                           ),
                         ),
-                      ),
-                      for (final a in actions) ...[const SizedBox(width: 8), a],
-                    ],
+                        for (final a in actions) ...[const SizedBox(width: 8), a],
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child:
-                      body ??
-                      ListView.separated(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
-                        itemCount: children!.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (_, i) => children![i],
-                      ),
-                ),
-              ],
+                  Expanded(
+                    child:
+                        body ??
+                        ListView.separated(
+                          padding: EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
+                          itemCount: children!.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 12),
+                          itemBuilder: (_, i) => children![i],
+                        ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -214,52 +219,52 @@ class MeSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     final dense = MeDense.of(context);
-    return Material(
-      // 玻璃底部卡片里是半透明白，透出卡片的玻璃
-      color: (MeSheetScope.maybeOf(context)?.glass ?? false) ? mm.glassPanel : mm.elev,
-      borderRadius: BorderRadius.circular(dense ? 20 : 24),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (title != null)
-              ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 26),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
-                  // 标题都很短，按自身宽度排；剩下的给右侧小字，放不下就省略
-                  child: Row(
-                    children: [
-                      Text(
-                        title!,
+    final radius = BorderRadius.circular(dense ? 20 : 24);
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 26),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 12, 4),
+                // 标题都很短，按自身宽度排；剩下的给右侧小字，放不下就省略
+                child: Row(
+                  children: [
+                    Text(
+                      title!,
+                      maxLines: 1,
+                      style: TextStyle(
+                        fontSize: MeowFont.caption,
+                        fontWeight: FontWeight.w600,
+                        color: accent ? mm.accent : mm.t2,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        note ?? '',
                         maxLines: 1,
-                        style: TextStyle(
-                          fontSize: MeowFont.caption,
-                          fontWeight: FontWeight.w600,
-                          color: accent ? mm.accent : mm.t2,
-                        ),
+                        textAlign: TextAlign.end,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          note ?? '',
-                          maxLines: 1,
-                          textAlign: TextAlign.end,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ...meDivided(context, children, leading: title != null),
-          ],
-        ),
+            ),
+          ...meDivided(context, children, leading: title != null),
+        ],
       ),
     );
+    // 玻璃底部卡片里是半透明白，透出卡片的玻璃（不再加内容卡片的亮边）
+    if (MeSheetScope.maybeOf(context)?.glass ?? false) {
+      return Material(color: mm.glassPanel, borderRadius: radius, clipBehavior: Clip.antiAlias, child: content);
+    }
+    return MeowCardMaterial(borderRadius: radius, clipBehavior: Clip.antiAlias, child: content);
   }
 }
 

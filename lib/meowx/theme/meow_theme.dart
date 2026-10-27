@@ -13,6 +13,10 @@ ThemeData meowThemeData({
   MeowLook look = MeowLook.classic,
 }) {
   final tokens = MeowTokens.resolve(brightness, look);
+  // 浮层与 Bettbox 原页面的 Material 用不透明的卡片底：液态玻璃下 elev / card2 是半透明的（内容卡片的玻璃），
+  // 对话框、弹出菜单这些叠在半透明上会发灰。经典主题下这两个就是 elev / card2 本身
+  final solid = tokens.elevSolid;
+  final solid2 = Color.alphaBlend(tokens.card2, solid);
   final scheme = ColorScheme.fromSeed(
     seedColor: tokens.accent,
     brightness: brightness,
@@ -21,13 +25,13 @@ ThemeData meowThemeData({
     onPrimary: tokens.onAccent,
     secondary: tokens.accent,
     surface: tokens.bg,
-    surfaceContainerHigh: tokens.elev,
-    surfaceContainerHighest: tokens.card2,
+    surfaceContainerHigh: solid,
+    surfaceContainerHighest: solid2,
     onSurfaceVariant: tokens.t2,
     outlineVariant: tokens.line,
-    surfaceContainerLowest: tokens.elev,
-    surfaceContainerLow: tokens.elev,
-    surfaceContainer: tokens.elev,
+    surfaceContainerLowest: solid,
+    surfaceContainerLow: solid,
+    surfaceContainer: solid,
     onSurface: tokens.t1,
     error: tokens.slow,
   );
@@ -44,14 +48,14 @@ ThemeData meowThemeData({
     splashFactory: InkRipple.splashFactory,
     scaffoldBackgroundColor: tokens.bg,
     canvasColor: tokens.bg,
-    cardColor: tokens.elev,
+    cardColor: solid,
     dialogTheme: DialogThemeData(
-      backgroundColor: tokens.elev,
+      backgroundColor: solid,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: tokens.elev,
+      backgroundColor: solid,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -103,13 +107,13 @@ ThemeData meowThemeData({
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: tokens.elev,
+      color: solid,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18))),
     ),
     dividerTheme: DividerThemeData(color: tokens.line, space: 1, thickness: 1),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: tokens.elev,
+      backgroundColor: solid,
       indicatorColor: tokens.accent.withValues(alpha: 0.14),
       labelTextStyle: WidgetStatePropertyAll(
         TextStyle(fontSize: MeowFont.caption2, fontWeight: FontWeight.w500, color: tokens.t1),
@@ -120,7 +124,7 @@ ThemeData meowThemeData({
       surfaceTintColor: Colors.transparent,
       foregroundColor: tokens.t1,
     ),
-    listTileTheme: ListTileThemeData(tileColor: tokens.elev),
+    listTileTheme: ListTileThemeData(tileColor: solid),
     extensions: [tokens],
   );
   return base.copyWith(

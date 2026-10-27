@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
-import '../theme/tokens.dart';
+import '../theme/page_background.dart';
 
 /// 手机上进二级页的路由（`BaseNavigator.push` 用）：共享轴横向转场 + 推迟一帧开始。
 class MeowPageRoute<T> extends PageRoute<T> with DeferredPushRouteMixin<T> {
@@ -51,15 +51,15 @@ class MeowPageRoute<T> extends PageRoute<T> with DeferredPushRouteMixin<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final bg = context.mm.bg;
+    final bg = MeowBgFill.of(context);
     return SharedXPageTransition(
       animation: animation,
       secondaryAnimation: secondaryAnimation,
-      color: bg,
+      fill: bg,
       slide: SharedXPageTransition.pageSlide,
       overSettledPage: _overSettledPage,
       uncoveredByGesture: navigator!.userGestureInProgress,
-      child: ColoredBox(color: bg, child: child),
+      child: MeowBgBox(fill: bg, child: child),
     );
   }
 }
@@ -79,28 +79,28 @@ class MeowPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final bg = context.mm.bg;
+    final bg = MeowBgFill.of(context);
     return SharedXPageTransition(
       animation: animation,
       secondaryAnimation: secondaryAnimation,
-      color: bg,
+      fill: bg,
       slide: SharedXPageTransition.pageSlide,
       // 主题转场的上下两页都是这套转场、各自淡入淡出，不用替下面那页垫底色
       overSettledPage: true,
       uncoveredByGesture: route.navigator?.userGestureInProgress ?? false,
-      child: ColoredBox(color: bg, child: child),
+      child: MeowBgBox(fill: bg, child: child),
     );
   }
 }
 
-/// 页面一边平移 [slide] 一边淡入淡出。淡入淡出 = 在页面上盖一层 [color]（只盖在底下也是这个颜色的地方），
+/// 页面一边平移 [slide] 一边淡入淡出。淡入淡出 = 在页面上盖一层页面底 [fill]（只盖在底下也是这个底的地方），
 /// 不用 opacity 层：那在 Impeller 下每帧都要把整页离屏画一遍。
 class SharedXPageTransition extends StatelessWidget {
   const SharedXPageTransition({
     super.key,
     required this.animation,
     required this.secondaryAnimation,
-    required this.color,
+    required this.fill,
     required this.slide,
     required this.overSettledPage,
     this.uncoveredByGesture = false,
@@ -114,12 +114,12 @@ class SharedXPageTransition extends StatelessWidget {
 
   final Animation<double> animation;
   final Animation<double> secondaryAnimation;
-  final Color color;
+  final MeowBgFill fill;
 
   /// 页面移动的距离，按自身尺寸的比例
   final Offset slide;
 
-  /// 下面那页在这页进来时是静止的：它按这条路由的动画淡出，底下只剩 [color]
+  /// 下面那页在这页进来时是静止的：它按这条路由的动画淡出，底下只剩 [fill]
   final bool overSettledPage;
 
   /// 上面那页由手势拖着走（系统返回手势）：这页跟手、按露出的比例淡入，而不是拖到最后才出现
@@ -145,7 +145,7 @@ class SharedXPageTransition extends StatelessWidget {
   Widget _overPageBelow(Animation<double> animation, Animatable<double> pageBelowOpacity, Widget child) {
     final fades = !overSettledPage && animation.isAnimating;
     final opacity = fades ? pageBelowOpacity.evaluate(animation) : 1.0;
-    return CustomPaint(painter: _Fill(color.withValues(alpha: color.a * (1 - opacity))), child: child);
+    return MeowBgBox(fill: fill, opacity: 1 - opacity, child: child);
   }
 
   @override
@@ -159,13 +159,13 @@ class SharedXPageTransition extends StatelessWidget {
       animation: ReverseAnimation(secondaryAnimation),
       forwardBuilder: (_, animation, child) => SlideTransition(
         position: uncoverSlide.animate(animation),
-        child: _PageFade(opacity: gesture ? animation : _fadeIn.animate(animation), color: color, child: child),
+        child: _PageFade(opacity: gesture ? animation : _fadeIn.animate(animation), fill: fill, child: child),
       ),
       reverseBuilder: (_, animation, child) => SlideTransition(
         position: coverSlide.animate(animation),
         child: _PageFade(
           opacity: gesture ? ReverseAnimation(animation) : _fadeOut.animate(animation),
-          color: color,
+          fill: fill,
           child: child,
         ),
       ),
@@ -178,7 +178,7 @@ class SharedXPageTransition extends StatelessWidget {
         _fadeOut,
         SlideTransition(
           position: enterSlide.animate(animation),
-          child: _PageFade(opacity: _takeOver.animate(animation), color: color, opaque: true, child: child),
+          child: _PageFade(opacity: _takeOver.animate(animation), fill: fill, opaque: true, child: child),
         ),
       ),
       reverseBuilder: (_, animation, child) => IgnorePointer(
@@ -188,11 +188,11 @@ class SharedXPageTransition extends StatelessWidget {
           _fadeIn,
           SlideTransition(
             position: exitSlide.animate(animation),
-            child: _PageFade(opacity: _handBack.animate(animation), color: color, opaque: true, child: child),
+            child: _PageFade(opacity: _handBack.animate(animation), fill: fill, opaque: true, child: child),
           ),
         ),
       ),
-      child: ColoredBox(color: secondaryAnimation.isAnimating ? color : Colors.transparent, child: covered),
+      child: MeowBgBox(fill: fill, opacity: secondaryAnimation.isAnimating ? 1 : 0, child: covered),
     );
   }
 }
@@ -211,49 +211,35 @@ class _HandOver extends Curve {
   }
 }
 
-class _Fill extends CustomPainter {
-  const _Fill(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (color.a > 0) canvas.drawRect(Offset.zero & size, Paint()..color = color);
-  }
-
-  @override
-  bool shouldRepaint(_Fill oldDelegate) => color != oldDelegate.color;
-}
-
-/// 把 [child] 往 [color] 淡：在它上面盖一层这个颜色；[opaque] 时下面也垫一层，底下什么都透不出来。
+/// 把 [child] 往页面底 [fill] 淡：在它上面盖一层页面底；[opaque] 时下面也垫一层，底下什么都透不出来。
 class _PageFade extends SingleChildRenderObjectWidget {
-  const _PageFade({required this.opacity, required this.color, this.opaque = false, super.child});
+  const _PageFade({required this.opacity, required this.fill, this.opaque = false, super.child});
 
   final Animation<double> opacity;
-  final Color color;
+  final MeowBgFill fill;
   final bool opaque;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderPageFade(opacity: opacity, color: color, opaque: opaque);
+      _RenderPageFade(opacity: opacity, fill: fill, opaque: opaque);
 
   @override
   void updateRenderObject(BuildContext context, _RenderPageFade renderObject) {
     renderObject
       ..opacity = opacity
-      ..color = color
+      ..fill = fill
       ..opaque = opaque;
   }
 }
 
 class _RenderPageFade extends RenderProxyBox {
-  _RenderPageFade({required Animation<double> opacity, required Color color, required bool opaque})
+  _RenderPageFade({required Animation<double> opacity, required MeowBgFill fill, required bool opaque})
     : _opacity = opacity,
-      _color = color,
+      _fill = fill,
       _opaque = opaque;
 
   Animation<double> _opacity;
-  Color _color;
+  MeowBgFill _fill;
   bool _opaque;
   bool _visible = true;
 
@@ -267,9 +253,9 @@ class _RenderPageFade extends RenderProxyBox {
     _update();
   }
 
-  set color(Color value) {
-    if (value == _color) return;
-    _color = value;
+  set fill(MeowBgFill value) {
+    if (value == _fill) return;
+    _fill = value;
     markNeedsPaint();
   }
 
@@ -309,9 +295,18 @@ class _RenderPageFade extends RenderProxyBox {
       super.paint(context, offset);
       return;
     }
-    if (_opaque) context.canvas.drawRect(offset & size, Paint()..color = _color);
+    if (_fill.flat) {
+      final color = _fill.color;
+      if (_opaque) context.canvas.drawRect(offset & size, Paint()..color = color);
+      super.paint(context, offset);
+      context.canvas.drawRect(offset & size, Paint()..color = color.withValues(alpha: color.a * (1 - opacity)));
+      return;
+    }
+    // 渐层的页面底：按这一页在屏幕上的位置取色（与下面那页、页面本身的底拼成同一条渐层）
+    final top = localToGlobal(Offset.zero).dy;
+    if (_opaque) _fill.paint(context.canvas, offset & size, globalTop: top);
     super.paint(context, offset);
-    context.canvas.drawRect(offset & size, Paint()..color = _color.withValues(alpha: _color.a * (1 - opacity)));
+    _fill.paint(context.canvas, offset & size, globalTop: top, opacity: 1 - opacity);
   }
 
   @override

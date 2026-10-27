@@ -2,9 +2,12 @@ import 'dart:convert';
 
 import 'package:bett_box/meowx/glass/liquid_glass.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
+import 'package:bett_box/meowx/theme/card_surface.dart';
 import 'package:bett_box/meowx/theme/glass.dart';
+import 'package:bett_box/meowx/theme/glass_card.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:bett_box/meowx/theme/morph_menu.dart';
+import 'package:bett_box/meowx/theme/page_background.dart';
 import 'package:bett_box/meowx/theme/page_title.dart';
 import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
@@ -38,15 +41,10 @@ HSLColor _hsl(Color c) => HSLColor.fromColor(c);
 
 void main() {
   group('卡片色推导', () {
-    test('白：保持原来的两档；液态玻璃的深色换成更中性的一对', () {
+    test('白：保持原来的两档', () {
       const white = Color(0xFFFFFFFF);
       expect(MeowTokens.cardShades(white, dark: false), (card: const Color(0xFFFFFFFF), card2: const Color(0xFFF3EDE6)));
       expect(MeowTokens.cardShades(white, dark: true), (card: const Color(0xFF221C29), card2: const Color(0xFF2F2838)));
-      expect(
-        MeowTokens.cardShades(white, dark: true, glass: true),
-        (card: const Color(0xFF1C1A20), card2: const Color(0xFF2A2730)),
-      );
-      expect(MeowTokens.cardShades(white, dark: false, glass: true).card, const Color(0xFFFFFFFF));
     });
 
     test('浅色：直接用所选色，亮度低于 88% 的提到 88%；次级底同色相再深 5%', () {
@@ -96,13 +94,21 @@ void main() {
       }
     });
 
-    test('液态玻璃：浅色底 #F5F1EC、深色纯黑；深色 + 白卡用 #1C1A20；主卡渐变、半透明白', () {
+    test('液态玻璃 + 白：浅色底 #F5F1EC、深色纯黑（平涂）；卡片是半透明白；主卡渐变、半透明白', () {
       final light = MeowTokens.resolve(Brightness.light, _glassLook);
       final dark = MeowTokens.resolve(Brightness.dark, _glassLook);
       expect(light.bg, const Color(0xFFF5F1EC));
       expect(dark.bg, const Color(0xFF000000));
-      expect(dark.elev, const Color(0xFF1C1A20));
-      expect(dark.card2, const Color(0xFF2A2730));
+      expect(light.bgGradient, isNull);
+      expect(dark.bgGradient, isNull);
+      expect(light.elev, const Color(0x85FFFFFF));
+      expect(light.card2, const Color(0x8CFFFFFF));
+      expect(dark.elev, const Color(0x12FFFFFF));
+      expect(dark.card2, const Color(0x0FFFFFFF));
+      expect(light.elevSolid, Color.alphaBlend(const Color(0x85FFFFFF), const Color(0xFFF5F1EC)));
+      expect(dark.elevSolid, Color.alphaBlend(const Color(0x12FFFFFF), const Color(0xFF000000)));
+      expect(light.cardRim, const Color(0xBFFFFFFF));
+      expect(dark.cardRim, const Color(0x1FFFFFFF));
       expect(light.glass && dark.glass, isTrue);
       expect((light.heroGradient! as LinearGradient).colors, const [Color(0xFFFBDCE7), Color(0xFFF2BED2)]);
       expect((dark.heroGradient! as LinearGradient).colors, const [Color(0xFF5A2C47), Color(0xFF33202F)]);
@@ -133,6 +139,129 @@ void main() {
       expect(identical(g.light, a.light), isFalse);
       expect(g.light.scaffoldBackgroundColor, const Color(0xFFF5F1EC));
       expect(identical(themes.of(look: const MeowLook(style: MeowThemeStyle.glass)).dark, g.dark), isTrue);
+    });
+  });
+
+  group('液态玻璃：底色 + 玻璃卡片', () {
+    test('浅色底色：同色相、饱和度 ≤ 0.6、亮度 0.925 → 0.885 自上而下；中间色当 bg', () {
+      for (final (name, c) in MeowCardColors.presets.skip(1)) {
+        final g = MeowTokens.glassShades(Color(c), dark: false);
+        final top = _hsl(g.gradient![0]), bottom = _hsl(g.gradient![1]);
+        expect(top.lightness, closeTo(0.925, 0.006), reason: name);
+        expect(bottom.lightness, closeTo(0.885, 0.006), reason: name);
+        expect(top.saturation, lessThanOrEqualTo(0.605), reason: name);
+        expect(top.hue, closeTo(_hsl(Color(c)).hue, 3), reason: name);
+        expect(_hsl(g.bg).lightness, closeTo(0.905, 0.006), reason: name);
+      }
+      // 饱和度低于 0.6 的保持原值
+      const grey = Color(0xFFE6E0F0);
+      expect(_hsl(MeowTokens.glassShades(grey, dark: false).gradient![0]).saturation, closeTo(_hsl(grey).saturation, 0.03));
+    });
+
+    test('深色底色：同色相、饱和度 ≤ 0.32、亮度 0.12 → 0.07；白 → 纯黑', () {
+      for (final (name, c) in MeowCardColors.presets.skip(1)) {
+        final g = MeowTokens.glassShades(Color(c), dark: true);
+        expect(_hsl(g.gradient![0]).lightness, closeTo(0.12, 0.006), reason: name);
+        expect(_hsl(g.gradient![1]).lightness, closeTo(0.07, 0.006), reason: name);
+        expect(_hsl(g.gradient![0]).saturation, lessThanOrEqualTo(0.325), reason: name);
+        expect(_hsl(g.gradient![0]).hue, closeTo(_hsl(Color(c)).hue, 3), reason: name);
+      }
+      final white = MeowTokens.glassShades(const Color(MeowCardColors.white), dark: true);
+      expect((white.bg, white.gradient), (const Color(0xFF000000), null));
+    });
+
+    test('卡片：浅 = 白 52% + 白 75% 亮边 + 白 90% 高光 + 很淡的同色相投影；深 = 白 7% / 12% / 10%、不投影', () {
+      const mint = Color(0xFFECF8F1);
+      final l = MeowTokens.glassShades(mint, dark: false);
+      expect((l.card, l.card2, l.rim, l.sheen), (
+        const Color(0x85FFFFFF),
+        const Color(0x8CFFFFFF),
+        const Color(0xBFFFFFFF),
+        const Color(0xE6FFFFFF),
+      ));
+      expect(l.shadow.a, closeTo(0.10, 0.01));
+      expect(_hsl(l.shadow).hue, closeTo(_hsl(mint).hue, 3));
+      final d = MeowTokens.glassShades(mint, dark: true);
+      expect((d.card, d.card2, d.rim, d.sheen, d.shadow), (
+        const Color(0x12FFFFFF),
+        const Color(0x0FFFFFFF),
+        const Color(0x1FFFFFFF),
+        const Color(0x1AFFFFFF),
+        const Color(0x00000000),
+      ));
+    });
+
+    test('着色：浅色卡片 = 所选色相的极浅色 62%，深色 = 同色相 12%；白 = 白 62% / 12%', () {
+      const blue = Color(0xFFEDF3FB);
+      final l = MeowTokens.glassShades(blue, dark: false, tinted: true).card;
+      expect(l.a, closeTo(0.62, 0.01));
+      expect(_hsl(l.withValues(alpha: 1)).lightness, closeTo(0.97, 0.01));
+      expect(_hsl(l.withValues(alpha: 1)).hue, closeTo(_hsl(blue).hue, 3));
+      final d = MeowTokens.glassShades(blue, dark: true, tinted: true).card;
+      expect(d.a, closeTo(0.12, 0.01));
+      expect(_hsl(d.withValues(alpha: 1)).hue, closeTo(_hsl(blue).hue, 3));
+      expect(MeowTokens.glassShades(const Color(MeowCardColors.white), dark: false, tinted: true).card, const Color(0x9EFFFFFF));
+      expect(MeowTokens.glassShades(const Color(MeowCardColors.white), dark: true, tinted: true).card, const Color(0x1FFFFFFF));
+      final t = MeowTokens.resolve(
+        Brightness.light,
+        const MeowLook(style: MeowThemeStyle.glass, glassTint: MeowGlassTint.tinted, cardColor: 0xFFEDF3FB),
+      );
+      expect(t.elev, l);
+    });
+
+    test('resolve：旧配置的 cardColor 在玻璃主题下当底色；浮层用叠好的实色；经典主题的卡片没有亮边', () {
+      const look = MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFFFEFF4);
+      final t = MeowTokens.resolve(Brightness.light, look);
+      final g = MeowTokens.glassShades(const Color(0xFFFFEFF4), dark: false);
+      expect(t.bg, g.bg);
+      expect(t.bgGradient, g.gradient);
+      expect(t.elev, g.card);
+      expect(t.elevSolid.a, 1);
+      expect(t.elevSolid, Color.alphaBlend(g.card, g.bg));
+      expect(t.cardRim, g.rim);
+      expect(meowThemeData(brightness: Brightness.light, look: look).dialogTheme.backgroundColor, t.elevSolid);
+      expect(meowThemeData(brightness: Brightness.light, look: look).colorScheme.surfaceContainerHighest.a, 1);
+
+      final classic = MeowTokens.resolve(Brightness.light, const MeowLook(cardColor: 0xFFFFEFF4));
+      expect(classic.cardRim, isNull);
+      expect(classic.bgGradient, isNull);
+      expect(classic.elevSolid, classic.elev);
+      expect(MeowTokens.light.elevSolid, MeowTokens.light.elev);
+      expect(MeowTokens.dark.elevSolid, MeowTokens.dark.elev);
+      expect(classic.card(BorderRadius.circular(24)), BoxDecoration(color: classic.elev, borderRadius: BorderRadius.circular(24)));
+      expect(t.card(BorderRadius.circular(24)), isA<MeowCardDecoration>());
+    });
+
+    test('文字对比度：墨色正文 ≥ 7、次级字 ≥ 4.5（整段底色与玻璃卡片、卡片里的次级底上，浅 / 深、透明 / 着色）', () {
+      for (final b in Brightness.values) {
+        for (final tint in MeowGlassTint.values) {
+          for (final (name, c) in MeowCardColors.presets) {
+            final t = MeowTokens.resolve(b, MeowLook(style: MeowThemeStyle.glass, glassTint: tint, cardColor: c));
+            for (final bg in [t.bg, ...?t.bgGradient]) {
+              final card = Color.alphaBlend(t.elev, bg);
+              final chip = Color.alphaBlend(t.card2, card);
+              for (final surface in [bg, card, chip]) {
+                final why = '$name $b $tint on $surface';
+                expect(MeowTokens.contrast(t.t1, surface), greaterThanOrEqualTo(7), reason: why);
+                expect(MeowTokens.contrast(t.t2, surface), greaterThanOrEqualTo(4.5), reason: why);
+              }
+            }
+          }
+        }
+      }
+      // 白底与经典主题的次级字不动
+      expect(MeowTokens.resolve(Brightness.light, _glassLook).t2, MeowTokens.light.t2);
+    });
+
+    test('强调色在玻璃底色上也 ≥ 4.5:1', () {
+      for (final (_, card) in MeowCardColors.presets) {
+        for (final (_, accent) in MeowAccentColors.presets) {
+          final t = MeowTokens.resolve(Brightness.light, MeowLook(style: MeowThemeStyle.glass, cardColor: card, accentColor: accent));
+          for (final bg in [t.bg, ...?t.bgGradient]) {
+            expect(MeowTokens.contrast(t.accent, bg), greaterThanOrEqualTo(4.5), reason: '$accent on $bg');
+          }
+        }
+      }
     });
   });
 
@@ -249,6 +378,69 @@ void main() {
       final odd = MeowSettings.fromJson({'themeStyle': 'neon', 'glassTint': 'frosted'});
       expect(odd.themeStyle, MeowThemeStyle.classic);
       expect(odd.glassTint, MeowGlassTint.clear);
+    });
+  });
+
+  group('内容卡片与页面底', () {
+    Widget themed(Widget child, MeowLook look) => MaterialApp(
+      theme: meowThemeData(brightness: Brightness.light, look: look),
+      home: Scaffold(body: Center(child: child)),
+    );
+    const mint = MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFECF8F1);
+
+    testWidgets('MeowCardMaterial：经典主题原样是实色 Material；玻璃主题是玻璃底 + 透明 Material（水波照旧）', (tester) async {
+      var taps = 0;
+      Widget card() => MeowCardMaterial(
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(onTap: () => taps++, child: const SizedBox(width: 120, height: 60)),
+      );
+      await tester.pumpWidget(themed(card(), MeowLook.classic));
+      final m = tester.widget<Material>(find.descendant(of: find.byType(MeowCardMaterial), matching: find.byType(Material)));
+      expect(m.color, MeowTokens.light.elev);
+      expect(find.descendant(of: find.byType(MeowCardMaterial), matching: find.byType(DecoratedBox)), findsNothing);
+
+      await tester.pumpWidget(themed(card(), mint));
+      await tester.pumpAndSettle();
+      final box = tester.widget<DecoratedBox>(find.descendant(of: find.byType(MeowCardMaterial), matching: find.byType(DecoratedBox)));
+      expect(box.decoration, isA<MeowCardDecoration>());
+      expect((box.decoration as MeowCardDecoration).color, const Color(0x85FFFFFF));
+      final inner = tester.widget<Material>(find.descendant(of: find.byType(MeowCardMaterial), matching: find.byType(Material)));
+      expect(inner.type, MaterialType.transparency);
+      await tester.tap(find.byType(InkWell));
+      expect(taps, 1);
+    });
+
+    testWidgets('GlassCard：玻璃主题下是玻璃卡片，经典下是原来的实色', (tester) async {
+      Widget card() => const GlassCard(child: SizedBox(width: 100, height: 40));
+      Decoration? deco() => tester.widget<Container>(find.descendant(of: find.byType(GlassCard), matching: find.byType(Container))).decoration;
+      await tester.pumpWidget(themed(card(), MeowLook.classic));
+      expect(deco(), isA<BoxDecoration>());
+      await tester.pumpWidget(themed(card(), mint));
+      await tester.pumpAndSettle();
+      expect(deco(), isA<MeowCardDecoration>());
+    });
+
+    testWidgets('页面底：玻璃 + 底色 = 按整屏铺的渐层，经典 / 白 = 平涂；切换时子树不重建', (tester) async {
+      final key = GlobalKey();
+      Widget page(MeowLook look) => MaterialApp(
+        theme: meowThemeData(brightness: Brightness.light, look: look),
+        home: MeowPageBackground(child: SizedBox.expand(key: key)),
+      );
+      await tester.pumpWidget(page(MeowLook.classic));
+      final state = key.currentContext;
+      MeowBgFill fill() => tester.widget<MeowBgBox>(find.byType(MeowBgBox)).fill;
+      expect(fill().flat, isTrue);
+      expect(fill().color, MeowTokens.light.bg);
+      await tester.pumpWidget(page(mint));
+      await tester.pumpAndSettle();
+      expect(fill().flat, isFalse);
+      expect(fill().gradient, MeowTokens.glassShades(const Color(0xFFECF8F1), dark: false).gradient);
+      expect(fill().height, tester.view.physicalSize.height / tester.view.devicePixelRatio);
+      expect(key.currentContext, same(state), reason: '同一种 widget，换底色不拆子树');
+      await tester.pumpWidget(page(_glassLook));
+      await tester.pumpAndSettle();
+      expect(fill().flat, isTrue);
+      expect(fill().color, const Color(0xFFF5F1EC));
     });
   });
 

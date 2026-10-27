@@ -1,3 +1,4 @@
+import '../../theme/card_surface.dart';
 import 'dart:async';
 
 import 'package:bett_box/common/navigator.dart';
@@ -151,8 +152,7 @@ class HomeSpeedCard extends ConsumerWidget {
       ),
     );
     // 点卡片打开网络测速（右上角一个小仪表图标提示，与 iOS 同）
-    return Material(
-      color: mm.elev,
+    return MeowCardMaterial(
       borderRadius: BorderRadius.circular(dense ? 22 : 24),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

@@ -12,6 +12,7 @@ import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -47,11 +48,14 @@ class HomeHeroCard extends ConsumerWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: EdgeInsets.all(dense ? 16 : 18),
-      decoration: BoxDecoration(
-        color: gradient != null ? null : (on ? mm.hero : mm.card2),
-        gradient: gradient,
-        borderRadius: BorderRadius.circular(radius),
-      ),
+      // 液态玻璃：没连上时是一张玻璃卡片（次级底那档半透明 + 亮边），连上换成主卡的斜向渐变实色
+      decoration: mm.cardRim != null && !on
+          ? mm.card(BorderRadius.circular(radius), color: mm.card2)
+          : BoxDecoration(
+              color: gradient != null ? null : (on ? mm.hero : mm.card2),
+              gradient: gradient,
+              borderRadius: BorderRadius.circular(radius),
+            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/motion.dart';
-import '../theme/tokens.dart';
+import '../theme/page_background.dart';
 import 'meow_tab.dart';
 
 /// 四个 Tab 页的常驻栈：都留在树上（切回来滚动位置、展开状态、已加载的数据都在），平时只画当前页。
@@ -196,7 +196,7 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final bg = context.mm.bg;
+    final bg = MeowBgFill.of(context);
     final dpr = MediaQuery.devicePixelRatioOf(context);
     return LayoutBuilder(
       builder: (context, box) => AnimatedBuilder(
@@ -218,8 +218,8 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
             ?warming,
             for (final l in layers) l.tab,
           ];
-          return ColoredBox(
-            color: bg,
+          return MeowBgBox(
+            fill: bg,
             child: ClipRect(
               // 平推时旧页会退到内容区外（宽屏是侧栏那边），只在这时裁
               clipBehavior: sliding ? Clip.hardEdge : Clip.none,
@@ -240,8 +240,8 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
                               0,
                             ),
                             child: RepaintBoundary(
-                              child: ColoredBox(
-                                color: bg,
+                              child: MeowBgBox(
+                                fill: bg,
                                 child: ExcludeSemantics(
                                   excluding: t == warming,
                                   child: TickerMode(

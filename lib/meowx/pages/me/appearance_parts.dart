@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/color_picker.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
@@ -154,8 +155,10 @@ class _StyleThumb extends StatelessWidget {
     final dark = context.isDarkMode;
     final base = dark ? MeowTokens.dark : MeowTokens.light;
     final spec = MeowGlassSpec.of(dark);
+    final shades = MeowTokens.glassShades(const Color(MeowCardColors.white), dark: dark);
     final bg = glass ? spec.bg : base.bg;
-    final card = glass && dark ? const Color(0xFF1C1A20) : base.elev;
+    // 液态玻璃那张的卡片也是半透明的玻璃（白卡 + 亮边）
+    final card = glass ? shades.card : base.elev;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: ColoredBox(
@@ -181,7 +184,11 @@ class _StyleThumb extends StatelessWidget {
               top: 28,
               height: 12,
               child: DecoratedBox(
-                decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(5)),
+                decoration: BoxDecoration(
+                  color: card,
+                  borderRadius: BorderRadius.circular(5),
+                  border: glass ? Border.all(color: shades.rim, width: 0.8) : null,
+                ),
               ),
             ),
             Positioned(
@@ -319,13 +326,20 @@ class GlassTintRow extends ConsumerWidget {
 }
 
 /// 三种可调颜色（卡片 / 启动卡片 / 强调色）：行的标题、预设、说明、取色页的标题与预览、存到哪个字段。
+/// 液态玻璃主题下「卡片颜色」改叫「底色」（存的仍是 cardColor）：铺成整页的底，内容卡片变成玻璃（见 [MeowTokens.glassShades]）。
 enum MeowColorKind {
   card('卡片颜色', '自定义卡片颜色', '只改内容卡片，玻璃控件不变；深色下取同色相的深色卡片。'),
   hero('启动卡片颜色', '自定义启动卡片颜色', '首页连接主卡与电源键；深色下取同色相的深色。'),
   accent('强调色', '自定义强调色', '强调文字、选中态、底栏选中项与进度条；对比度不够时自动压暗 / 提亮。');
 
-  const MeowColorKind(this.label, this.pickerTitle, this.caption);
-  final String label, pickerTitle, caption;
+  const MeowColorKind(this._label, this._pickerTitle, this._caption);
+  final String _label, _pickerTitle, _caption;
+
+  /// [glass] = 液态玻璃主题
+  String label(bool glass) => glass && this == card ? '底色' : _label;
+  String pickerTitle(bool glass) => glass && this == card ? '自定义底色' : _pickerTitle;
+  String caption(bool glass) =>
+      glass && this == card ? '铺满整页的底色（取同色相的柔和渐层），内容卡片是半透明的玻璃；选「白」保持原来的底色。深色下取同色相的深底。' : _caption;
 
   List<(String, int)> get presets => switch (this) {
     card => MeowCardColors.presets,
@@ -357,11 +371,12 @@ class ColorChoiceRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final color = ref.watch(meowSettingProvider.select(kind.of));
+    final glass = context.mm.glass;
     final name = kind.presets.where((p) => p.$2 == color).firstOrNull?.$1;
     return _StackedRow(
-      label: kind.label,
+      label: kind.label(glass),
       value: name ?? '自定义 #${meowHexDigits(Color(color))}',
-      caption: kind.caption,
+      caption: kind.caption(glass),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -477,7 +492,7 @@ class _ColorPickerPageState extends ConsumerState<ColorPickerPage> {
   @override
   Widget build(BuildContext context) {
     return MeSubPage.list(
-      title: widget.kind.pickerTitle,
+      title: widget.kind.pickerTitle(context.mm.glass),
       actions: [RoundGlassButton(icon: Icons.check_rounded, filled: true, tooltip: '确定', onTap: _confirm)],
       children: [
         ValueListenableBuilder(
@@ -505,7 +520,8 @@ class _ColorPickerPageState extends ConsumerState<ColorPickerPage> {
   }
 }
 
-/// 选的颜色在浅色 / 深色下实际推出来的样子：卡片色 = 一张卡片配次级底；启动卡片 = 主卡配电源键；强调色 = 强调字配淡底胶囊与进度条。
+/// 选的颜色在浅色 / 深色下实际推出来的样子：卡片色 = 一张卡片配次级底（液态玻璃下是底色上放一张玻璃卡片）；
+/// 启动卡片 = 主卡配电源键；强调色 = 强调字配淡底胶囊与进度条。
 class ColorPreview extends StatelessWidget {
   const ColorPreview({super.key, required this.kind, required this.color});
 
@@ -517,13 +533,39 @@ class ColorPreview extends StatelessWidget {
     final glass = context.mm.glass;
     Widget sample(String label, bool dark) {
       final base = dark ? MeowTokens.dark : MeowTokens.light;
-      final bg = glass ? MeowGlassSpec.of(dark).bg : base.bg;
-      final card = MeowTokens.cardShades(const Color(MeowCardColors.white), dark: dark, glass: glass).card;
+      final white = MeowTokens.glassShades(const Color(MeowCardColors.white), dark: dark);
+      var bg = glass ? white.bg : base.bg;
+      List<Color>? bgGradient;
+      final card = glass ? Color.alphaBlend(white.card, white.bg) : base.elev;
       final text = TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: base.t1);
       final Widget inner;
       switch (kind) {
+        case MeowColorKind.card when glass:
+          final g = MeowTokens.glassShades(color, dark: dark, tinted: context.mm.glassTinted);
+          bg = g.bg;
+          bgGradient = g.gradient;
+          inner = Container(
+            padding: const EdgeInsets.all(10),
+            decoration: MeowCardDecoration(
+              color: g.card,
+              borderRadius: BorderRadius.circular(12),
+              rim: g.rim,
+              sheen: g.sheen,
+              shadow: g.shadow,
+            ),
+            child: Row(
+              children: [
+                Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
+                Container(
+                  width: 34,
+                  height: 20,
+                  decoration: BoxDecoration(color: g.card2, borderRadius: BorderRadius.circular(10)),
+                ),
+              ],
+            ),
+          );
         case MeowColorKind.card:
-          final shades = MeowTokens.cardShades(color, dark: dark, glass: glass);
+          final shades = MeowTokens.cardShades(color, dark: dark);
           inner = Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: shades.card, borderRadius: BorderRadius.circular(12)),
@@ -606,7 +648,13 @@ class ColorPreview extends StatelessWidget {
         child: Container(
           height: 76,
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(18)),
+          decoration: BoxDecoration(
+            color: bgGradient == null ? bg : null,
+            gradient: bgGradient == null
+                ? null
+                : LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: bgGradient),
+            borderRadius: BorderRadius.circular(18),
+          ),
           child: inner,
         ),
       );
