@@ -303,10 +303,10 @@ class _RenderPageFade extends RenderProxyBox {
       return;
     }
     // 渐层的页面底：按这一页在屏幕上的位置取色（与下面那页、页面本身的底拼成同一条渐层）
-    final top = localToGlobal(Offset.zero).dy;
-    if (_opaque) _fill.paint(context.canvas, offset & size, globalTop: top);
+    final origin = localToGlobal(Offset.zero);
+    if (_opaque) _fill.paint(context.canvas, offset & size, origin: origin);
     super.paint(context, offset);
-    _fill.paint(context.canvas, offset & size, globalTop: top, opacity: 1 - opacity);
+    _fill.paint(context.canvas, offset & size, origin: origin, opacity: 1 - opacity);
   }
 
   @override

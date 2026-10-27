@@ -1,6 +1,7 @@
 import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 
+import '../../app/page_route.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
 import '../../theme/morph_menu.dart';
@@ -42,8 +43,10 @@ class MeSubPage extends StatelessWidget {
     final sheet = MeSheetScope.maybeOf(context);
     if (sheet != null) return _inSheet(context, sheet);
     final mm = context.mm;
-    // 液态玻璃选了底色时页面底是整屏的轻渐层（见 page_background.dart），Scaffold 本身透明
+    // 液态玻璃选了底色时页面底是整屏的渐层（见 page_background.dart），Scaffold 本身透明；
+    // 手机上由 MeowPageRoute 推入时底由路由画（它在转场中跟着重画），这里不再画
     return MeowPageBackground(
+      hostedByRoute: ModalRoute.of(context) is MeowPageRoute,
       child: Scaffold(
         backgroundColor: mm.bgGradient == null ? mm.bg : Colors.transparent,
         body: SafeArea(

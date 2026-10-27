@@ -132,10 +132,23 @@ void main() {
     // 卡片颜色 / 启动卡片颜色都有「薄荷」：按行找
     Finder swatch(MeowColorKind kind, String label) =>
         find.descendant(of: find.byWidgetPredicate((w) => w is ColorChoiceRow && w.kind == kind), matching: find.byTooltip(label));
-    await tester.tap(swatch(MeowColorKind.card, '薄荷'));
+    // 液态玻璃下「卡片颜色」那一行换成「底色」（单色 / 渐变）
+    expect(find.text('卡片颜色'), findsNothing);
+    expect(find.text('底色'), findsOneWidget);
+    Finder bgSwatch(String label) => find.descendant(of: find.byType(GlassBgRow), matching: find.byTooltip(label));
+    await tester.tap(bgSwatch('薄荷'));
     await tester.pumpAndSettle();
     expect(_settings(tester).cardColor, 0xFFECF8F1);
     expect(find.text('薄荷'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.byType(GlassBgRow), matching: find.text('渐变')));
+    await tester.pumpAndSettle();
+    expect(_settings(tester).bgStyle, MeowBgStyle.gradient);
+    expect(find.text('樱粉 · 薰衣草'), findsOneWidget, reason: '缺省的渐变写在行尾');
+    await tester.tap(bgSwatch('薄荷 · 雾蓝'));
+    await tester.pumpAndSettle();
+    expect((_settings(tester).bgGradientFrom, _settings(tester).bgGradientTo), (0xFFCDEBDD, 0xFFCFDDF3));
+    expect(_settings(tester).cardColor, 0xFFECF8F1, reason: '单色底色留着');
 
     await tester.ensureVisible(swatch(MeowColorKind.hero, '雾蓝'));
     await tester.tap(swatch(MeowColorKind.hero, '雾蓝'));
@@ -153,6 +166,29 @@ void main() {
     expect(_settings(tester).themeStyle, MeowThemeStyle.classic);
     expect(find.text('玻璃样式'), findsNothing);
     expect(_settings(tester).glassTint, MeowGlassTint.tinted, reason: '玻璃样式的选择留着，下次切回液态玻璃还是它');
+    expect(find.text('卡片颜色'), findsOneWidget, reason: '经典主题下回到「卡片颜色」');
+  });
+
+  testWidgets('自定义渐变底色：切起始色 / 结束色分别取色，确定后存两种颜色并切到渐变', (tester) async {
+    await _pump(tester, meow: const MeowSettings(themeStyle: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient), glass: true);
+    await tester.tap(find.descendant(of: find.byType(GlassBgRow), matching: find.byTooltip('自定义')));
+    await tester.pumpAndSettle();
+    expect(find.text('自定义渐变底色'), findsOneWidget);
+    expect(find.byType(GradientPreview), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '112233');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('结束色（右下）'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '445566');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('起始色（左上）'));
+    await tester.pumpAndSettle();
+    expect(find.text('112233'), findsOneWidget, reason: '切回起始色，输入框显示它');
+    await tester.tap(find.byTooltip('确定'));
+    await tester.pumpAndSettle();
+    final s = _settings(tester);
+    expect((s.bgStyle, s.bgGradientFrom, s.bgGradientTo), (MeowBgStyle.gradient, 0xFF112233, 0xFF445566));
+    expect(find.text('自定义渐变'), findsOneWidget);
   });
 
   testWidgets('自定义卡片颜色：在卡片里进下一层取色（网格 / 光谱 / 滑块 + 十六进制），确定后存下并退回', (tester) async {

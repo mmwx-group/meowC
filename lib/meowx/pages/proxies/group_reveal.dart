@@ -144,7 +144,7 @@ class _RenderBgFade extends RenderProxyBox {
         context.canvas.drawRect(offset & size, Paint()..color = color.withValues(alpha: color.a * (1 - _opacity)));
       } else {
         // 渐层的页面底：按这张卡在屏幕上的位置取色，盖上去与周围的底接得上
-        _fill.paint(context.canvas, offset & size, globalTop: localToGlobal(Offset.zero).dy, opacity: 1 - _opacity);
+        _fill.paint(context.canvas, offset & size, origin: localToGlobal(Offset.zero), opacity: 1 - _opacity);
       }
     }
   }

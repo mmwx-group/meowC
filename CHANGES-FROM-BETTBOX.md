@@ -167,3 +167,4 @@
 
 ## 2026-10-27 · 液态玻璃主题：选底色，内容卡片变玻璃
 - 只改 `lib/meowx/`，Bettbox 底层不动。液态玻璃主题下「卡片颜色」改叫「底色」（仍存在 `MeowSettings.cardColor`，旧配置照常生效）：铺成整页的底（浅色同色相饱和度 ≤ 0.6、亮度 0.925 → 0.885 的轻渐层，深色饱和度 ≤ 0.32、亮度 0.12 → 0.07；选「白」保持 #F5F1EC / 纯黑）；内容卡片变成半透明 + 亮边 + 顶边内高光的玻璃（`theme/card_surface.dart`，不挂实时模糊），页面底按整屏位置画渐层（`theme/page_background.dart`，转场与展开代理组时盖的那层底色同一套）。对话框、弹出菜单、Bettbox 原页面的 Material 用叠好的不透明卡片底（`MeowTokens.elevSolid`）。经典主题不变。
+- 同日补充：底色可选「渐变」——两种颜色左上 → 右下的斜向渐变（6 组预设 + 自定义起始色 / 结束色），整屏连续（转场与 Tab 平推时页面底画在 RepaintBoundary 外面、按屏幕位置取色）。`lib/models/meow.dart MeowSettings` 增加 `bgStyle`（单色 / 渐变，缺省单色、认不出的值回到单色）、`bgGradientFrom`、`bgGradientTo`；老配置没有这几项时照旧是单色底色。

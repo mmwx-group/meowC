@@ -327,7 +327,8 @@ class AppearanceRows extends ConsumerWidget {
         ),
         const ThemeStyleRow(),
         if (glass) const GlassTintRow(),
-        const ColorChoiceRow(MeowColorKind.card),
+        // 液态玻璃下是「底色」（单色 / 渐变），经典下是卡片颜色
+        if (glass) const GlassBgRow() else const ColorChoiceRow(MeowColorKind.card),
         const ColorChoiceRow(MeowColorKind.hero),
         const ColorChoiceRow(MeowColorKind.accent),
         if (ref.watch(appIconSupportedProvider)) const AppIconRow(),

@@ -239,9 +239,11 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
                               snap(onStage[t] ?? 0) + (t == warming ? _warmShifts[_warmStep] / dpr : 0),
                               0,
                             ),
-                            child: RepaintBoundary(
-                              child: MeowBgBox(
-                                fill: bg,
+                            // 页面底在 RepaintBoundary 外面：平推中它跟着位移每帧重画、按屏幕位置取色（渐变底色整屏不动，
+                            // 页面内容那一层照旧只画一次）；放在里面的话页面第一次画在半路上，停下后底色就错位了
+                            child: MeowBgBox(
+                              fill: bg,
+                              child: RepaintBoundary(
                                 child: ExcludeSemantics(
                                   excluding: t == warming,
                                   child: TickerMode(

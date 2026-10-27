@@ -113,6 +113,17 @@ enum MeowThemeStyle {
   };
 }
 
+/// 液态玻璃主题的底色样式：单色 = 「底色」（cardColor）取同色相的柔和渐层；渐变 = 两种颜色的斜向渐变（左上 → 右下）。
+enum MeowBgStyle {
+  solid,
+  gradient;
+
+  String get label => switch (this) {
+    MeowBgStyle.solid => '单色',
+    MeowBgStyle.gradient => '渐变',
+  };
+}
+
 /// 液态玻璃的样式（照 iOS 26.1 系统设置的同名选项）：透明 = 高透；着色 = 更厚、更不透明、对比度更高。只在液态玻璃下生效。
 enum MeowGlassTint {
   clear,
@@ -279,6 +290,14 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// 强调色（ARGB，缺省玫红 #B02E63）：强调文字 / 图标、选中态的描边与淡底、底栏选中项、进度条；对比度不够时自动压暗 / 提亮
     @Default(0xFFB02E63) int accentColor,
+
+    /// 液态玻璃主题的底色样式（缺省单色 = 只看 [cardColor]，老配置没有这几项时照旧）；渐变的起始色 / 结束色（ARGB，缺省樱粉 → 薰衣草）。
+    /// 经典主题不用；深色下不直接用，取色相压成深色（见 `lib/meowx/theme/tokens.dart`）
+    @JsonKey(unknownEnumValue: MeowBgStyle.solid)
+    @Default(MeowBgStyle.solid)
+    MeowBgStyle bgStyle,
+    @Default(0xFFF7CDDB) int bgGradientFrom,
+    @Default(0xFFDED4F5) int bgGradientTo,
 
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,

@@ -43,6 +43,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     required this.fill,
     Color? elevSolid,
     this.bgGradient,
+    this.bgDiagonal = false,
     this.cardRim,
     this.cardSheen = const Color(0x00000000),
     this.cardShadow = const Color(0x00000000),
@@ -101,6 +102,9 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 液态玻璃主题选了「白」以外的底色时，页面底是自上而下的轻渐层（按整屏高度铺，见 page_background.dart）；
   /// 经典与「白」= null，页面底就是平涂的 [bg]（有渐层时 [bg] 是它的中间色，给浮层、文字底色这些只要一个颜色的地方用）
   final List<Color>? bgGradient;
+
+  /// [bgGradient] 是左上 → 右下的斜向渐变（液态玻璃选了「渐变」底色）；否则自上而下
+  final bool bgDiagonal;
 
   /// 液态玻璃主题的内容卡片（见 card_surface.dart）：1px 亮边、顶边内高光、很淡的同色相投影（只画在卡片外面）。
   /// 经典 = null（卡片照原来的实色画，一个像素不变）
@@ -188,13 +192,18 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     final MeowTokens tokens;
     final List<Color> pageBgs;
     if (glass) {
-      // 液态玻璃：「卡片颜色」改当「底色」铺满页面，内容卡片是半透明的玻璃（见 [glassShades]）
-      final s = glassShades(Color(look.cardColor), dark: isDark, tinted: look.glassTint == MeowGlassTint.tinted);
+      // 液态玻璃：「卡片颜色」改当「底色」铺满页面（单色 / 两色渐变），内容卡片是半透明的玻璃（见 [glassShades]）
+      final tinted = look.glassTint == MeowGlassTint.tinted;
+      final s = look.bgStyle == MeowBgStyle.gradient
+          ? glassGradientShades(Color(look.gradientFrom), Color(look.gradientTo), dark: isDark, tinted: tinted)
+          : glassShades(Color(look.cardColor), dark: isDark, tinted: tinted);
       final solid = Color.alphaBlend(s.card, s.bg);
-      pageBgs = [s.bg, ...?s.gradient];
+      // 字要在底色、玻璃卡片、卡片里的次级底上都读得清：渐层上取一串位置（两端与中间），逐个叠出来比
+      pageBgs = glassSurfaces(s);
       tokens = base.copyWith(
         bg: s.bg,
         bgGradient: s.gradient,
+        bgDiagonal: s.diagonal,
         elev: s.card,
         elevSolid: solid,
         card2: s.card2,
@@ -202,8 +211,8 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         cardSheen: s.sheen,
         cardShadow: s.shadow,
         glassTint: isDark ? solid : null,
-        // 次级字在最深的那截底色上也要 ≥ 4.5:1（饱和一点的底色比原来的页面底深，原来的 #665A69 差一点点）
-        t2: isDark ? null : ensureContrast(base.t2, pageBgs, lighten: false),
+        // 次级字在最不利的那一处也要 ≥ 4.5:1（饱和一点的底色比原来的页面底深，原来的 #665A69 差一点点）
+        t2: ensureContrast(base.t2, pageBgs, lighten: isDark),
         glass: true,
         glassTinted: look.glassTint == MeowGlassTint.tinted,
         heroGradient: heroGradient,
@@ -224,7 +233,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         glassPanel: shades.card,
       );
     }
-    final accent = accentShades(Color(look.accentColor), dark: isDark, backgrounds: isDark ? const [] : pageBgs);
+    final accent = accentShades(Color(look.accentColor), dark: isDark, backgrounds: pageBgs);
     return tokens._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
   }
 
@@ -268,7 +277,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 强调色 → 强调字色（对比度自动修正）、选中态淡底、进度条填充。
   /// 浅色：在页面底与白卡上都 ≥ 4.5:1，不够就压暗；淡底是同色相很淡的实色。
   /// 深色：在深色底与卡片上 ≥ 4.5:1，不够就提亮（起点至少 78% 亮度，与原来的 #F7B6CB 一族）；淡底是半透明。缺省玫红给回原来的值。
-  /// [backgrounds] = 另外还要读得清的底色（液态玻璃的浅色底色，比原来的页面底深）。
+  /// [backgrounds] = 另外还要读得清的底色（液态玻璃的底色与玻璃卡片，见 [glassSurfaces]）。
   static ({Color accent, Color soft, Color fill}) accentShades(
     Color pick, {
     required bool dark,
@@ -296,7 +305,11 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     }
     final start = HSLColor.fromAHSL(1, h, s, hsl.lightness.clamp(0.78, 1.0)).toColor();
     return (
-      accent: ensureContrast(start, const [Color(0xFF0E0C11), Color(0xFF221C29), Color(0xFF2F2838)], lighten: true),
+      accent: ensureContrast(
+        start,
+        [const Color(0xFF0E0C11), const Color(0xFF221C29), const Color(0xFF2F2838), ...backgrounds],
+        lighten: true,
+      ),
       soft: HSLColor.fromAHSL(0.16, h, s, 0.80).toColor(),
       fill: fill,
     );
@@ -363,6 +376,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     fill: fill,
     elevSolid: elevSolid,
     bgGradient: bgGradient,
+    bgDiagonal: bgDiagonal,
     cardRim: cardRim,
     cardSheen: cardSheen,
     cardShadow: cardShadow,
@@ -425,6 +439,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         rim: const Color(0xBFFFFFFF), // 白 75%
         sheen: const Color(0xE6FFFFFF), // 白 90%
         shadow: HSLColor.fromAHSL(0.10, h, math.min(s, 0.5), 0.30).toColor(),
+        diagonal: false,
       );
     }
     final bs = math.min(s, 0.32);
@@ -443,7 +458,53 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       rim: const Color(0x1FFFFFFF), // 白 12%
       sheen: const Color(0x1AFFFFFF), // 白 10%
       shadow: const Color(0x00000000),
+      diagonal: false,
     );
+  }
+
+  /// 液态玻璃主题的「渐变」底色：两种颜色左上 → 右下的斜向渐变，卡片与单色底色同一套（见 [glassShades]）。
+  /// 两端各取自己的色相：浅色饱和度 ≤ 0.6、起始端亮度 0.915、结束端 0.885（左上稍亮）；深色饱和度 ≤ 0.35、亮度 0.13 → 0.075。
+  /// 「着色」的卡片底取两端着色的中间色；投影取中间色的色相。[MeowGlassShades.bg] 是渐变的中间色。
+  static MeowGlassShades glassGradientShades(Color from, Color to, {required bool dark, bool tinted = false}) {
+    final a = HSLColor.fromColor(from.withValues(alpha: 1)), b = HSLColor.fromColor(to.withValues(alpha: 1));
+    Color end(HSLColor c, double maxS, double l, [double alpha = 1]) =>
+        HSLColor.fromAHSL(alpha, c.hue, math.min(c.saturation, maxS), l).toColor();
+    final gradient = dark
+        ? [end(a, 0.35, 0.13), end(b, 0.35, 0.075)]
+        : [end(a, 0.6, 0.915), end(b, 0.6, 0.885)];
+    final mid = Color.lerp(gradient[0], gradient[1], 0.5)!;
+    final m = HSLColor.fromColor(mid);
+    if (!dark) {
+      return (
+        bg: mid,
+        gradient: gradient,
+        card: tinted ? Color.lerp(end(a, 0.6, 0.97, 0.62), end(b, 0.6, 0.97, 0.62), 0.5)! : const Color(0x85FFFFFF),
+        card2: const Color(0x8CFFFFFF),
+        rim: const Color(0xBFFFFFFF),
+        sheen: const Color(0xE6FFFFFF),
+        shadow: HSLColor.fromAHSL(0.10, m.hue, math.min(m.saturation, 0.5), 0.30).toColor(),
+        diagonal: true,
+      );
+    }
+    return (
+      bg: mid,
+      gradient: gradient,
+      card: tinted ? Color.lerp(end(a, 0.6, 0.70, 0.12), end(b, 0.6, 0.70, 0.12), 0.5)! : const Color(0x12FFFFFF),
+      card2: const Color(0x0FFFFFFF),
+      rim: const Color(0x1FFFFFFF),
+      sheen: const Color(0x1AFFFFFF),
+      shadow: const Color(0x00000000),
+      diagonal: true,
+    );
+  }
+
+  /// 字要读得清的那些面：底色（有渐层时沿渐层取 9 个位置，渐层上最深 / 最浅处不一定在两端）、叠在上面的玻璃卡片、卡片里的次级底。
+  static List<Color> glassSurfaces(MeowGlassShades s) {
+    final g = s.gradient;
+    final bgs = g == null ? [s.bg] : [for (var i = 0; i <= 8; i++) Color.lerp(g.first, g.last, i / 8)!];
+    return [
+      for (final bg in bgs) ...[bg, Color.alphaBlend(s.card, bg), Color.alphaBlend(s.card2, Color.alphaBlend(s.card, bg))],
+    ];
   }
 
   @override
@@ -460,6 +521,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     Color? glassPanel,
     Color? elevSolid,
     List<Color>? bgGradient,
+    bool? bgDiagonal,
     Color? cardRim,
     Color? cardSheen,
     Color? cardShadow,
@@ -501,6 +563,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     // 只换卡片底时实色跟着换（经典主题下二者是同一个颜色）
     elevSolid: elevSolid ?? elev ?? this.elevSolid,
     bgGradient: bgGradient ?? this.bgGradient,
+    bgDiagonal: bgDiagonal ?? this.bgDiagonal,
     cardRim: cardRim ?? this.cardRim,
     cardSheen: cardSheen ?? this.cardSheen,
     cardShadow: cardShadow ?? this.cardShadow,
@@ -548,6 +611,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       elevSolid: c(elevSolid, other.elevSolid),
       // 渐层与卡片的玻璃画法同主题风格一样不插值
       bgGradient: t < 0.5 ? bgGradient : other.bgGradient,
+      bgDiagonal: t < 0.5 ? bgDiagonal : other.bgDiagonal,
       cardRim: t < 0.5 ? cardRim : other.cardRim,
       cardSheen: c(cardSheen, other.cardSheen),
       cardShadow: c(cardShadow, other.cardShadow),
@@ -564,6 +628,9 @@ typedef MeowGlassShades = ({
   Color rim,
   Color sheen,
   Color shadow,
+
+  /// [gradient] 是左上 → 右下的斜向渐变（「渐变」底色）；否则自上而下
+  bool diagonal,
 });
 
 /// 外观设置里决定颜色 token 的几项（见 [MeowTokens.resolve]）。
@@ -575,16 +642,26 @@ class MeowLook {
     this.cardColor = MeowCardColors.white,
     this.heroColor = MeowHeroColors.sakura,
     this.accentColor = MeowAccentColors.rose,
+    this.bgStyle = MeowBgStyle.solid,
+    this.gradientFrom = MeowBgGradients.defaultFrom,
+    this.gradientTo = MeowBgGradients.defaultTo,
   });
 
-  /// 从设置里取（经典主题下玻璃样式不影响任何东西，一律记成缺省，切样式时不白建主题）
-  factory MeowLook.of(MeowSettings s) => MeowLook(
-    style: s.themeStyle,
-    glassTint: s.themeStyle == MeowThemeStyle.glass ? s.glassTint : MeowGlassTint.clear,
-    cardColor: s.cardColor,
-    heroColor: s.heroColor,
-    accentColor: s.accentColor,
-  );
+  /// 从设置里取（经典主题下玻璃样式、底色样式不影响任何东西，一律记成缺省，切样式时不白建主题；单色底色时渐变两色同理）
+  factory MeowLook.of(MeowSettings s) {
+    final glass = s.themeStyle == MeowThemeStyle.glass;
+    final gradient = glass && s.bgStyle == MeowBgStyle.gradient;
+    return MeowLook(
+      style: s.themeStyle,
+      glassTint: glass ? s.glassTint : MeowGlassTint.clear,
+      cardColor: s.cardColor,
+      heroColor: s.heroColor,
+      accentColor: s.accentColor,
+      bgStyle: gradient ? MeowBgStyle.gradient : MeowBgStyle.solid,
+      gradientFrom: gradient ? s.bgGradientFrom : MeowBgGradients.defaultFrom,
+      gradientTo: gradient ? s.bgGradientTo : MeowBgGradients.defaultTo,
+    );
+  }
 
   /// 缺省外观：经典 + 白卡 + 樱粉主卡 + 玫红强调，就是改版前的样子
   static const classic = MeowLook();
@@ -595,6 +672,10 @@ class MeowLook {
   /// ARGB
   final int cardColor, heroColor, accentColor;
 
+  /// 液态玻璃的底色样式：单色（[cardColor]）/ 渐变（[gradientFrom] → [gradientTo]，ARGB）
+  final MeowBgStyle bgStyle;
+  final int gradientFrom, gradientTo;
+
   bool get glass => style == MeowThemeStyle.glass;
 
   @override
@@ -604,10 +685,14 @@ class MeowLook {
       other.glassTint == glassTint &&
       other.cardColor == cardColor &&
       other.heroColor == heroColor &&
-      other.accentColor == accentColor;
+      other.accentColor == accentColor &&
+      other.bgStyle == bgStyle &&
+      other.gradientFrom == gradientFrom &&
+      other.gradientTo == gradientTo;
 
   @override
-  int get hashCode => Object.hash(style, glassTint, cardColor, heroColor, accentColor);
+  int get hashCode =>
+      Object.hash(style, glassTint, cardColor, heroColor, accentColor, bgStyle, gradientFrom, gradientTo);
 }
 
 /// 卡片颜色的预设（「我的 › 外观 › 卡片颜色」，与设计稿同一组）；预设以外的就是自定义取色。
@@ -624,6 +709,23 @@ abstract final class MeowCardColors {
 
   /// 预设名；自定义的返回 null
   static String? nameOf(int color) => presets.where((p) => p.$2 == color).firstOrNull?.$1;
+}
+
+/// 液态玻璃「渐变」底色的预设（起始色 → 结束色，左上 → 右下）：取品牌的奶油粉一族，两端色相相邻、亮度相近，
+/// 实际铺出来的颜色由 [MeowTokens.glassGradientShades] 推（浅色是淡彩、深色压成同色相的深色），这里存的是「选的颜色」。
+abstract final class MeowBgGradients {
+  static const defaultFrom = 0xFFF7CDDB, defaultTo = 0xFFDED4F5;
+  static const presets = <(String, int, int)>[
+    ('樱粉 · 薰衣草', defaultFrom, defaultTo),
+    ('奶油 · 蜜桃', 0xFFFBE3C2, 0xFFFBCFC2),
+    ('薄荷 · 雾蓝', 0xFFCDEBDD, 0xFFCFDDF3),
+    ('雾蓝 · 薰衣草', 0xFFCFDDF3, 0xFFDED4F5),
+    ('蜜桃 · 樱粉', 0xFFFBD3C7, 0xFFF7CDDB),
+    ('柠檬 · 薄荷', 0xFFF4EDC4, 0xFFCDEBDD),
+  ];
+
+  /// 预设名；自定义的返回 null
+  static String? nameOf(int from, int to) => presets.where((p) => p.$2 == from && p.$3 == to).firstOrNull?.$1;
 }
 
 /// 启动卡片（连接主卡）颜色的预设；缺省樱粉 = 原来的主卡色。

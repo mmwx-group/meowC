@@ -393,19 +393,7 @@ class ColorChoiceRow extends ConsumerWidget {
             label: '自定义',
             selected: name == null,
             size: _swatch,
-            fill: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: SweepGradient(
-                colors: [
-                  Color(0xFFF3A6BF),
-                  Color(0xFFB3A2FF),
-                  Color(0xFF7CCFE0),
-                  Color(0xFF57D292),
-                  Color(0xFFF2B257),
-                  Color(0xFFF3A6BF),
-                ],
-              ),
-            ),
+            fill: const BoxDecoration(shape: BoxShape.circle, gradient: _rainbow),
             onTap: () => mePush(context, ColorPickerPage(kind: kind, initial: Color(color))),
           ),
         ],
@@ -413,6 +401,111 @@ class ColorChoiceRow extends ConsumerWidget {
     );
   }
 }
+
+/// 液态玻璃的「底色」：单色 / 渐变两种，上面一个分段切换，下面是对应的预设（单色同「卡片颜色」那一组，渐变是 [MeowBgGradients]）+ 自定义。
+/// 存的仍是 cardColor（单色）与 bgStyle / bgGradientFrom / bgGradientTo（渐变），老配置没有后几项 = 单色。
+class GlassBgRow extends ConsumerWidget {
+  const GlassBgRow({super.key});
+
+  static const _swatch = 28.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final style = ref.watch(meowSettingProvider.select((s) => s.bgStyle));
+    final solid = ref.watch(meowSettingProvider.select((s) => s.cardColor));
+    final from = ref.watch(meowSettingProvider.select((s) => s.bgGradientFrom));
+    final to = ref.watch(meowSettingProvider.select((s) => s.bgGradientTo));
+    final dense = MeDense.of(context);
+    final gradient = style == MeowBgStyle.gradient;
+    final String value;
+    if (gradient) {
+      value = MeowBgGradients.nameOf(from, to) ?? '自定义渐变';
+    } else {
+      value = MeowCardColors.nameOf(solid) ?? '自定义 #${meowHexDigits(Color(solid))}';
+    }
+    return _StackedRow(
+      label: '底色',
+      value: value,
+      caption: gradient
+          ? '两种颜色从左上到右下铺满整页，内容卡片是半透明的玻璃；深色下取同色相的深色渐变。'
+          : MeowColorKind.card.caption(true),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          MeowSegment<MeowBgStyle>(
+            items: [for (final v in MeowBgStyle.values) (v, v.label)],
+            value: style,
+            onCard: true,
+            height: dense ? 32 : 38,
+            fontSize: dense ? 12 : 13,
+            onChanged: (v) => _update(ref, (s) => s.copyWith(bgStyle: v)),
+          ),
+          SizedBox(height: dense ? 8 : 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: gradient
+                ? [
+                    for (final (label, a, b) in MeowBgGradients.presets)
+                      _Swatch(
+                        label: label,
+                        selected: a == from && b == to,
+                        size: _swatch,
+                        fill: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Color(a), Color(b)],
+                          ),
+                        ),
+                        onTap: () => _update(ref, (s) => s.copyWith(bgGradientFrom: a, bgGradientTo: b)),
+                      ),
+                    _customSwatch(
+                      selected: MeowBgGradients.nameOf(from, to) == null,
+                      onTap: () => mePush(context, GradientPickerPage(from: Color(from), to: Color(to))),
+                    ),
+                  ]
+                : [
+                    for (final (label, c) in MeowCardColors.presets)
+                      _Swatch(
+                        label: label,
+                        selected: c == solid,
+                        size: _swatch,
+                        fill: BoxDecoration(color: Color(c), shape: BoxShape.circle),
+                        onTap: () => _update(ref, (s) => s.copyWith(cardColor: c)),
+                      ),
+                    _customSwatch(
+                      selected: MeowCardColors.nameOf(solid) == null,
+                      onTap: () => mePush(context, ColorPickerPage(kind: MeowColorKind.card, initial: Color(solid))),
+                    ),
+                  ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _customSwatch({required bool selected, required VoidCallback onTap}) => _Swatch(
+    label: '自定义',
+    selected: selected,
+    size: _swatch,
+    fill: const BoxDecoration(shape: BoxShape.circle, gradient: _rainbow),
+    onTap: onTap,
+  );
+}
+
+/// 「自定义」色块的彩虹圈
+const _rainbow = SweepGradient(
+  colors: [
+    Color(0xFFF3A6BF),
+    Color(0xFFB3A2FF),
+    Color(0xFF7CCFE0),
+    Color(0xFF57D292),
+    Color(0xFFF2B257),
+    Color(0xFFF3A6BF),
+  ],
+);
 
 class _Swatch extends StatelessWidget {
   const _Swatch({required this.label, required this.selected, required this.size, required this.fill, required this.onTap});
@@ -517,6 +610,158 @@ class _ColorPickerPageState extends ConsumerState<ColorPickerPage> {
         ),
       ],
     );
+  }
+}
+
+/// 自定义渐变底色：上面是浅 / 深两种外观下铺出来的样子，「起始色 / 结束色」切换正在调的那一端，取色器与十六进制输入同 [ColorPickerPage]。
+/// 右上角确定后存两种颜色并切到「渐变」。
+class GradientPickerPage extends ConsumerStatefulWidget {
+  const GradientPickerPage({super.key, required this.from, required this.to});
+
+  final Color from, to;
+
+  @override
+  ConsumerState<GradientPickerPage> createState() => _GradientPickerPageState();
+}
+
+class _GradientPickerPageState extends ConsumerState<GradientPickerPage> {
+  late Color _from = widget.from.withValues(alpha: 1), _to = widget.to.withValues(alpha: 1);
+
+  /// 0 = 起始色，1 = 结束色
+  var _end = 0;
+  late final _controller = ValueNotifier<Color>(_from)..addListener(_onPick);
+
+  void _onPick() {
+    final c = _controller.value;
+    setState(() => _end == 0 ? _from = c : _to = c);
+  }
+
+  void _switch(int end) {
+    setState(() => _end = end);
+    _controller.value = end == 0 ? _from : _to;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _confirm() {
+    _update(
+      ref,
+      (s) => s.copyWith(
+        bgStyle: MeowBgStyle.gradient,
+        bgGradientFrom: _from.toARGB32() | 0xFF000000,
+        bgGradientTo: _to.toARGB32() | 0xFF000000,
+      ),
+    );
+    final sheet = MeSheetScope.maybeOf(context);
+    if (sheet != null) {
+      sheet.navigator.back();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dense = MeDense.of(context);
+    return MeSubPage.list(
+      title: '自定义渐变底色',
+      actions: [RoundGlassButton(icon: Icons.check_rounded, filled: true, tooltip: '确定', onTap: _confirm)],
+      children: [
+        GradientPreview(from: _from, to: _to),
+        MeSection(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MeowSegment<int>(
+                    items: const [(0, '起始色（左上）'), (1, '结束色（右下）')],
+                    value: _end,
+                    onCard: true,
+                    height: dense ? 32 : 38,
+                    fontSize: dense ? 12 : 13,
+                    onChanged: _switch,
+                  ),
+                  const SizedBox(height: 10),
+                  MeowPalette(controller: _controller),
+                ],
+              ),
+            ),
+          ],
+        ),
+        MeSection(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: ValueListenableBuilder(
+                valueListenable: _controller,
+                builder: (_, color, _) => MeowHexColorField(color: color, onChanged: (c) => _controller.value = c),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// 渐变底色在浅色 / 深色下铺出来的样子：斜向渐变的底上放一张玻璃卡片（跟着当前的玻璃样式）。
+class GradientPreview extends StatelessWidget {
+  const GradientPreview({super.key, required this.from, required this.to});
+
+  final Color from, to;
+
+  @override
+  Widget build(BuildContext context) {
+    final tinted = context.mm.glassTinted;
+    Widget sample(String label, bool dark) {
+      final base = dark ? MeowTokens.dark : MeowTokens.light;
+      final g = MeowTokens.glassGradientShades(from, to, dark: dark, tinted: tinted);
+      return Expanded(
+        child: Container(
+          height: 76,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: g.gradient!),
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: MeowCardDecoration(
+              color: g.card,
+              borderRadius: BorderRadius.circular(12),
+              rim: g.rim,
+              sheen: g.sheen,
+              shadow: g.shadow,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: base.t1),
+                  ),
+                ),
+                Container(
+                  width: 34,
+                  height: 20,
+                  decoration: BoxDecoration(color: g.card2, borderRadius: BorderRadius.circular(10)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(children: [sample('浅色', false), const SizedBox(width: 10), sample('深色', true)]);
   }
 }
 
