@@ -164,3 +164,10 @@
 - 换网重置：新增 `android/.../services/UnderlyingNetworkTracker.kt`（VPN 建好时由 `BettboxVpnService` 启动、stop 时停）跟踪最佳非 VPN 网络，变了就 `setUnderlyingNetworks`，换成另一个网络时去抖 1 秒调 `Core.onUnderlyingNetworkChanged`（`core.cpp` JNI → `core/meow_netreset_android.go` 的 `networkChanged`）：清网卡缓存、DNS 上游连接与缓存、统计表里全部连接、各协议空闲连接池，再重测自动组。以前只有系统 DNS 字符串变了才通知内核，Wi-Fi 与移动数据同时在线时来回切往往不变。新增 `core/Clash.Meta/component/netreset` 钩子，Miu 空闲通道（`transport/miu/client.go`）与 Snell v6 复用池（`transport/snell/v6.go`、`v6_reuse.go` 的 `closeIdle`）接上。
 - 拣选上游 Bettbox `60c9862e`（Improve Android service lifecycle）的一部分：`VpnPlugin.kt` 连上后 `startStickyService`（VPN 服务成为 started + START_STICKY，被系统杀掉后拉起并以 quick 参数重连）、`restoreNotification` 改成直接调服务方法（`ServicePlugin.kt` / `BettboxVpnService.kt`）、`core/lib_android.go` 的 quickStart 初始化失败后 return。MainActivity 的高刷新率改动没拣。
 - `lib/meowx/state/battery_prompt.dart` + `app/meow_root.dart`：Android 第一次连上后，App 不在「忽略电池优化」白名单里就提示一次（附三星「永不休眠的应用」「电池 › 不受限制」的设置位置），只提示一次。
+
+## 2026-10-27 · Android 上残留的 Bettbox 字样
+- `services/BaseServiceInterface.kt`：前台服务通知的缺省标题 `Bettbox` → `MeowX`；三个通知渠道的名字（系统设置 › 通知里看得到）`Bettbox Service` / `Bettbox High Priority Service` / `Bettbox Suspended Service` → `MeowX …`，旧版本已经建好的渠道按同一 ID 重新提交一次改名（渠道 ID 不变，用户对渠道的设置保留）。
+- `services/BettboxVpnService.kt`：VPN 会话名 `setSession("Bettbox")` → `MeowX`（系统 VPN 状态里显示）。
+- `plugins/VpnPlugin.kt`：智能启停的两条 Toast `Bettbox Suspended` / `Bettbox Connected` → `MeowX …`。
+- `android/app/src/debug/AndroidManifest.xml`：debug 包的应用名与快捷开关名 `Bettbox Debug` → `MeowX Debug`。
+- 包名、类名、渠道 ID 等内部标识不动。

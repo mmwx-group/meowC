@@ -81,7 +81,7 @@ suspend fun Service.createBettboxNotificationBuilder(
             if (largeIconBitmap != null) {
                 setLargeIcon(largeIconBitmap)
             }
-            setContentTitle("Bettbox")
+            setContentTitle("MeowX")
             setContentIntent(pendingIntent)
             setCategory(NotificationCompat.CATEGORY_SERVICE)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -105,17 +105,22 @@ fun Service.ensureNotificationChannel(
         isHighPriority -> GlobalState.NOTIFICATION_CHANNEL_HIGH
         else -> GlobalState.NOTIFICATION_CHANNEL
     }
+    val name = when {
+        isSuspended -> "MeowX Suspended Service"
+        isHighPriority -> "MeowX High Priority Service"
+        else -> "MeowX Service"
+    }
     val channel = manager.getNotificationChannel(channelId)
+    if (channel != null && channel.name != name) {
+        // MeowX：旧版本建的渠道名还是「Bettbox …」，同 ID 再提交一次只改名、不动用户设置
+        channel.name = name
+        manager.createNotificationChannel(channel)
+    }
     if (channel == null) {
         val importance = when {
             isSuspended -> NotificationManager.IMPORTANCE_DEFAULT
             isHighPriority -> NotificationManager.IMPORTANCE_HIGH
             else -> NotificationManager.IMPORTANCE_LOW
-        }
-        val name = when {
-            isSuspended -> "Bettbox Suspended Service"
-            isHighPriority -> "Bettbox High Priority Service"
-            else -> "Bettbox Service"
         }
         val newChannel = NotificationChannel(channelId, name, importance).apply {
             setShowBadge(false)

@@ -143,7 +143,7 @@ class BettboxVpnService : VpnService(), BaseServiceInterface {
             }
         }
 
-        setSession("Bettbox")
+        setSession("MeowX")
         setBlocking(false)
         if (Build.VERSION.SDK_INT >= 29) setMetered(false)
         if (options.allowBypass) allowBypass()
