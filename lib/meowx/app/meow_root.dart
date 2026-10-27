@@ -25,6 +25,7 @@ import '../state/connection.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
+import '../state/wifi_switch.dart';
 import '../theme/tokens.dart';
 import 'frame_log.dart';
 import 'meow_dock.dart';
@@ -49,6 +50,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
   late final ProviderSubscription<bool> _batterySub;
+  final List<ProviderSubscription<Object?>> _wifiSubs = [];
   RealtimeClient? _realtime;
 
   @override
@@ -99,6 +101,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         unawaited(Future<void>.delayed(const Duration(seconds: 2), maybePromptBatteryOptimization));
       }
     });
+    if (system.isAndroid) _listenWifiSwitch();
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {
@@ -115,6 +118,39 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       }
       _pushBettboxPage(next);
     });
+  }
+
+  /// Wi-Fi 智能开关（只 Android）：等 Bettbox 初始化完（自动连接已经起完）再开始看网络；之后运行状态的变化
+  /// 不是规则自己引起的就算用户手动（电源键、磁贴、通知都算），换网前不再干预。设置变了就重新决策。
+  void _listenWifiSwitch() {
+    WifiSwitchController wifi() => ref.read(wifiSwitchProvider);
+    _wifiSubs.add(
+      ref.listenManual<bool>(initProvider, (prev, next) {
+        if (next) wifi().start();
+      }, fireImmediately: true),
+    );
+    // 直接听 runTimeProvider（不经派生的 isRunningProvider）：通知是同步的，判得出是不是规则自己在暂停 / 恢复
+    _wifiSubs.add(
+      ref.listenManual<bool>(runTimeProvider.select((t) => t != null), (prev, next) {
+        if (prev != next && ref.read(initProvider)) wifi().observedRunChange();
+      }),
+    );
+    _wifiSubs.add(
+      ref.listenManual<(bool, String, MeowWifiAction)>(
+        meowSettingProvider.select(
+          // 规则拼成字符串比较：freezed 列表的 == 只认同一个实例
+          (s) => (s.wifiSwitchEnabled, s.wifiRules.map((r) => '${r.action.name} ${r.ssid}').join('\n'), s.wifiOtherAction),
+        ),
+        (prev, next) {
+          if (prev == null || !ref.read(initProvider)) return;
+          if (prev.$1 != next.$1) {
+            unawaited(next.$1 ? wifi().enabled() : wifi().disabled());
+          } else if (next.$1) {
+            unawaited(wifi().reevaluate());
+          }
+        },
+      ),
+    );
   }
 
   /// 切到内置直连档 → mode=direct；不在直连档上而 direct 是当初自动设的 → 恢复 rule。
@@ -165,6 +201,9 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _realtimeSub.close();
     _po0Sub.close();
     _batterySub.close();
+    for (final sub in _wifiSubs) {
+      sub.close();
+    }
     _realtime?.stop();
     super.dispose();
   }

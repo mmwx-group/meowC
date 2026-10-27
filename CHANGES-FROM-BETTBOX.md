@@ -171,3 +171,10 @@
 - `plugins/VpnPlugin.kt`：智能启停的两条 Toast `Bettbox Suspended` / `Bettbox Connected` → `MeowX …`。
 - `android/app/src/debug/AndroidManifest.xml`：debug 包的应用名与快捷开关名 `Bettbox Debug` → `MeowX Debug`。
 - 包名、类名、渠道 ID 等内部标识不动。
+
+## 2026-10-27 · Wi-Fi 智能开关（只 Android）
+- 新增 `plugins/wifi_ssid`：移植自 FlClash 的同名插件（MIT，© 2025 FlClash，LICENSE 随插件），只保留 Android。读 SSID（Android 12+ 经带 `FLAG_INCLUDE_LOCATION_INFO` 的 Wi-Fi 网络回调取 `WifiInfo`，更早的系统用 `WifiManager`）与定位权限申请（前台 → 后台「始终允许」分两步）原样保留；MeowX 加了 `getNetworkState`（非 VPN 网络里有没有 Wi-Fi / 蜂窝 / 有线、精确 / 后台定位权限、定位服务开关）、`openAppSettings`、`openLocationSettings`。插件清单经清单合并给 App 加上 `ACCESS_WIFI_STATE`、`ACCESS_COARSE_LOCATION`、`ACCESS_FINE_LOCATION`、`ACCESS_BACKGROUND_LOCATION`（App 自己的 AndroidManifest 没改）。
+- `pubspec.yaml`：加 `wifi_ssid`（path 依赖）。
+- `android/.../plugins/VpnPlugin.kt handleSmartStop`：暂停时的 Toast 由「Bettbox Suspended」改成「MeowX 已暂停代理」（Wi-Fi 规则断开时用户会看到它）。
+- `lib/models/meow.dart MeowSettings`：`wifiSwitchEnabled`、`wifiRules`（`MeowWifiRule{ssid, action}`）、`wifiOtherAction`（`MeowWifiAction`：不变 / 连接代理 / 断开代理，缺省连接）。
+- 其余在 `lib/meowx/`：规则判定与执行（`state/wifi_switch.dart`）、「我的 › Wi-Fi 智能开关」页（`pages/settings/wifi_switch_page.dart`，手机是入口行、宽屏是一个分组）、`app/meow_root.dart` 接线、首页主卡的「已暂停」、电源键在暂停中点 = 恢复（`state/connection.dart`）。断开 / 连接复用 Bettbox 已有的智能启停（`smartStop` / `smartResume`，VPN 服务留着、核心挂起）：规则只暂停 / 恢复正在用的代理，不打开用户自己关掉的；打开本功能时关掉「高级」里 Bettbox 按 IP / 网关的「智能启停」（两者共用一个暂停状态）。与 iOS / macOS 的 Wi-Fi 规则同一思路：SSID 第一条命中，其余走「其它网络」，只在网络变化时触发，手动开关后换网前不再干预；读不到 SSID 时不切换并写明原因。

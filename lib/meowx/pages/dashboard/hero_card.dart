@@ -12,6 +12,7 @@ import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
+import '../../state/wifi_switch.dart';
 import '../../theme/glass.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -35,6 +36,7 @@ class HomeHeroCard extends ConsumerWidget {
     final (hint, tone, status) = switch (phase) {
       ConnPhase.on => ('${modeLabel(mode)}模式 · ${vpn ? 'VPN 已建立' : '核心运行中'}', mm.good, S.connected),
       ConnPhase.connecting => ('${modeLabel(mode)}模式 · 正在启动', mm.mid, S.connecting),
+      ConnPhase.off when ref.watch(wifiPausedProvider) => ('Wi-Fi 规则暂停中 · 点电源键恢复', mm.mid, '已暂停'),
       ConnPhase.off => (hasProfile ? S.ready : S.notConfigured, mm.t2, S.disconnected),
     };
     final gap = dense ? 10.0 : 12.0;

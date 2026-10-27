@@ -1,0 +1,19 @@
+name: wifi_ssid
+description: 读当前 Wi-Fi 名称（SSID）与定位权限状态（Android）。移植自 FlClash 的 plugins/wifi_ssid（MIT），MeowX 加了网络类型 / 定位服务 / 跳设置页。
+version: 0.0.1
+publish_to: none
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.follow.clash.wifi_ssid
+        pluginClass: WifiSsidPlugin

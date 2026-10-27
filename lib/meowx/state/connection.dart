@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app/meow_tab.dart';
 import 'meow_settings.dart';
 import 'status.dart';
+import 'wifi_switch.dart';
 
 /// 桌面形态（Windows）。`--dart-define=MEOWX_PREVIEW_DESKTOP=true` 只用于在 Android 模拟器上预览桌面布局，正式包不带。
 final isDesktopUi = system.isWindows || const bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
@@ -38,6 +39,19 @@ class PowerController extends Notifier<PowerState> {
 
   Future<void> toggle() async {
     if (state.busy) return;
+    // 被 Wi-Fi 规则暂停着：点电源键 = 恢复（记为手动，换网前不再自动断开）。暂停状态下直接走启动流程会撞上
+    // Bettbox 的挂起态（它自己的启动键这时是禁用的）
+    if (ref.read(wifiPausedProvider)) {
+      state = const PowerState(busy: true, optimistic: true);
+      try {
+        await ref.read(wifiSwitchProvider).resumeManually();
+      } catch (e) {
+        commonPrint.log('wifi resume failed: $e');
+      } finally {
+        state = const PowerState();
+      }
+      return;
+    }
     final isStart = ref.read(isRunningProvider);
     state = PowerState(busy: true, optimistic: !isStart);
     try {

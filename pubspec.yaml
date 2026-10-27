@@ -70,6 +70,9 @@ dependencies:
     path: plugins/code_forge
   flutter_qjs:
     path: plugins/flutter_qjs
+  # MeowX：Wi-Fi 智能开关读 SSID（移植自 FlClash 的同名插件，MIT，只有 Android）
+  wifi_ssid:
+    path: plugins/wifi_ssid
 dependency_overrides:
   flutter_rust_bridge: 2.12.0
   # Fix compile failure: https://github.com/leanflutter/hotkey_manager/pull/66
