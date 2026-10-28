@@ -492,30 +492,6 @@ class _RenderMeowFrostBox extends RenderProxyBox {
                 Colors.white.withValues(alpha: fill.bottom),
               ])),
     );
-    // 顶部反光：左 8% 到右 30%、高 42%，上沿随卡片圆角、下沿是大圆弧
-    if (!c.openTop) {
-      // 高的卡片（设置分组、长列表卡）不让反光拖成一大片：最多 [MeowFrostStyle.sheenMaxHeight]
-      final sheen = Rect.fromLTWH(
-        rect.left + size.width * 0.08,
-        rect.top,
-        size.width * 0.62,
-        math.min(size.height * 0.42, MeowFrostStyle.sheenMaxHeight),
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndCorners(
-          sheen,
-          topLeft: rrect.tlRadius,
-          topRight: rrect.trRadius,
-          bottomLeft: Radius.elliptical(sheen.width * 0.6, sheen.height * 0.6),
-          bottomRight: Radius.elliptical(sheen.width * 0.6, sheen.height * 0.6),
-        ).scaleRadii(),
-        Paint()
-          ..shader = ui.Gradient.linear(sheen.topCenter, sheen.bottomCenter, [
-            MeowFrostStyle.sheen(dark),
-            MeowFrostStyle.sheen(dark).withValues(alpha: 0),
-          ]),
-      );
-    }
     canvas.restore();
 
     // 顶部 1dp 内高光、底部 1dp 内暗边：沿边线描一道，往里很快淡掉（圆角处顺着弧线）

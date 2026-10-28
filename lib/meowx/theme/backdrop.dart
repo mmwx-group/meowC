@@ -300,12 +300,6 @@ abstract final class MeowFrostStyle {
   static Color inner(bool dark, double hue) =>
       dark ? const Color(0x40000000) : HSLColor.fromAHSL(0.10, hue, 0.4, 0.5).toColor();
 
-  /// 顶部反光：卡片左 8% 到右 30%、高 42%，白色自上而下淡出（浅 α.55 / 深 α.10，再乘 0.9）
-  static Color sheen(bool dark) => Colors.white.withValues(alpha: (dark ? 0.10 : 0.55) * 0.9);
-
-  /// 反光最高这么多（设计稿的卡片都矮，高卡片按 42% 会拖成一大片）
-  static const sheenMaxHeight = 64.0;
-
   /// 投影：浅 底色色相 L0.35 α.16 模糊 28 下移 10 + 一圈 1dp 小影；深 黑 α.35
   static Color drop(bool dark, double hue) =>
       dark ? const Color(0x59000000) : HSLColor.fromAHSL(0.16, hue, 0.35, 0.35).toColor();
