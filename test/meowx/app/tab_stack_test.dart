@@ -51,7 +51,9 @@ class _PaintCounter extends CustomPainter {
 void main() {
   group('MeowTabStack', () {
     Widget stack(MeowTab current, Widget Function(MeowTab) pageBuilder) => MaterialApp(
-      home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pageBuilder)),
+      home: Scaffold(
+        body: MeowTabStack(current: current, pageBuilder: pageBuilder),
+      ),
     );
 
     // 「动态」页一直挂着一个转圈（核心在跑、页面没加载完时就是这样）
@@ -234,7 +236,9 @@ void main() {
 
     testWidgets('提示气泡不会留在别的页上：不经触摸切页（系统返回键回首页）时也收掉', (tester) async {
       Widget tips(MeowTab t) => t == MeowTab.proxies
-          ? const Center(child: Tooltip(message: '测速全部', child: SizedBox(width: 60, height: 60)))
+          ? const Center(
+              child: Tooltip(message: '测速全部', child: SizedBox(width: 60, height: 60)),
+            )
           : Text(t.label);
       await tester.pumpWidget(stack(MeowTab.proxies, tips));
       // 长按出气泡，松手后它默认再留 1.5 秒
@@ -265,7 +269,9 @@ void main() {
                 TickerMode(
                   enabled: t == current,
                   child: t == MeowTab.proxies
-                      ? const Center(child: Tooltip(message: '测速全部', child: SizedBox(width: 60, height: 60)))
+                      ? const Center(
+                          child: Tooltip(message: '测速全部', child: SizedBox(width: 60, height: 60)),
+                        )
                       : Text(t.label),
                 ),
             ],
@@ -287,7 +293,11 @@ void main() {
     testWidgets('气泡刚弹出、还没走过一帧就切页：不在 build 期间摘 Overlay', (tester) async {
       Widget tips(MeowTab t) => t == MeowTab.proxies
           ? const Center(
-              child: Tooltip(message: '测速全部', triggerMode: TooltipTriggerMode.tap, child: SizedBox(width: 60, height: 60)),
+              child: Tooltip(
+                message: '测速全部',
+                triggerMode: TooltipTriggerMode.tap,
+                child: SizedBox(width: 60, height: 60),
+              ),
             )
           : Text(t.label);
       await tester.pumpWidget(stack(MeowTab.proxies, tips));
@@ -307,8 +317,13 @@ void main() {
     Widget pages(MeowTab t) => SizedBox.expand(key: pageKey(t), child: Text(t.label));
 
     Widget stack(MeowTab current, {bool reduce = false}) => MaterialApp(
-      builder: (context, c) => MediaQuery(data: MediaQuery.of(context).copyWith(disableAnimations: reduce), child: c!),
-      home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages)),
+      builder: (context, c) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: reduce),
+        child: c!,
+      ),
+      home: Scaffold(
+        body: MeowTabStack(current: current, pageBuilder: pages),
+      ),
     );
 
     Future<void> setUpView(WidgetTester tester) async {
@@ -346,11 +361,11 @@ void main() {
       expect(x(tester, MeowTab.proxies), isNull);
 
       await tester.pump(MeowMotion.tabSlide - half - const Duration(milliseconds: 10));
-      expect(x(tester, MeowTab.home), isNotNull);   // 还没推完
+      expect(x(tester, MeowTab.home), isNotNull); // 还没推完
       await tester.pump(const Duration(milliseconds: 10));
       expect(x(tester, MeowTab.me), 0);
       expect(x(tester, MeowTab.home), isNull);
-      await tester.pump(const Duration(milliseconds: 1));   // 控制器越过终点的下一帧报完成，之后不再要帧
+      await tester.pump(const Duration(milliseconds: 1)); // 控制器越过终点的下一帧报完成，之后不再要帧
       expect(tester.binding.hasScheduledFrame, isFalse);
     });
 
@@ -368,24 +383,26 @@ void main() {
       expect(x(tester, MeowTab.connections), isNull);
     });
 
-    testWidgets('不改透明度，每页垫着页面底色；新页压在旧页上面', (tester) async {
+    testWidgets('背景不动：页面底只在最外层画一份、各页透明；旧页淡出，新页压在旧页上面', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(stack(MeowTab.home));
       await switchTo(tester, MeowTab.proxies);
-      await tester.pump(const Duration(milliseconds: 120));
-      for (final t in [MeowTab.home, MeowTab.proxies]) {
+      const t = Duration(milliseconds: 120);
+      await tester.pump(t);
+      final bgs = find.descendant(of: find.byType(MeowTabStack), matching: find.byType(MeowBgBox));
+      expect(bgs, findsOneWidget);
+      final bg = tester.widget<MeowBgBox>(bgs);
+      expect(bg.fill.color, MeowTokens.light.bg);
+      // 底不跟着页面动
+      expect(tester.getTopLeft(bgs).dx, 0);
+      double opacity(MeowTab t) {
         final page = find.byKey(pageKey(t));
-        // 页与栈之间没有任何透明度（路由自己的 FadeTransition 在栈外面，不算）
-        final fades = find.ancestor(
-          of: page,
-          matching: find.byWidgetPredicate((w) => w is Opacity || w is FadeTransition || w is AnimatedOpacity),
-        );
-        final inStack = find.descendant(of: find.byType(MeowTabStack), matching: fades);
-        expect(inStack, findsNothing);
-        final box = tester.widget<MeowBgBox>(find.ancestor(of: page, matching: find.byType(MeowBgBox)).first);
-        expect(box.fill.color, MeowTokens.light.bg);
-        expect(box.fill.flat, isTrue);
+        expect(find.ancestor(of: page, matching: find.byType(MeowBgBox)), findsNothing);
+        return tester.widget<Opacity>(find.ancestor(of: page, matching: find.byType(Opacity)).first).opacity;
       }
+
+      expect(opacity(MeowTab.home), closeTo(1 - eased(t), 1e-6));
+      expect(opacity(MeowTab.proxies), 1);
       // 点两页重叠的地方：命中的是新页
       final hit = tester.hitTestOnBinding(const Offset(width - 10, 10));
       final top = hit.path.map((e) => e.target).whereType<RenderObject>().map((r) => r.debugCreator.toString());
@@ -410,7 +427,8 @@ void main() {
       const t = Duration(milliseconds: 200);
       await tester.pump(t);
       expect(x(tester, MeowTab.me), closeTo(width * (1 - eased(t)), 0.5));
-      expect(x(tester, MeowTab.proxies), closeTo(proxiesX - width * MeowMotion.tabParallax * eased(t), 0.5));
+      // 起点与这一帧各取整一次到物理像素，误差至多两个半像素
+      expect(x(tester, MeowTab.proxies), closeTo(proxiesX - width * MeowMotion.tabParallax * eased(t), 1));
       await tester.pump(MeowMotion.tabSlide);
       expect(x(tester, MeowTab.me), 0);
       expect(x(tester, MeowTab.home), isNull);
@@ -487,12 +505,16 @@ void main() {
         },
       );
       Widget stack(MeowTab current) => MaterialApp(
-        home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true)),
+        home: Scaffold(
+          body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true),
+        ),
       );
       final page = find.byKey(pageKey(MeowTab.proxies));
       bool semanticsExcluded(MeowTab t) => tester
           .widget<ExcludeSemantics>(
-            find.ancestor(of: find.byKey(pageKey(t), skipOffstage: false), matching: find.byType(ExcludeSemantics)).first,
+            find
+                .ancestor(of: find.byKey(pageKey(t), skipOffstage: false), matching: find.byType(ExcludeSemantics))
+                .first,
           )
           .excluding;
 
@@ -546,7 +568,9 @@ void main() {
     testWidgets('到点时正在切页：往后推，已经上过台的页不再垫', (tester) async {
       Widget pages(MeowTab t) => SizedBox.expand(key: pageKey(t), child: Text(t.label));
       Widget stack(MeowTab current) => MaterialApp(
-        home: Scaffold(body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true)),
+        home: Scaffold(
+          body: MeowTabStack(current: current, pageBuilder: pages, prewarm: true),
+        ),
       );
       await tester.pumpWidget(stack(MeowTab.home));
       await tester.pump(MeowTabStack.prewarmDelay - const Duration(milliseconds: 100));
@@ -563,6 +587,7 @@ void main() {
           if (find.byKey(pageKey(t)).evaluate().isNotEmpty) warmed.add(t);
         }
       }
+
       await tester.pump(MeowMotion.tabSlide);
       look();
       for (var i = 0; i < 10; i++) {

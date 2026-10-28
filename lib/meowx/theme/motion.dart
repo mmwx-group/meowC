@@ -50,11 +50,11 @@ abstract final class MeowMotion {
   static const drainDuration = Duration(milliseconds: 350);
   static const iconPopFrom = 0.6;
 
-  // ── 切 Tab 的整页平推（同 iOS：新页整页推入、旧页反向退 30%，不改透明度）──
+  // ── 切 Tab 的内容平推（同 iOS：新页整宽推入、旧页反向退 30% 并淡出，背景不动）──
   static const tabSlide = Duration(milliseconds: 380);
 
-  /// 临界阻尼、无回弹（iOS 那边是 dampingRatio 1 的弹簧）
-  static const tabSlideCurve = Curves.easeOutCubic;
+  /// 同 iOS 的 cubic-bezier(.32,.72,0,1)（位移与淡出共用）
+  static const tabSlideCurve = Cubic(.32, .72, 0, 1);
 
   /// 旧页退开的距离（页宽的比例）
   static const tabParallax = 0.3;
