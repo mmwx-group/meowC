@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -21,7 +22,7 @@ import 'meow_tab.dart';
 ///
 /// 切页是「内容平推、背景不动」（同 iOS 端，2026-10-27 用户在预览页选的方案 A，[MeowMotion.tabSlide]）：
 /// 往后切（序号变大）新页从右侧整宽推入、旧页同时往左退 [MeowMotion.tabParallax] 页宽并淡出，往前切反过来。
-/// 页面底只在最外层画一份、不跟页面动，各页本身透明：以前每页各垫一层底色一起推，渐层 / 玻璃底按屏幕位置逐帧重画，
+/// 页面底只在最外层画一份、不跟页面动，各页本身透明（所以每页只露出上面各页还没盖到的那一段，否则淡出中的旧页从新页空隙里透出来）：以前每页各垫一层底色一起推，渐层 / 玻璃底按屏幕位置逐帧重画，
 /// iOS 那边同样的做法在玻璃主题下前沿有接缝暗影（用户实报），两端一起改成背景不动。
 /// 只有这 380ms 里新旧两页同时画，结束后回到只画当前页。平推中又点了别的 Tab：画面上的各页从当时的位置与透明度接着走，
 /// 新目标压在最上面推入（目标本来就在画面上 = 往回点：它从当时的位置回正、淡回不透明，其余各页淡出，压在它上面的朝来的那一侧退出）。
@@ -217,6 +218,23 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
           final sliding = layers.length > 1;
           final onStage = {for (final l in layers) l.tab: _pos(l)};
           final alphas = {for (final l in layers) l.tab: _alpha(l)};
+          // 每页只露出上面各页还没盖到的那一段（页自己坐标里的横向区间）：各页透明，不裁的话淡出中的旧页
+          // 从新页的空隙里透出来（iOS 上用户实报「残影」）
+          final w = box.maxWidth;
+          final spans = <MeowTab, (double, double)>{};
+          if (sliding) {
+            for (final (i, l) in layers.indexed) {
+              var lo = double.negativeInfinity, hi = double.infinity;
+              for (final above in layers.skip(i + 1)) {
+                final o = snap(onStage[above.tab]!);
+                if (o.abs() >= w) continue;
+                if (o >= 0) hi = math.min(hi, o);
+                if (o <= 0) lo = math.max(lo, o + w);
+              }
+              final own = snap(onStage[l.tab]!);
+              spans[l.tab] = (lo - own, hi - own);
+            }
+          }
           _painted.addAll(onStage.keys);
           final warming = onStage.containsKey(_warming) ? null : _warming;
           if (warming != null) _painted.add(warming);
@@ -234,12 +252,19 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
                   child: Transform.translate(
                     offset: Offset(snap(onStage[t] ?? 0) + (t == warming ? _warmShifts[_warmStep] / dpr : 0), 0),
                     // 页面本身透明，底在最外层（不动）；页面内容那一层平推中只画一次
-                    child: RepaintBoundary(
-                      child: ExcludeSemantics(
-                        excluding: t == warming,
-                        child: TickerMode(
-                          enabled: onStage.containsKey(t) || t == widget.current || _leaving.contains(t),
-                          child: widget.pageBuilder(t),
+                    child: ClipRect(
+                      clipBehavior: spans.containsKey(t) ? Clip.hardEdge : Clip.none,
+                      clipper: switch (spans[t]) {
+                        (final lo, final hi) => _SpanClipper(lo, hi),
+                        null => null,
+                      },
+                      child: RepaintBoundary(
+                        child: ExcludeSemantics(
+                          excluding: t == warming,
+                          child: TickerMode(
+                            enabled: onStage.containsKey(t) || t == widget.current || _leaving.contains(t),
+                            child: widget.pageBuilder(t),
+                          ),
                         ),
                       ),
                     ),
@@ -267,6 +292,21 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
       ),
     );
   }
+}
+
+/// 只留页面里横向 [lo, hi) 这一段（页自己的坐标，可超出页面两边）。
+class _SpanClipper extends CustomClipper<Rect> {
+  const _SpanClipper(this.lo, this.hi);
+  final double lo, hi;
+
+  @override
+  Rect getClip(Size size) {
+    final l = lo.clamp(0.0, size.width), r = hi.clamp(0.0, size.width);
+    return r > l ? Rect.fromLTRB(l, 0, r, size.height) : Rect.zero;
+  }
+
+  @override
+  bool shouldReclip(_SpanClipper oldClipper) => oldClipper.lo != lo || oldClipper.hi != hi;
 }
 
 /// 让开软键盘：把 [child] 的底边收到键盘顶上。和 Scaffold 默认的 resizeToAvoidBottomInset 对 body 做的事逐项一致

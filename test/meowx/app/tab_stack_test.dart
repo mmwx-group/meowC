@@ -410,6 +410,34 @@ void main() {
       expect(top.any((c) => c.contains('page-home')), isFalse);
     });
 
+    testWidgets('旧页只露出新页还没盖到的那一段，不从新页的空隙里透出来；推完不再裁', (tester) async {
+      await setUpView(tester);
+      await tester.pumpWidget(stack(MeowTab.home));
+      await switchTo(tester, MeowTab.proxies);
+      await tester.pump(const Duration(milliseconds: 120));
+      Rect? clip(MeowTab t) {
+        final w = tester.widget<ClipRect>(
+          find.ancestor(of: find.byKey(pageKey(t)), matching: find.byType(ClipRect)).first,
+        );
+        if (w.clipBehavior == Clip.none) return null;
+        return w.clipper!.getClip(const Size(width, 800));
+      }
+
+      final homeX = x(tester, MeowTab.home)!, proxiesX = x(tester, MeowTab.proxies)!;
+      // 旧页（在左边退开）露出的是它自己左边、新页前沿以左那一段
+      expect(clip(MeowTab.home), Rect.fromLTRB(0, 0, proxiesX - homeX, 800));
+      expect(clip(MeowTab.proxies), const Rect.fromLTRB(0, 0, width, 800));
+
+      // 往前切：新页从左边来，旧页露出的是新页右沿以右那一段
+      await tester.pump(MeowMotion.tabSlide);
+      await switchTo(tester, MeowTab.home);
+      await tester.pump(const Duration(milliseconds: 120));
+      final h = x(tester, MeowTab.home)!, p = x(tester, MeowTab.proxies)!;
+      expect(clip(MeowTab.proxies), Rect.fromLTRB(h + width - p, 0, width, 800));
+      await tester.pump(MeowMotion.tabSlide);
+      expect(clip(MeowTab.home), isNull);
+    });
+
     testWidgets('平推中又点了别的 Tab：各页从当时的位置接着走，新目标从右侧推入，推完只剩它', (tester) async {
       await setUpView(tester);
       await tester.pumpWidget(stack(MeowTab.home));
