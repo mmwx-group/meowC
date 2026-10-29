@@ -99,7 +99,7 @@ class SpeedTestShareContent {
   /// 延迟毫秒数；null = 没测到
   final String? latency;
 
-  /// 「Microsoft · 多线程 8」/「Google · 单线程」
+  /// 「Microsoft · 8 线程」/「Google · 单线程」（同记录详情页的 threadsTitle）
   final String sourceLine;
 
   /// 节点名；直连「直连 · 本机网络」
@@ -126,7 +126,7 @@ class SpeedTestShareContent {
           ? '此测速源只测下载'
           : (r.uploadPeakMbps == null ? '未测' : '峰值 ${fmtRecordMbps(r.uploadPeakMbps)} Mbps'),
       latency: r.latencyMs?.toString(),
-      sourceLine: '${r.source.title} · ${r.connections > 1 ? '多线程 ${r.connections}' : '单线程'}',
+      sourceLine: '${r.source.title} · ${r.threadsTitle}',
       outbound: r.isDirect ? '直连 · 本机网络' : r.outbound,
       exit: exit.isEmpty ? null : exit,
     );

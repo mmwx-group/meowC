@@ -180,7 +180,7 @@ void main() {
     test('页头时间、测速源 · 线程、出站（直连写「直连 · 本机网络」）', () {
       final c = SpeedTestShareContent.of(_record(source: SpeedTestSource.microsoft, outbound: kSpeedTestDirect))!;
       expect(c.dateTime, '2026-10-29 14:32');
-      expect(c.sourceLine, 'Microsoft · 多线程 8');
+      expect(c.sourceLine, 'Microsoft · 8 线程');
       expect(c.outbound, '直连 · 本机网络');
       expect((c.download, c.downloadPeak, c.latency), ('486', '峰值 533 Mbps', '38'));
       final single = SpeedTestShareContent.of(_record(connections: 1))!;
