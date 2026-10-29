@@ -218,9 +218,9 @@ void main() {
     _preview('meowc-share-direct.png', direct);
   });
 
-  group('记录详情页的「保存分享图」', () {
+  group('记录详情页的分享图（安卓「分享」/ Windows「保存分享图」）', () {
     Future<void> pumpRecord(WidgetTester tester, Brightness brightness, SpeedTestRecord record,
-        {SpeedTestSaveFile? save}) async {
+        {bool systemShare = false, SpeedTestSaveFile? save, SpeedTestShareFile? share}) async {
       tester.view.devicePixelRatio = 3;
       tester.view.physicalSize = const Size(360 * 3, 1060 * 3);
       addTearDown(tester.view.reset);
@@ -232,23 +232,48 @@ void main() {
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
             theme: _theme(brightness),
-            home: SpeedTestRecordPage(controller: c, id: record.id, saveFile: save ?? (_, _) async => null),
+            home: SpeedTestRecordPage(
+              controller: c,
+              id: record.id,
+              systemShare: systemShare,
+              saveFile: save ?? (_, _) async => null,
+              shareFile: share ?? (_, _) async {},
+            ),
           ),
         ),
       );
       await tester.pumpAndSettle();
     }
 
-    testWidgets('失败的记录没有这个按钮', (tester) async {
-      await pumpRecord(tester, Brightness.light, _record(error: '连接超时'));
-      expect(find.text('保存分享图'), findsNothing);
-      expect(find.text('用同样设置再测一次'), findsOneWidget);
-    });
+    /// 真的去画图要在真实的事件循环里跑：直接调按钮的回调，等 [done] 拿到交出去的文件名与 PNG，回（文件名, 宽, 高, 左上角像素）
+    Future<(String, int, int, Color)?> tapAndDecode(
+        WidgetTester tester, String label, Completer<(String, Uint8List)> Function() done) {
+      final ink = tester.widget<InkWell>(find.ancestor(of: find.text(label), matching: find.byType(InkWell)));
+      return tester.runAsync(() async {
+        final completer = done();
+        ink.onTap!();
+        final (name, bytes) = await completer.future.timeout(const Duration(seconds: 20));
+        final image = await _decode(bytes);
+        final info = (name, image.width, image.height, await _pixel(image, 4, 4));
+        image.dispose();
+        return info;
+      });
+    }
+
+    for (final systemShare in [false, true]) {
+      testWidgets('${systemShare ? '安卓' : 'Windows'}：失败的记录没有这个按钮', (tester) async {
+        await pumpRecord(tester, Brightness.light, _record(error: '连接超时'), systemShare: systemShare);
+        expect(find.text('保存分享图'), findsNothing);
+        expect(find.text('分享'), findsNothing);
+        expect(find.text('用同样设置再测一次'), findsOneWidget);
+      });
+    }
 
     for (final brightness in Brightness.values) {
-      testWidgets('${brightness.name}：点了生成 PNG 交给保存（文件名 .png），图一样是浅色', (tester) async {
+      testWidgets('Windows · ${brightness.name}：点了生成 PNG 交给保存（文件名 .png），图一样是浅色', (tester) async {
         // Completer 要在真实的事件循环里建（建在测试的假时钟里的话，完成的回调要等 pump 才跑）
         late Completer<(String, Uint8List)> saved;
+        var shareCalls = 0;
         await pumpRecord(
           tester,
           brightness,
@@ -257,26 +282,45 @@ void main() {
             saved.complete((name, bytes));
             return '/storage/$name';
           },
+          share: (_, _) async => shareCalls++,
         );
         expect(find.text('保存分享图'), findsOneWidget);
+        expect(find.text('分享'), findsNothing);
         final page = await _capture(tester, const ValueKey('page'));
         _preview(brightness == Brightness.light ? 'meowc-record.png' : 'meowc-record-dark.png', page!);
 
-        // 真的去画图要在真实的事件循环里跑：直接调按钮的回调
-        final ink = tester.widget<InkWell>(find.ancestor(of: find.text('保存分享图'), matching: find.byType(InkWell)));
-        final out = await tester.runAsync(() async {
-          saved = Completer();
-          ink.onTap!();
-          final (name, bytes) = await saved.future.timeout(const Duration(seconds: 20));
-          final image = await _decode(bytes);
-          final info = (name, image.width, image.height, await _pixel(image, 4, 4));
-          image.dispose();
-          return info;
-        });
+        final out = await tapAndDecode(tester, '保存分享图', () => saved = Completer());
         expect(out, ('MeowX-speedtest-20261029-1432.png', 1080, 1350, MeowTokens.light.bg));
+        expect(shareCalls, 0);
         await tester.pumpAndSettle();
       });
     }
+
+    testWidgets('安卓：按钮是「分享」，点了把 PNG 交给系统分享（文件名 .png），不存文件', (tester) async {
+      late Completer<(String, Uint8List)> shared;
+      var saveCalls = 0;
+      await pumpRecord(
+        tester,
+        Brightness.light,
+        _record(source: SpeedTestSource.microsoft),
+        systemShare: true,
+        save: (_, _) async {
+          saveCalls++;
+          return null;
+        },
+        share: (name, bytes) async => shared.complete((name, bytes)),
+      );
+      expect(find.text('分享'), findsOneWidget);
+      expect(find.text('保存分享图'), findsNothing);
+      expect(find.byIcon(Icons.share_outlined), findsOneWidget);
+      final page = await _capture(tester, const ValueKey('page'));
+      _preview('meowc-record-android.png', page!);
+
+      final out = await tapAndDecode(tester, '分享', () => shared = Completer());
+      expect(out, ('MeowX-speedtest-20261029-1432.png', 1080, 1350, MeowTokens.light.bg));
+      expect(saveCalls, 0);
+      await tester.pumpAndSettle();
+    });
   });
 
   group('测速源选择', () {

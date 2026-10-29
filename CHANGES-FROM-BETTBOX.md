@@ -202,4 +202,8 @@
 
 ## 2026-10-29 · 测速：Microsoft 测速源 + 测速记录分享图
 - `core/Clash.Meta/component/speedtest`（我们加的内核包）：加第五个测速源 `microsoft`（微软下载站上 VS Code 1.98.2 的 Windows 安装包，107,513,920 字节），做法同 Google：只测下载，32MB 一段 Range、按「连接序号 + 轮次」轮流取（文件只有 3 段完整的 32MB，到尾回头），延迟用同一地址的 `Range: bytes=0-0`；与 Google 共用 `speedRangeEndpoints`。旧界面不会发这个值。
-- 界面只在 `lib/meowx/`：测速源多一项（手机宽度一排五段放不下，分两排：Google / Microsoft、Apple / Speedtest / Cloudflare）；测速记录详情页加「保存分享图」，画一张 1080 × 1350 的 PNG（固定浅色经典配色，出口只写 ASN / 运营商、不写 IP），经 Bettbox 原有的 `picker.saveFile` 存（`lib/common/picker.dart` 没有改；不加分享插件）。
+- 界面只在 `lib/meowx/`：测速源多一项（手机宽度一排五段放不下，分两排：Google / Microsoft、Apple / Speedtest / Cloudflare）；测速记录详情页加「保存分享图」，画一张 1080 × 1350 的 PNG（固定浅色经典配色，出口只写 ASN / 运营商、不写 IP），经 Bettbox 原有的 `picker.saveFile` 存（`lib/common/picker.dart` 没有改；不加分享插件）。安卓同日改走系统分享，见下一节。
+
+## 2026-10-29 · 测速记录分享图：安卓走系统分享
+- `pubspec.yaml`：加 `share_plus: ^12.0.2`（BSD-3-Clause；新拉进来的只有它和 `share_plus_platform_interface` 6.1.0，其余依赖的锁定版本不变。13.x 要 `win32 ^6`，与现有的 `win32 ^5.15.0` 冲突，所以停在 12）。原因：用户要求安卓上测速记录分享图像 iOS 一样弹系统分享面板，而不是「另存为」。插件经清单合并给 App 加上它自己的 `ShareFileProvider`（`${applicationId}.flutter.share_provider`，与更新用的 `${applicationId}.update` 不冲突）和接收选择结果的广播接收器，App 自己的 AndroidManifest 没改；`windows/flutter/generated_plugin_registrant.cc`、`generated_plugins.cmake` 与 `macos/Flutter/GeneratedPluginRegistrant.swift` 是 `flutter pub get` 随之重新生成的（Windows 包里也会带上这个插件，但 Windows 不调用它）。
+- 界面只在 `lib/meowx/`（`pages/speedtest/speed_test_history_page.dart`）：安卓的按钮改叫「分享」，PNG 经 `SharePlus.instance.share` 交给系统分享面板（只带这张图、不带文字，文件名同前 `MeowX-speedtest-YYYYMMDD-HHmm.png`）；Windows 仍是「保存分享图」经 `picker.saveFile` 另存新档。`lib/common/picker.dart` 没有改。

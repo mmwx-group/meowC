@@ -9,8 +9,8 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart' show meowRounded;
 import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 
-/// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1080 × 1350 像素的 4:5 竖图，从记录详情页「保存分享图」生成、
-/// 经 `picker.saveFile` 存成 PNG（安卓弹系统「另存为」、Windows 另存新档）。
+/// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1080 × 1350 像素的 4:5 竖图，从记录详情页生成 PNG：
+/// 安卓「分享」经 share_plus 弹系统分享面板（同 iOS），Windows「保存分享图」经 `picker.saveFile` 另存新档。
 ///
 /// 固定用浅色经典那一套 token（[MeowTokens.light]），不跟深浅色、不跟玻璃主题：分享出去的图都一样。
 /// 自上而下：页头（App 图标 + MeowX + 网络测速、右边日期时间）→ 下载主卡（大数字 + 峰值）→ 上传 / 延迟两张小卡 →

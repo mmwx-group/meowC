@@ -228,7 +228,7 @@ void main() {
     expect(find.text('还没有测速记录，测完一次会出现在这里'), findsOneWidget);
   });
 
-  testWidgets('详情页：大数 / 参数；「用同样设置再测一次」预填并带 true 退出', (tester) async {
+  testWidgets('详情页：大数 / 参数；桌面上是「保存分享图」；「用同样设置再测一次」预填并带 true 退出', (tester) async {
     final c = SpeedTestController(call: (_, _) async => '');
     final r = SpeedTestRecord(
       id: 'r1',
@@ -262,6 +262,9 @@ void main() {
     expect(find.text('5.0 MB'), findsOneWidget);
     // 测试窗口 800×600，按钮在列表底部：先滚出来
     await tester.scrollUntilVisible(find.text('用同样设置再测一次'), 200);
+    // 不指定时按平台：只有安卓是「分享」，测试跑在桌面上 = 存文件
+    expect(find.text('保存分享图'), findsOneWidget);
+    expect(find.text('分享'), findsNothing);
     await tester.tap(find.text('用同样设置再测一次'));
     await tester.pumpAndSettle();
     expect(popped, isTrue);
