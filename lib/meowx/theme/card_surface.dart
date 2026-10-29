@@ -308,10 +308,10 @@ class MeowFrostBox extends SingleChildRenderObjectWidget {
   @visibleForTesting
   static int get debugPaintCount => _RenderMeowFrostBox._paints;
 
-  /// 测试用：用投影九宫格图画一张卡片（圆角 [r]）的投影
+  /// 测试用：按卡片实际走的那条路画一张卡片 [card] 的投影
   @visibleForTesting
-  static void debugPaintShadow(Canvas canvas, Rect card, double r, Color color, double dpr) =>
-      _FrostShadow.paint(canvas, card, r, color, dpr);
+  static void debugPaintShadow(Canvas canvas, RRect card, Color color, double dpr) =>
+      _FrostShadow.paint(canvas, card, color, dpr);
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderMeowFrostBox(_config(context));
@@ -470,25 +470,7 @@ class _RenderMeowFrostBox extends RenderProxyBox {
     // 投影（卡片底是不透明的背景图，盖得住投影落在卡片下面的那部分）。四角圆角一样时用全 App 共用的九宫格图
     // （[_FrostShadow]）：以前每张卡片每次重画都现算两次高斯模糊，滚动、平推时每帧都在算
     final drop = MeowFrostStyle.drop(dark, spec.hueA);
-    final r = edge.tlRadiusX;
-    final uniform = [edge.tlRadiusY, edge.trRadiusX, edge.trRadiusY, edge.blRadiusX, edge.blRadiusY, edge.brRadiusX, edge.brRadiusY]
-        .every((v) => (v - r).abs() < 0.01);
-    if (uniform) {
-      _FrostShadow.paint(canvas, edge.outerRect, r, drop, c.dpr);
-    } else {
-      canvas.drawRRect(
-        edge.shift(const Offset(0, MeowFrostStyle.dropDy)),
-        Paint()
-          ..color = drop
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, _FrostShadow.sigma),
-      );
-      canvas.drawRRect(
-        edge.shift(const Offset(0, 1)),
-        Paint()
-          ..color = drop
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
-      );
-    }
+    _FrostShadow.paint(canvas, edge, drop, c.dpr);
 
     // 卡片背后那块背景：预模糊图按屏幕坐标贴成着色器、直接画成这个圆角形状（不先按圆角裁切：裁切在 Impeller 下要多走模板缓冲）
     final images = c.images;
@@ -586,6 +568,9 @@ class _RenderMeowFrostBox extends RenderProxyBox {
 /// 图里那张卡片的中心离每条边都要有 r + 三倍 sigma：卡片太小的话四边的模糊互相影响，中间那一像素到不了全浓度，
 /// 拉伸出来整圈投影淡一成（最初按 2r+1 的小卡片画就是这样）。
 /// 投影本来就是糊的，图最多按 1.5 倍像素画（一张二三百 KB，常用的圆角十来种）。
+/// 九宫格四个角各要占「r + 三倍 sigma」再加外边，卡片的长或宽不到 2(r + 三倍 sigma) 时四个角会叠在一起、整张图被压扁，
+/// 本该压在卡片下面的深色部分挤到卡片外面（小卡片、胶囊外面一大圈暗影，2026-10-29 用户在小米 14 上实报）——
+/// 这种小卡片照原来现算两层模糊（[_paintDirect]），只有够大的卡片贴图。
 abstract final class _FrostShadow {
   static final sigma = Shadow.convertRadiusToSigma(MeowFrostStyle.dropBlur / 2);
 
@@ -631,9 +616,37 @@ abstract final class _FrostShadow {
     return _cache[key] = image;
   }
 
-  /// 在卡片 [card]（圆角 [r]）四周画投影
-  static void paint(Canvas canvas, Rect card, double r, Color color, double dpr) {
+  /// 在卡片 [card] 四周画投影：四角圆角一样、而且够大的贴九宫格图，其余现算
+  static void paint(Canvas canvas, RRect card, Color color, double dpr) {
     if (color.a == 0) return;
+    final r = card.tlRadiusX;
+    final uniform = [card.tlRadiusY, card.trRadiusX, card.trRadiusY, card.blRadiusX, card.blRadiusY, card.brRadiusX, card.brRadiusY]
+        .every((v) => (v - r).abs() < 0.01);
+    final minSide = 2 * (r + _spread) + 1;
+    if (uniform && card.width >= minSide && card.height >= minSide) {
+      _paintNine(canvas, card.outerRect, r, color, dpr);
+    } else {
+      _paintDirect(canvas, card, color);
+    }
+  }
+
+  /// 原来的画法：两层现算的模糊
+  static void _paintDirect(Canvas canvas, RRect card, Color color) {
+    canvas.drawRRect(
+      card.shift(const Offset(0, MeowFrostStyle.dropDy)),
+      Paint()
+        ..color = color
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigma),
+    );
+    canvas.drawRRect(
+      card.shift(const Offset(0, 1)),
+      Paint()
+        ..color = color
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
+    );
+  }
+
+  static void _paintNine(Canvas canvas, Rect card, double r, Color color, double dpr) {
     final scale = math.min(dpr, 1.5);
     final image = _image(r, color, scale);
     final m = margin, c = (m + r + _spread) * scale;
