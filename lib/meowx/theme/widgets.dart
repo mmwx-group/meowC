@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'button_fill.dart';
 import 'glass.dart';
+import 'haptics.dart';
 import 'motion.dart';
 import 'svg_path.dart';
 import 'tokens.dart';
@@ -325,6 +326,7 @@ class _SegmentThumb extends CustomPainter {
 /// - 连上（[on]）：弹簧补满，同时一圈樱粉描边外扩一次（涟漪），图标从 0.6 弹回 1、颜色渐变成墨色；
 /// - 断开 / 连接失败：350ms 排空。
 /// 初值按出现时的状态给：切回首页时已连接就是满的，不重放。不可用 = 半透明。
+/// 点下去中震一下（只在用户点的时候；核心那边起停引起的状态变化不震）。
 /// 液态玻璃主题：没有墨色实心底（用户 2026-10-28 要求按钮别再是纯色，同 iOS），液面半透明（55%）地在里面涨、图标用墨色；
 /// 液面之上盖一块几乎不着色的玻璃（樱粉着色那一档的边缘折射与高光），形状仍是圆角方块、不加光晕（用户明确不要正圆和光晕），
 /// 只留一层很淡的投影。低端机画不了玻璃时底换成按钮那档静态半透明 + 细亮边（[MeowButtonFill.plain]），照样不是实心块。
@@ -423,7 +425,12 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
       child: Opacity(
         opacity: widget.enabled || widget.busy ? 1 : 0.4,
         child: GestureDetector(
-          onTap: widget.enabled ? widget.onTap : null,
+          onTap: widget.enabled
+              ? () {
+                  MeowHaptics.toggle();
+                  widget.onTap();
+                }
+              : null,
           child: SizedBox.square(
             dimension: size,
             child: Stack(

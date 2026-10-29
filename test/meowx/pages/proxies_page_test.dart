@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/pages/proxies/group_widgets.dart';
@@ -16,6 +18,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/haptics.dart';
 
 // 各 Notifier 换成不碰 globalState / 核心的替身，页面本身的布局保持真实。
 
@@ -190,6 +194,14 @@ Future<void> _pump(
   );
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
+}
+
+/// 点一下测速 / 节点。测速与切节点本身要 appController 和核心，测试里都没有，点下去之后它们抛的错在这里接住：这几条只看震动。
+Future<void> _tapAction(WidgetTester tester, Finder finder) async {
+  await runZonedGuarded(() async {
+    await tester.tap(finder);
+    await tester.pump();
+  }, (_, _) {});
 }
 
 /// 网格的列数是布局阶段按网格自己的宽度算的，从渲染对象上取。
@@ -600,5 +612,36 @@ void main() {
 
     await _pump(tester, size: const Size(360, 800), overrides: _overrides(profile: _profile(), groups: const []));
     expect(find.text('暂无代理组'), findsOneWidget);
+  });
+
+  group('震动', () {
+    testWidgets('全部测速 / 测速本组 / 点节点的延迟单测：点下去各轻震一下', (tester) async {
+      final haptics = recordHaptics();
+      await _pump(tester, size: const Size(360, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
+      expect(haptics, isEmpty);
+
+      await _tapAction(tester, find.byTooltip('全部测速'));
+      expect(haptics, [kLight]);
+      await _tapAction(tester, find.byTooltip('测速本组'));
+      expect(haptics, [kLight, kLight]);
+      await _tapAction(tester, find.text('152'));   // 香港 02 的延迟胶囊
+      expect(haptics, [kLight, kLight, kLight]);
+    });
+
+    testWidgets('选节点：换了才震（select 组点已选中的不震）；url-test 组点了就是固定，震', (tester) async {
+      final haptics = recordHaptics();
+      await _pump(tester, size: const Size(360, 1600), overrides: _overrides(profile: _profile(current: '节点选择')), textScale: 1);
+
+      Finder cell(String name) => find.descendant(of: find.byType(NodeSliverGrid), matching: find.text(name));
+      await _tapAction(tester, cell('自动选择'));   // 已选中的
+      expect(haptics, isEmpty);
+      await _tapAction(tester, cell('香港 02 · BGP'));
+      expect(haptics, [kSelection]);
+
+      haptics.clear();
+      await _pump(tester, size: const Size(360, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
+      await _tapAction(tester, cell('东京 01 · IIJ'));
+      expect(haptics, [kSelection]);
+    });
   });
 }

@@ -1,4 +1,5 @@
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/controller.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/pages/dashboard/active_connections_card.dart';
@@ -21,6 +22,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/haptics.dart';
 import '../support/release_frames.dart';
 
 // 各 Notifier 换成不碰 globalState / 核心 / 网络的替身，页面本身的布局与交互保持真实。
@@ -536,7 +538,8 @@ void main() {
     expect(HomeCard.apps.label, '代理应用');
   });
 
-  testWidgets('标题行的重查钮立即重查出口 IP', (tester) async {
+  testWidgets('标题行的重查钮立即重查出口 IP，轻震一下', (tester) async {
+    final haptics = recordHaptics();
     final exitIp = _ExitIp(const ExitIpState());
     await _pump(
       tester,
@@ -548,6 +551,7 @@ void main() {
     final before = exitIp.refreshes;   // 进页面那一次
     await tester.tap(find.byTooltip('重新查询出口 IP'));
     expect(exitIp.refreshes, before + 1);
+    expect(haptics, [kLight]);
   });
 
   testWidgets('两列 · 够高：整页一屏不滚动，「活跃连接」撑满右列', (tester) async {
@@ -711,5 +715,40 @@ void main() {
     expect(card().color, MeowTokens.light.hero);
     await pump(MeowLook.classic, running: false);
     expect(card().color, MeowTokens.light.card2);
+  });
+
+  // 放在最后：要给 globalState 装一个真的 AppController（切模式经它改配置），装上就撤不掉
+  testWidgets('出站模式分段：用户换了才震；点当前那段、别处改的模式都不震', (tester) async {
+    final haptics = recordHaptics();
+    await _pump(
+      tester,
+      Consumer(
+        builder: (context, ref, _) {
+          globalState.appController = AppController(context, ref);
+          return const SingleChildScrollView(child: HomeHeroCard());
+        },
+      ),
+      size: const Size(412, 892),
+      overrides: _overrides(running: true, profile: _profile),
+      textScale: 1,
+    );
+    // 切模式之后真实实现会防抖推一次配置给核心，测试里没有核心
+    addTearDown(() => debouncer.cancel(FunctionTag.updateClashConfig));
+    final container = ProviderScope.containerOf(tester.element(find.byType(HomeHeroCard)));
+    Mode mode() => container.read(patchClashConfigProvider).mode;
+
+    await tester.tap(find.text('规则'));
+    await tester.pump();
+    expect(haptics, isEmpty);
+
+    await tester.tap(find.text('直连'));
+    await tester.pump();
+    expect(mode(), Mode.direct);
+    expect(haptics, [kSelection]);
+
+    // 别处改的（直连档自动切、托盘）：分段跟着变，不震
+    container.read(patchClashConfigProvider.notifier).updateState((s) => s.copyWith(mode: Mode.global));
+    await tester.pumpAndSettle();
+    expect(haptics, [kSelection]);
   });
 }

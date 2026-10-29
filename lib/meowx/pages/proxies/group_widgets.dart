@@ -13,6 +13,7 @@ import '../../app/strings.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/button_fill.dart';
+import '../../theme/haptics.dart';
 import '../../theme/motion.dart';
 import '../../theme/popover.dart';
 import '../../theme/tokens.dart';
@@ -184,7 +185,10 @@ class GroupTestButton extends ConsumerWidget {
       listenable: delayTestCoordinator,
       builder: (_, _) {
         final testing = delayTestCoordinator.isTestingGroup(group.name) || delay == 0;
-        void run() => delayTest(group.all, testUrl: group.testUrl, groupName: group.name);
+        void run() {
+          MeowHaptics.tap();
+          delayTest(group.all, testUrl: group.testUrl, groupName: group.name);
+        }
         final Widget content;
         if (testing) {
           content = SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent));

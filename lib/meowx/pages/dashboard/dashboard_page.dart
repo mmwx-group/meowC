@@ -11,6 +11,7 @@ import '../../state/connection.dart';
 import '../../state/exit_ip.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
+import '../../theme/haptics.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
@@ -255,7 +256,10 @@ class _RefreshIpButton extends ConsumerWidget {
       glyph: MeowGlyph.refresh,
       tooltip: '重新查询出口 IP',
       busy: busy,
-      onTap: () => unawaited(ref.read(exitIpProvider.notifier).refresh(running: ref.read(isRunningProvider))),
+      onTap: () {
+        MeowHaptics.tap();
+        unawaited(ref.read(exitIpProvider.notifier).refresh(running: ref.read(isRunningProvider)));
+      },
     );
   }
 }

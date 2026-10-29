@@ -15,6 +15,7 @@ import '../../config/direct_profile.dart';
 import '../../panel/account.dart';
 import '../../state/format.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -79,6 +80,7 @@ class _SubscriptionsCardState extends ConsumerState<SubscriptionsCard> {
     try {
       switch (action) {
         case _ProfileAction.refresh:
+          MeowHaptics.tap();
           unawaited(ref.read(accountActionsProvider).refreshProfile());   // 昵称 / 头像跟着用户点的刷新走，不定时拉
           await globalState.appController.updateProfile(p);
         case _ProfileAction.rename:

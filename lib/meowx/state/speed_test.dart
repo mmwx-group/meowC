@@ -7,6 +7,8 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../theme/haptics.dart';
+
 /// 测速出站「直连」：mihomo 的内置出站 DIRECT（不是代理组），经本机网络直接测。
 const kSpeedTestDirect = 'DIRECT';
 
@@ -258,6 +260,7 @@ class SpeedTestController extends ChangeNotifier {
 
   Future<void> start(String via) async {
     if (isRunning) return;
+    MeowHaptics.tap();
     final generation = ++_generation;
     // 记录用发起时的参数（进度里的 source / via 是核心回的，可能缺）
     final source = this.source;
@@ -278,6 +281,7 @@ class SpeedTestController extends ChangeNotifier {
     if (generation != _generation) return;
     // 比 App 旧的核心不认识这个方法：回包是 null
     if (reason == null || reason.isNotEmpty) {
+      MeowHaptics.error();   // 没能开始也算失败
       _starting = false;
       progress = const SpeedTestProgress();
       message = reason ?? '核心版本过旧，重启后再试';
@@ -293,7 +297,13 @@ class SpeedTestController extends ChangeNotifier {
           progress = SpeedTestProgress.fromJson(json.decode(raw) as Map<String, Object?>);
           notifyListeners();
           if (!progress.isRunning) {
-            // 测完 / 失败才记一条（停止的是 cancelled，且 stop 已让 generation 失效）
+            // 测完 / 失败才震一下、记一条，一次测速只到这里一回（停止的是 cancelled，且 stop 已让 generation 失效）
+            switch (progress.phase) {
+              case 'done':
+                MeowHaptics.success();
+              case 'failed':
+                MeowHaptics.error();
+            }
             final record = SpeedTestRecord.fromProgress(progress, source: source, connections: connections, outbound: via);
             if (record != null) history.add(record);
             return;

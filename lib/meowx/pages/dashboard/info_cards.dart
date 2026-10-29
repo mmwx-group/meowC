@@ -21,6 +21,7 @@ import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/glass_card.dart';
+import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -91,6 +92,7 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
 
   Future<void> _refresh(Profile p) async {
     if (_refreshing) return;
+    MeowHaptics.tap();
     setState(() => _refreshing = true);
     try {
       await ref.read(accountActionsProvider).refreshLocalSubscription(p);

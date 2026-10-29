@@ -14,6 +14,7 @@ import '../../state/meow_settings.dart';
 import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
+import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/motion.dart';
 import '../../theme/page_title.dart';
@@ -174,6 +175,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
 
   Future<void> _testAll(List<Group> groups) async {
     if (_testingAll) return;
+    MeowHaptics.tap();
     setState(() => _testingAll = true);
     try {
       await delayTest(allLeafProxies(groups));

@@ -16,6 +16,7 @@ import '../../state/speed_test.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/button_fill.dart';
+import '../../theme/haptics.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -106,7 +107,15 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                 _StartButton(
                   running: running,
                   enabled: running || canStart,
-                  onTap: () => running ? c.stop() : _requestStart(node!),
+                  // 停止的震动放在按钮上：离开页面（dispose）也会调 stop，那时不该震；开始的在 c.start 里
+                  onTap: () {
+                    if (running) {
+                      MeowHaptics.tap();
+                      c.stop();
+                    } else {
+                      _requestStart(node!);
+                    }
+                  },
                 ),
                 if (!connected) ...[
                   const SizedBox(height: 6),

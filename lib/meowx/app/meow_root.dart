@@ -26,6 +26,7 @@ import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
 import '../state/wifi_switch.dart';
+import '../theme/haptics.dart';
 import '../theme/page_background.dart';
 import '../theme/tokens.dart';
 import 'frame_log.dart';
@@ -64,6 +65,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     } catch (e) {
       commonPrint.log('set PanelClient.userAgent failed: $e');
     }
+    // 测速成功 / 失败的震动要看安卓版本（API 30 以下没有那两种，见 MeowHaptics.androidSdk）
+    if (system.isAndroid) MeowHaptics.androidSdk = globalState.appState.version;
     _realtimeSub = ref.listenManual(
       Provider<(String, String, bool)>((r) {
         final a = r.watch(meowSettingProvider.select((s) => s.account));

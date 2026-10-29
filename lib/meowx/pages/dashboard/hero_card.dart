@@ -15,6 +15,7 @@ import '../../state/meow_settings.dart';
 import '../../state/wifi_switch.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
+import '../../theme/haptics.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 
@@ -117,8 +118,11 @@ class HomeHeroCard extends ConsumerWidget {
             fontSize: dense ? 13 : 14,
             track: mm.heroTrack,
             glass: true,
+            // 只有用户在这里换了模式才震；别处改的模式（直连档自动切、托盘）走不到这里
             onChanged: (m) {
-              if (m != mode) setOutboundMode(ref, m);
+              if (m == mode) return;
+              MeowHaptics.select();
+              setOutboundMode(ref, m);
             },
           ),
         ],

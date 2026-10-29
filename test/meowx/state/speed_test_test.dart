@@ -1,12 +1,20 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_page.dart';
+import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/speed_test.dart';
+import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
+import 'package:bett_box/models/models.dart';
+import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../support/haptics.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -119,5 +127,93 @@ void main() {
     expect(find.text('257 Mbps', findRichText: true), findsOneWidget);   // 下载格
     expect(find.text('峰值 286'), findsOneWidget);
     expect(find.text('不支持'), findsOneWidget);
+  });
+
+  group('震动', () {
+    /// 核心依次回 [statuses] 里的进度（最后一个一直回）；[start] = 开始的回包（空串 = 开始了）
+    SpeedTestController fake(List<String> statuses, {String? start = ''}) => SpeedTestController(
+      call: (method, data) async => switch (method) {
+        ActionMethod.meowSpeedTestStart => start,
+        ActionMethod.meowSpeedTestStatus => statuses.length > 1 ? statuses.removeAt(0) : statuses.first,
+        _ => '',
+      },
+    );
+
+    test('自己测完：开始轻震、测完成功震，一次测速只震这两下', () async {
+      final haptics = recordHaptics();
+      final c = fake(['{"runID":1,"phase":"download"}', '{"runID":1,"phase":"done","downloadMbps":120}']);
+      await c.start('n');
+      expect(haptics, [kLight, kSuccess]);
+      // 再测一次：又是一对
+      await c.start('n');
+      expect(haptics, [kLight, kSuccess, kLight, kSuccess]);
+    });
+
+    test('测速失败、核心不让开始（原因 / 旧核心回 null）：失败震', () async {
+      final haptics = recordHaptics();
+      await fake(['{"runID":1,"phase":"failed","error":"连不上"}']).start('n');
+      expect(haptics, [kLight, kError]);
+      haptics.clear();
+      await fake(const [], start: '找不到节点 n').start('n');
+      expect(haptics, [kLight, kError]);
+      haptics.clear();
+      await fake(const [], start: null).start('n');
+      expect(haptics, [kLight, kError]);
+    });
+
+    test('中途停掉：只有开始那一下，没有成功 / 失败（停止的震动在按钮上）', () async {
+      final haptics = recordHaptics();
+      late SpeedTestController c;
+      c = SpeedTestController(call: (method, data) async {
+        if (method != ActionMethod.meowSpeedTestStatus) return '';
+        c.stop();
+        return '{"runID":1,"phase":"done","downloadMbps":1}';
+      });
+      await c.start('n');
+      expect(c.progress.phase, 'cancelled');
+      expect(haptics, [kLight]);
+    });
+
+    testWidgets('测速页：点「停止」轻震；打开页面看见上次的结果、离开页面自动停都不震', (tester) async {
+      tester.view.physicalSize = const Size(400, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final haptics = recordHaptics();
+      final c = fake(['{"runID":1,"phase":"download","currentMbps":20}']);
+      c.progress = const SpeedTestProgress(phase: 'done', downloadMbps: 120);   // 上一次的结果
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isRunningProvider.overrideWithValue(true),
+            currentGroupsStateProvider.overrideWithValue(
+              GroupsState(value: [Group(name: '节点选择', type: GroupType.Selector, now: 'n', all: const [Proxy(name: 'n', type: 'Vless')])]),
+            ),
+            currentNodeProvider.overrideWithValue(const CurrentNode(group: '节点选择', path: ['节点选择'], leaf: 'n')),
+          ],
+          child: MaterialApp(theme: meowThemeData(brightness: Brightness.light), home: SpeedTestPage(controller: c)),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('测速完成'), findsOneWidget);
+      expect(haptics, isEmpty);
+
+      // 开始按钮先查网络类型（测试里没有那个插件），这里直接调 start（按钮最后也是调它）
+      unawaited(c.start('n'));
+      await tester.pump();
+      expect(find.text('停止'), findsOneWidget);
+      await tester.tap(find.text('停止'));
+      await tester.pump();
+      expect(c.progress.phase, 'cancelled');
+      expect(haptics, [kLight, kLight]);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 再测一次，测到一半离开页面：dispose 里的 stop 不震
+      unawaited(c.start('n'));
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox.shrink());
+      expect(c.isRunning, isFalse);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(haptics, [kLight, kLight, kLight]);
+    });
   });
 }

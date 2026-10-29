@@ -24,6 +24,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../support/haptics.dart';
+
 // 各 Notifier 换成不碰 globalState 落盘 / 核心 / 网络的替身，页面本身的布局与交互保持真实。
 
 class _Meow extends MeowSetting {
@@ -377,6 +379,32 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('查看配置'), findsOneWidget);
     expect(find.text('重命名'), findsNothing);
+  });
+
+  testWidgets('订阅菜单「刷新」：轻震一下；只打开菜单、选别的项不震', (tester) async {
+    final haptics = recordHaptics();
+    await _pump(
+      tester,
+      const MePage(),
+      size: const Size(412, 1900),
+      overrides: _overrides(profiles: [_main, _backup, _direct], current: 'p1'),
+      textScale: 1,
+    );
+    Future<void> pick(String item) async {
+      await tester.tap(find.byTooltip('订阅管理'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(item));
+      await tester.pump(MeowMotion.menuAutoClose);
+      await tester.pumpAndSettle();
+    }
+
+    await pick('重命名');
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(haptics, isEmpty);
+    // 刷新本身经 appController 拉订阅（测试里没有，报错显示在页面上），这里只看震动
+    await pick('刷新');
+    expect(haptics, [kLight]);
   });
 
   testWidgets('账户卡头像：主控上传的站内路径接上主控地址再去加载', (tester) async {

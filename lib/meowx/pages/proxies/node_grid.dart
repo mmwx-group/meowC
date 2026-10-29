@@ -19,6 +19,7 @@ import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/card_surface.dart';
+import '../../theme/haptics.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'group_reveal.dart';
@@ -216,7 +217,13 @@ class NodeSliverGrid extends ConsumerWidget {
               busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
               mode: mode,
               dense: dense,
-              onTap: selectable ? () => unawaited(pickNode(ref, group, p)) : null,
+              onTap: selectable
+                  ? () {
+                      // select 组点已选中的那个什么都不变，不震；url-test / fallback 组点了不是固定就是取消固定，都算换了
+                      if (computed || p.name != selectedName) MeowHaptics.select();
+                      unawaited(pickNode(ref, group, p));
+                    }
+                  : null,
             ),
           );
         },
@@ -355,7 +362,10 @@ class _NodeCell extends ConsumerWidget {
                   else if (testable) ...[
                     SizedBox(width: medal != null || unlocks != null ? 4 : 6),
                     GestureDetector(
-                      onTap: () => proxyDelayTest(proxy, group.testUrl),
+                      onTap: () {
+                        MeowHaptics.tap();
+                        proxyDelayTest(proxy, group.testUrl);
+                      },
                       child: MsChip(delay, mode: mode, bg: mm.card2),
                     ),
                   ],

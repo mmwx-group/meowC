@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/haptics.dart';
+
 // 首页订阅卡（同 iOS）：直连档的样子、点更新时间刷新、切换菜单里的「账户订阅 · 未下载」与去重。
 // 账户动作换成记账的替身，不碰 globalState / 网络。
 
@@ -151,7 +153,8 @@ void main() {
       expect(find.byTooltip('刷新订阅'), findsNothing);
     });
 
-    testWidgets('$tag · 在用订阅：用量条 + 用量 · 到期；点更新时间刷新当前订阅，刷新中换成转圈', (tester) async {
+    testWidgets('$tag · 在用订阅：用量条 + 用量 · 到期；点更新时间刷新当前订阅（轻震一下），刷新中换成转圈', (tester) async {
+      final haptics = recordHaptics();
       final actions = await _pump(tester, current: _main, dense: dense, size: dense ? const Size(520, 400) : const Size(320, 400));
 
       expect(find.text('切换订阅'), findsOneWidget);
@@ -163,11 +166,13 @@ void main() {
       await tester.tap(find.text('3 小时前更新'));
       await tester.pump();
       expect(actions.refreshed, ['p1']);
+      expect(haptics, [kLight]);
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      // 刷新中再点不重复发
+      // 刷新中再点不重复发、也不震
       await tester.tap(find.text('3 小时前更新'));
       await tester.pump();
       expect(actions.refreshed, ['p1']);
+      expect(haptics, [kLight]);
 
       actions.refreshGate!.complete();
       await tester.pump();
