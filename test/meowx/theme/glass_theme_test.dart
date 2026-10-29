@@ -1,13 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:bett_box/meowx/glass/liquid_glass.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
+import 'package:bett_box/meowx/app/backdrop_host.dart';
 import 'package:bett_box/meowx/theme/backdrop.dart';
 import 'package:bett_box/meowx/theme/card_surface.dart';
 import 'package:bett_box/meowx/theme/glass.dart';
+import 'package:bett_box/meowx/theme/glass_art.dart';
 import 'package:bett_box/meowx/theme/glass_card.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:bett_box/meowx/theme/morph_menu.dart';
@@ -531,8 +533,8 @@ void main() {
       accentColor: accent ?? l.accentColor,
     );
 
-    test('磨砂强度：浅色填充 (0.24+0.36f+0.14) → (0.24+0.36f−0.08)、模糊 14+30f、饱和 1.8；深色 (0.10+0.12f) → (0.04+0.06f)、饱和 1.6', () {
-      for (final f in const [0.0, 0.5, 1.0]) {
+    test('磨砂强度 ≥ 0.5：浅色填充 (0.24+0.36f+0.14) → (0.24+0.36f−0.08)、模糊 14+30f、饱和 1.8；深色 (0.10+0.12f) → (0.04+0.06f)、饱和 1.6', () {
+      for (final f in const [0.5, 0.75, 1.0]) {
         final l = MeowBackdrop.of(MeowLook(style: MeowThemeStyle.glass, glassFrost: f), dark: false);
         expect(l.fill.top, closeTo(0.38 + 0.36 * f, 1e-9));
         expect(l.fill.bottom, closeTo(0.16 + 0.36 * f, 1e-9));
@@ -543,6 +545,74 @@ void main() {
         expect(d.fill.bottom, closeTo(0.04 + 0.06 * f, 1e-9));
         expect(d.saturation, 1.6);
       }
+    });
+
+    test('磨砂强度 < 0.5 往透明走：0 = 浅 (0.08, 0.02) / 深 (0.03, 0)、模糊 1、不提饱和、没有罩色、不垫；0.25 在两端正中', () {
+      MeowBackdrop at(double f, bool dark) =>
+          MeowBackdrop.of(MeowLook(style: MeowThemeStyle.glass, bgPattern: MeowBgPattern.art, glassFrost: f), dark: dark);
+      final l0 = at(0, false), d0 = at(0, true);
+      expect(l0.fill.top, closeTo(0.08, 1e-9));
+      expect(l0.fill.bottom, closeTo(0.02, 1e-9));
+      expect(d0.fill.top, closeTo(0.03, 1e-9));
+      expect(d0.fill.bottom, closeTo(0, 1e-9));
+      expect((l0.blurSigma, l0.saturation, d0.saturation), (1, 1, 1));
+      expect([...l0.veil, ...d0.veil].every((c) => c.a == 0), isTrue);
+      expect(l0.scrim(const Color(0xFF2A2130)), 0);
+      expect(d0.scrim(const Color(0xFFF7F0F3)), 0);
+      final l = at(0.25, false), hi = at(0.5, false);
+      expect(l.fill.top, closeTo((0.08 + hi.fill.top) / 2, 1e-9));
+      expect(l.fill.bottom, closeTo((0.02 + hi.fill.bottom) / 2, 1e-9));
+      expect(l.blurSigma, closeTo(15, 1e-9));
+      expect(l.saturation, closeTo(1.4, 1e-9));
+      expect(l.veil[0].a, closeTo(0.35 / 2, 0.01));
+      expect(at(0.25, true).veil[1].a, closeTo(0.60 / 2, 0.01));
+      // 0.5 起与第一版一样
+      expect(hi.blurSigma, 29);
+      expect(hi.veil[0].a, closeTo(0.35, 0.01));
+    });
+
+    test('卡片取样图分辨率跟着模糊：模糊 ≥ 8dp 每 dp 1/4 像素，磨砂 0（模糊 1dp）每 dp 2 像素、不超过像素比；清晰图插画按像素比、光斑半个像素；一张不超过像素上限', () {
+      expect(MeowBackdrop.frostScaleFor(29, 2.75), 0.25);
+      expect(MeowBackdrop.frostScaleFor(44, 2.75), 0.25);
+      expect(MeowBackdrop.frostScaleFor(4, 2.75), 0.5);
+      expect(MeowBackdrop.frostScaleFor(1, 2.75), 2);
+      expect(MeowBackdrop.frostScaleFor(1, 1.25), 1.25);
+      expect(MeowBackdropHost.sharpScaleFor(MeowBgPattern.art, 2.75), 2.75);
+      expect(MeowBackdropHost.sharpScaleFor(MeowBgPattern.blobs, 2.75), 0.5);
+      // 手机整屏按像素比不降；4K 桌面窗口整窗降到像素上限以内
+      const phone = Size(393, 873), desk = Size(2560, 1440);
+      expect(MeowBackdropHost.capped(2.75, phone), 2.75);
+      final k = MeowBackdropHost.capped(1.5, desk);
+      expect(desk.width * k * desk.height * k, lessThanOrEqualTo(MeowBackdropHost.pixelBudget + 1));
+    });
+
+    test('自己的图片：按 cover 铺满需要的大小解码（大图缩小解码，小图不放大）；读不了的数据返回 null', () async {
+      Future<Uint8List> png(int w, int h) async {
+        final recorder = ui.PictureRecorder();
+        Canvas(recorder).drawRect(Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()), Paint()..color = const Color(0xFF336699));
+        final image = await recorder.endRecording().toImage(w, h);
+        final data = await image.toByteData(format: ui.ImageByteFormat.png);
+        image.dispose();
+        return data!.buffer.asUint8List();
+      }
+
+      final big = await MeowGlassArt.decode(await png(400, 300), const Size(100, 100));
+      expect((big!.width, big.height), (133, 100));
+      big.dispose();
+      final small = await MeowGlassArt.decode(await png(40, 30), const Size(100, 100));
+      expect((small!.width, small.height), (40, 30));
+      small.dispose();
+      expect(await MeowGlassArt.decode(Uint8List.fromList([1, 2, 3, 4]), const Size(10, 10)), isNull);
+    });
+
+    test('选中态的底：经典 = 淡底叠卡片底；玻璃 0.5 起同经典口径，磨砂 0 淡到 0.25 / 0.7', () {
+      final classic = MeowTokens.resolve(Brightness.light, MeowLook.classic);
+      expect(classic.selectedCard, Color.alphaBlend(classic.soft, classic.elev));
+      MeowTokens glass(double f) =>
+          MeowTokens.resolve(Brightness.light, MeowLook(style: MeowThemeStyle.glass, glassFrost: f, accentColor: 0xFF2E7DB0));
+      final g5 = glass(0.5), g0 = glass(0);
+      expect(g5.selectedCard, Color.alphaBlend(g5.soft, g5.elev));
+      expect(g0.selectedCard, Color.alphaBlend(g0.soft.withValues(alpha: g0.soft.a * 0.25 / 0.7), g0.elev));
     });
 
     test('颜色来源：渐变用两端；单色第二色 = 同色相 +28°；光斑四团的位置、大小、颜色按 340 宽等比', () {
@@ -593,7 +663,7 @@ void main() {
         final dark = b == Brightness.dark;
         for (final base in looks) {
           for (final pattern in MeowBgPattern.values) {
-            for (final f in const [0.0, 0.5, 1.0]) {
+            for (final f in const [0.5, 1.0]) {
               for (final (_, accent) in MeowAccentColors.presets) {
                 final t = MeowTokens.resolve(b, with2(base, pattern: pattern, frost: f, accent: accent));
                 final spec = t.backdrop!;
@@ -644,6 +714,41 @@ void main() {
       }
     });
 
+    test('磨砂 < 0.5：垫层上限跟着降（0 不垫，正文不再保证）；次级字与强调色仍按 0.5 那一档的卡片修正，不被推成近黑 / 近白', () {
+      for (final b in Brightness.values) {
+        final dark = b == Brightness.dark;
+        for (final base in looks) {
+          for (final pattern in MeowBgPattern.values) {
+            for (final f in const [0.0, 0.25]) {
+              for (final (_, accent) in MeowAccentColors.presets) {
+                final t = MeowTokens.resolve(b, with2(base, pattern: pattern, frost: f, accent: accent));
+                final spec = t.backdrop!;
+                final w = MeowBackdrop.frostWeight(f);
+                if (dark) {
+                  expect(t.backdropScrim, lessThanOrEqualTo(0.85 * w + 1e-9));
+                } else {
+                  final bottom = spec.fill.bottom;
+                  expect(1 - (1 - t.backdropScrim) * (1 - bottom), lessThanOrEqualTo(bottom + (0.85 - bottom) * w + 1e-9));
+                }
+                final why = '$b ${base.cardColor.toRadixString(16)} $pattern f=$f accent=$accent';
+                for (final surface in spec.referenceSurfaces(t.t1)) {
+                  expect(MeowTokens.contrast(t.t2, surface), greaterThanOrEqualTo(4.5), reason: why);
+                  expect(MeowTokens.contrast(t.accent, surface), greaterThanOrEqualTo(4.5), reason: why);
+                }
+                // 和 0.5 那一档比，强调色不会被推远（同一组背景，只是罩色 / 饱和度不同）
+                final ref = MeowTokens.resolve(b, with2(base, pattern: pattern, frost: 0.5, accent: accent));
+                expect(
+                  (t.accent.computeLuminance() - ref.accent.computeLuminance()).abs(),
+                  lessThan(0.12),
+                  reason: why,
+                );
+              }
+            }
+          }
+        }
+      }
+    });
+
     test('垫层：背景够亮 / 够暗时不垫；浅色垫白、深色垫黑，封顶 0.85', () {
       const texts = [(Color(0xFF2A2130), 7.0), (Color(0xFF665A69), 4.5)];
       expect(MeowBackdrop.scrimFor(worst: const Color(0xFFF0F0F0), fillAlpha: 0.34, dark: false, texts: texts), 0);
@@ -655,37 +760,10 @@ void main() {
       expect(MeowBackdrop.scrimFor(worst: const Color(0xFFB0B0B0), fillAlpha: 0.07, dark: true, texts: light), greaterThan(0));
     });
 
-    test('插画的保守极值与图本身一致（模糊后最暗 / 最亮的像素都在 artExtremes 的范围里）', () async {
-      for (final m in ['light', 'dark']) {
-        final bytes = File('assets/images/glass_art_$m.jpg').readAsBytesSync();
-        final codec = await ui.instantiateImageCodec(bytes);
-        final image = (await codec.getNextFrame()).image;
-        final data = (await image.toByteData())!;
-        // 按 48 × 48 格取平均（每格约 19px，比磨砂最小的模糊还轻），再看极值
-        const n = 48;
-        final w = image.width, h = image.height;
-        var lo = 1.0, hi = 0.0;
-        for (var gy = 0; gy < n; gy++) {
-          for (var gx = 0; gx < n; gx++) {
-            var r = 0, g = 0, b = 0, count = 0;
-            for (var y = gy * h ~/ n; y < (gy + 1) * h ~/ n; y++) {
-              for (var x = gx * w ~/ n; x < (gx + 1) * w ~/ n; x++) {
-                final i = (y * w + x) * 4;
-                r += data.getUint8(i);
-                g += data.getUint8(i + 1);
-                b += data.getUint8(i + 2);
-                count++;
-              }
-            }
-            final l = Color.fromARGB(255, r ~/ count, g ~/ count, b ~/ count).computeLuminance();
-            lo = math.min(lo, l);
-            hi = math.max(hi, l);
-          }
-        }
-        final ext = MeowBackdrop.artExtremes.map((c) => c.computeLuminance()).toList();
-        expect(lo, greaterThanOrEqualTo(ext.reduce(math.min) - 0.01), reason: m);
-        expect(hi, lessThanOrEqualTo(ext.reduce(math.max) + 0.01), reason: m);
-      }
+    test('插画是自己选的图：保守极值从纯黑到纯白都有', () {
+      final lum = MeowBackdrop.artExtremes.map((c) => c.computeLuminance()).toList();
+      expect(lum.reduce(math.min), 0);
+      expect(lum.reduce(math.max), 1);
     });
 
     test('设置：老配置没有背景 / 磨砂两项 = 光斑 + 0.5；存了再读回来一样；经典主题下外观不带它们', () {
@@ -696,7 +774,15 @@ void main() {
       expect((back.bgPattern, back.glassFrost), (MeowBgPattern.art, 0.2));
       expect(MeowSettings.fromJson({'bgPattern': 'stars'}).bgPattern, MeowBgPattern.blobs);
       expect(MeowLook.of(s.copyWith(themeStyle: MeowThemeStyle.classic)), MeowLook.classic);
-      expect(MeowLook.of(s).bgPattern, MeowBgPattern.art);
+      // 插画只用自己选的图：还没选时先按光斑画；选了带上编号（换图 = 外观变了 → 重画背景）
+      expect(MeowLook.of(s).bgPattern, MeowBgPattern.blobs);
+      final withArt = s.copyWith(glassArtImage: 'a1b2c3d4');
+      expect((MeowLook.of(withArt).bgPattern, MeowLook.of(withArt).artImage), (MeowBgPattern.art, 'a1b2c3d4'));
+      expect(MeowLook.of(withArt.copyWith(bgPattern: MeowBgPattern.blobs)).artImage, isNull);
+      expect(MeowLook.of(withArt) == MeowLook.of(withArt.copyWith(glassArtImage: 'ffff0000')), isFalse);
+      final back2 = MeowSettings.fromJson(jsonDecode(jsonEncode(withArt.toJson())) as Map<String, Object?>);
+      expect(back2.glassArtImage, 'a1b2c3d4');
+      expect(MeowSettings.fromJson({'themeStyle': 'glass'}).glassArtImage, isNull);
     });
   });
 

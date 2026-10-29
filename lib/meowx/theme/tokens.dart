@@ -116,6 +116,14 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 玻璃卡片统一的对比度垫层（正文 ≥ 7 用，见 [MeowBackdrop.scrim]）
   final double backdropScrim;
 
+  /// 卡片上选中态的底（选中的节点格、代理组…）：淡底叠在卡片底上。液态玻璃下跟着磨砂强度的左半段变淡（同 MeowX iOS：
+  /// 0.5 起照旧，到 0 剩 0.25 / 0.7）——卡片已经透明了，选中块还是一整块实色的淡粉会像贴上去的
+  Color get selectedCard {
+    final b = backdrop;
+    final k = b == null ? 1.0 : (0.25 + 0.45 * MeowBackdrop.frostWeight(b.frost)) / 0.7;
+    return Color.alphaBlend(soft.withValues(alpha: soft.a * k), elev);
+  }
+
   /// 液态玻璃主题的内容卡片（见 card_surface.dart）：1px 亮边、顶边内高光、很淡的同色相投影（只画在卡片外面）。
   /// 经典 = null（卡片照原来的实色画，一个像素不变）
   final Color? cardRim;
@@ -238,7 +246,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         // 次级字（与下面的强调色）在背景上、在垫好的卡片上都要 ≥ 4.5:1，不够就压暗 / 提亮
         t1: t1,
         backdropScrim: scrim,
-        t2: ensureContrast(base.t2, [...pageBgs, ...backdrop.cardSurfaces(scrim)], lighten: isDark),
+        t2: ensureContrast(base.t2, [...pageBgs, ...backdrop.referenceSurfaces(t1)], lighten: isDark),
         glass: true,
         glassTinted: look.glassTint == MeowGlassTint.tinted,
         heroGradient: heroGradient,
@@ -262,7 +270,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     final accent = accentShades(
       Color(look.accentColor),
       dark: isDark,
-      backgrounds: [...pageBgs, ...?tokens.backdrop?.cardSurfaces(tokens.backdropScrim)],
+      backgrounds: [...pageBgs, ...?tokens.backdrop?.referenceSurfaces(tokens.t1)],
     );
     return tokens._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
   }
@@ -686,12 +694,16 @@ class MeowLook {
     this.gradientTo = MeowBgGradients.defaultTo,
     this.bgPattern = MeowBgPattern.blobs,
     this.glassFrost = 0.5,
+    this.artImage,
   });
 
   /// 从设置里取（经典主题下玻璃样式、底色样式不影响任何东西，一律记成缺省，切样式时不白建主题；单色底色时渐变两色同理）
   factory MeowLook.of(MeowSettings s) {
     final glass = s.themeStyle == MeowThemeStyle.glass;
     final gradient = glass && s.bgStyle == MeowBgStyle.gradient;
+    // 插画只用自己选的图（同 MeowX iOS，不再内置品牌插画）：还没选图时先按光斑画
+    final art = glass && s.bgPattern == MeowBgPattern.art ? s.glassArtImage : null;
+    final pattern = !glass ? MeowBgPattern.blobs : (s.bgPattern == MeowBgPattern.art && art == null ? MeowBgPattern.blobs : s.bgPattern);
     return MeowLook(
       style: s.themeStyle,
       glassTint: glass ? s.glassTint : MeowGlassTint.clear,
@@ -701,8 +713,9 @@ class MeowLook {
       bgStyle: gradient ? MeowBgStyle.gradient : MeowBgStyle.solid,
       gradientFrom: gradient ? s.bgGradientFrom : MeowBgGradients.defaultFrom,
       gradientTo: gradient ? s.bgGradientTo : MeowBgGradients.defaultTo,
-      bgPattern: glass ? s.bgPattern : MeowBgPattern.blobs,
+      bgPattern: pattern,
       glassFrost: glass ? s.glassFrost : 0.5,
+      artImage: pattern == MeowBgPattern.art ? art : null,
     );
   }
 
@@ -723,6 +736,9 @@ class MeowLook {
   final MeowBgPattern bgPattern;
   final double glassFrost;
 
+  /// 插画背景的图片编号（只在背景是插画时有）
+  final String? artImage;
+
   bool get glass => style == MeowThemeStyle.glass;
 
   @override
@@ -737,11 +753,12 @@ class MeowLook {
       other.gradientFrom == gradientFrom &&
       other.gradientTo == gradientTo &&
       other.bgPattern == bgPattern &&
-      other.glassFrost == glassFrost;
+      other.glassFrost == glassFrost &&
+      other.artImage == artImage;
 
   @override
-  int get hashCode =>
-      Object.hash(style, glassTint, cardColor, heroColor, accentColor, bgStyle, gradientFrom, gradientTo, bgPattern, glassFrost);
+  int get hashCode => Object.hash(
+    style, glassTint, cardColor, heroColor, accentColor, bgStyle, gradientFrom, gradientTo, bgPattern, glassFrost, artImage);
 }
 
 /// 卡片颜色的预设（「我的 › 外观 › 卡片颜色」，与设计稿同一组）；预设以外的就是自定义取色。

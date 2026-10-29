@@ -316,6 +316,7 @@ class AppearanceRows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeSettingProvider.select((s) => s.themeMode));
     final glass = ref.watch(meowSettingProvider.select((s) => s.themeStyle == MeowThemeStyle.glass));
+    final art = ref.watch(meowSettingProvider.select((s) => s.bgPattern == MeowBgPattern.art));
     return MeRows(
       children: [
         MePickerRow<ThemeMode>(
@@ -329,7 +330,7 @@ class AppearanceRows extends ConsumerWidget {
         if (glass) const GlassTintRow(),
         // 液态玻璃下是「底色」（单色 / 渐变），经典下是卡片颜色
         if (glass) const GlassBgRow() else const ColorChoiceRow(MeowColorKind.card),
-        if (glass) ...const [GlassPatternRow(), GlassFrostRow()],
+        if (glass) ...[const GlassPatternRow(), if (art) const GlassArtRow(), const GlassFrostRow()],
         const ColorChoiceRow(MeowColorKind.hero),
         const ColorChoiceRow(MeowColorKind.accent),
         if (ref.watch(appIconSupportedProvider)) const AppIconRow(),

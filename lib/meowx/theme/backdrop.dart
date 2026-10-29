@@ -23,6 +23,7 @@ class MeowBackdrop {
     required this.base,
     required this.diagonal,
     required this.frost,
+    this.artImage,
   });
 
   /// 按底色选择推：渐变用两端；单色时第二色 = 同色相 +28°（「白」取原来的页面底 #F5F1EC 的色相）。
@@ -55,6 +56,7 @@ class MeowBackdrop {
       base: base,
       diagonal: diagonal,
       frost: look.glassFrost.clamp(0.0, 1.0),
+      artImage: pattern == MeowBgPattern.art ? look.artImage : null,
     );
   }
 
@@ -71,6 +73,9 @@ class MeowBackdrop {
   /// 磨砂强度 0–1
   final double frost;
 
+  /// 插画背景的图片编号（自己选的图，见 glass_art.dart；换图就重画）。没选图时外观里已经退回光斑（[MeowLook.of]），这里不会是 null
+  final String? artImage;
+
   /// 光斑与插画几何的参考宽度（设计稿的手机宽 340、高 720）
   static const refWidth = 340.0, refHeight = 720.0;
 
@@ -80,17 +85,37 @@ class MeowBackdrop {
   /// 插画铺满后四边再外扩的比例
   static const artBleed = 0.06;
 
-  /// 插画（与品牌图标同一张画，design/brand/icon-art-*.png 缩到 900）
-  String get artAsset => dark ? 'assets/images/glass_art_dark.jpg' : 'assets/images/glass_art_light.jpg';
+  /// 磨砂强度的左半段（0–0.5）往「透明」走的程度：0.5 及以上 = 1（第一版的取值），0 = 0（几乎透明、不模糊、不加厚、没有罩色）。
+  /// 第一版整段 0–1 都是磨砂：最低也有 14dp 模糊、对比度垫层又把卡片顶回 0.85（同 MeowX iOS，用户实报「调到最低也不是透明效果」）
+  static double frostWeight(double frost) => frost.clamp(0.0, 0.5) / 0.5;
 
-  /// 卡片背后那块背景的模糊（σ，dp）与饱和度提升
-  double get blurSigma => 14 + 30 * frost;
-  double get saturation => dark ? 1.6 : 1.8;
+  /// 卡片背后那块背景的模糊（σ，dp）：f ≥ 0.5 是 14 + 30f；更低时从 29 线性降到 f = 0 的 1
+  double get blurSigma => frost < 0.5 ? 1 + 28 * frostWeight(frost) : 14 + 30 * frost;
 
-  /// 卡片填充：白色自上而下的两档不透明度
-  ({double top, double bottom}) get fill => dark
-      ? (top: 0.10 + 0.12 * frost, bottom: 0.04 + 0.06 * frost)
-      : (top: 0.24 + 0.36 * frost + 0.14, bottom: 0.24 + 0.36 * frost - 0.08);
+  /// 饱和度提升跟着左半段降到原色：透明的卡片底下就是页面本来的颜色
+  double get saturation => 1 + ((dark ? 1.6 : 1.8) - 1) * frostWeight(frost);
+
+  /// 卡片填充：白色自上而下的两档不透明度（不含对比度垫层）
+  ({double top, double bottom}) get fill => fillOf(frost, dark: dark);
+
+  /// f ≥ 0.5：浅 (0.24+0.36f+0.14) → (0.24+0.36f−0.08)，深 (0.10+0.12f) → (0.04+0.06f)；
+  /// f < 0.5：从 0.5 那档线性降到 f = 0 的浅 (0.08, 0.02) / 深 (0.03, 0)
+  static ({double top, double bottom}) fillOf(double frost, {required bool dark}) {
+    final f = frost.clamp(0.0, 1.0);
+    if (f < 0.5) {
+      final k = frostWeight(f), hi = fillOf(0.5, dark: dark);
+      final (loTop, loBottom) = dark ? (0.03, 0.0) : (0.08, 0.02);
+      return (top: loTop + (hi.top - loTop) * k, bottom: loBottom + (hi.bottom - loBottom) * k);
+    }
+    return dark
+        ? (top: 0.10 + 0.12 * f, bottom: 0.04 + 0.06 * f)
+        : (top: 0.24 + 0.36 * f + 0.14, bottom: 0.24 + 0.36 * f - 0.08);
+  }
+
+  /// 卡片取样图每 dp 几个像素：跟着模糊走——模糊折成取样图的像素不少于 2，卡片按屏幕放大回去时才看不出格子；
+  /// 最少 1/4（磨砂 ≥ 0.5 时模糊 29dp 以上，1/4 绰绰有余），最多屏幕像素比（磨砂拉到 0、模糊 1dp 时每 dp 2 像素）。
+  /// 以前固定物理分辨率的 1/4：磨砂 0.5 时多占内存，磨砂调低后又不够清楚（同 MeowX iOS 2026-10-28 的改法）
+  static double frostScaleFor(double blurSigma, double dpr) => math.min(math.max(dpr, 0.25), math.max(0.25, 2 / math.max(blurSigma, 0.01)));
 
   /// 有没有东西可模糊（平涂只有渐层，磨砂照样生效，只是看不出模糊）
   bool get textured => pattern != MeowBgPattern.flat;
@@ -120,10 +145,14 @@ class MeowBackdrop {
     return (h + 360) % 360;
   }
 
-  /// 插画上面压的那层底色（左上 → 右下）
-  List<Color> get veil => dark
-      ? [HSLColor.fromAHSL(0.55, hueA, 0.5, 0.12).toColor(), HSLColor.fromAHSL(0.60, hueB, 0.5, 0.07).toColor()]
-      : [HSLColor.fromAHSL(0.35, hueA, 0.5, 0.92).toColor(), HSLColor.fromAHSL(0.45, hueB, 0.5, 0.88).toColor()];
+  /// 插画上面压的那层底色（左上 → 右下，保字的对比度）：跟着磨砂强度的左半段淡掉，到 0 没有——用户拉到透明要看的是图片本身
+  /// （同 MeowX iOS：罩色把对比度砍掉近一半，用户实报「插画背景很糊」）；≥ 0.5 不变
+  List<Color> get veil {
+    final k = frostWeight(frost);
+    return dark
+        ? [HSLColor.fromAHSL(0.55 * k, hueA, 0.5, 0.12).toColor(), HSLColor.fromAHSL(0.60 * k, hueB, 0.5, 0.07).toColor()]
+        : [HSLColor.fromAHSL(0.35 * k, hueA, 0.5, 0.92).toColor(), HSLColor.fromAHSL(0.45 * k, hueB, 0.5, 0.88).toColor()];
+  }
 
   /// 整屏底色渐层的着色器（屏幕坐标）
   Shader baseShader(Size screen) => _diagonalShader(screen, base, diagonal: diagonal);
@@ -134,7 +163,7 @@ class MeowBackdrop {
     colors,
   );
 
-  /// 在屏幕坐标里画整张清晰的背景（[art] = 解码好的插画，插画背景没解码完时只画底色渐层）
+  /// 在屏幕坐标里画整张清晰的背景（[art] = 解码好的图片，插画背景没解码完时只画底色渐层）
   void paint(Canvas canvas, Size screen, {ui.Image? art}) {
     final rect = Offset.zero & screen;
     canvas.drawRect(rect, Paint()..shader = baseShader(screen));
@@ -162,7 +191,8 @@ class MeowBackdrop {
             Paint()..filterQuality = FilterQuality.medium,
           );
         }
-        canvas.drawRect(rect, Paint()..shader = _diagonalShader(screen, veil));
+        final v = veil;
+        if (v.any((c) => c.a > 0)) canvas.drawRect(rect, Paint()..shader = _diagonalShader(screen, v));
     }
   }
 
@@ -191,9 +221,11 @@ class MeowBackdrop {
     return Color.from(alpha: 1, red: ch(0), green: ch(1), blue: ch(2));
   }
 
-  /// 插画模糊后亮度最低 / 最高的几种颜色（由 design/brand/icon-art-*.png 高斯模糊 σ≈磨砂最小值后统计，两张画同一个深色底）。
-  /// 运行时按卡片实际位置统计预模糊图（见 backdrop_host.dart），这里只给主题推文字色与单测用的保守极值。
+  /// 插画背景卡片底下最不利的颜色：图片是用户自己选的，什么都可能有，按纯黑到纯白取保守极值（以前内置品牌插画时是
+  /// 那两张画模糊后量出来的这几种近黑 / 近白，留着：它们带一点色相，提饱和后比纯黑白更不利）。主题按它推文字色与垫层。
   static const artExtremes = <Color>[
+    Color(0xFF000000),
+    Color(0xFFFFFFFF),
     Color(0xFF16171C),
     Color(0xFF17171E),
     Color(0xFF181920),
@@ -205,21 +237,38 @@ class MeowBackdrop {
   /// 整套卡片统一的对比度垫层：让正文 [t1] 在卡片背后最不利的背景上也 ≥ 7（只看正文；次级字与强调色由主题对卡片面压暗 / 提亮，
   /// 见 [MeowTokens.resolve]）。按背景整体算、不逐卡按位置变（逐卡算的话滚动时卡片会变）：光斑按估算的颜色集合，
   /// 插画按模糊后的亮度极值（[artExtremes]）。浅色 = 加厚白色填充，深色 = 白色填充下面垫一层黑，都封顶 0.85。
-  double scrim(Color t1) {
+  /// 磨砂强度低于 0.5 时垫层的上限跟着降（[frostWeight]），到 0 不垫：用户要的是透明，正文对比度不再保证。
+  double scrim(Color t1) => _scrimWith(t1, fill.bottom, frostWeight(frost));
+
+  double _scrimWith(Color t1, double fillBottom, double weight) {
+    // 上限：深色 = 黑垫层本身；浅色 = 白的总覆盖率（填充本身就算进去，所以从填充往 0.85 走）
+    final cap = dark ? 0.85 * weight : fillBottom + (0.85 - fillBottom) * weight;
     var s = 0.0;
     for (final w in worstBackgrounds()) {
-      s = math.max(s, scrimFor(worst: w, fillAlpha: fill.bottom, dark: dark, texts: [(t1, 7.0)]));
+      s = math.max(s, scrimFor(worst: w, fillAlpha: fillBottom, dark: dark, texts: [(t1, 7.0)], cap: cap));
     }
     return s;
   }
 
-  /// 垫层 [scrim] 之后，最不利的背景上卡片的颜色（次级字与强调色要在这上面够对比度）
+  /// 垫层 [scrim] 之后，最不利的背景上卡片的颜色
   List<Color> cardSurfaces(double scrim) => [for (final w in worstBackgrounds()) cardSurface(w, scrim)];
 
+  /// 次级字与强调色按哪些卡片面修正：磨砂 0.5 那一档的卡片（填充与垫层按 0.5 算，背景仍是此刻的）。
+  /// 更低时卡片往透明走，照实际的面修正会同时顶着背景最暗与最亮处、两头顾不全，强调色被推成近乎纯黑（MeowX iOS 模拟器里看到过），
+  /// 所以颜色不跟着磨砂强度的左半段变；≥ 0.5 就是 [cardSurfaces]。
+  List<Color> referenceSurfaces(Color t1) {
+    if (frost >= 0.5) return cardSurfaces(scrim(t1));
+    final ref = fillOf(0.5, dark: dark).bottom;
+    final s = _scrimWith(t1, ref, 1);
+    return [for (final w in worstBackgrounds()) _surface(w, s, ref)];
+  }
+
   /// 背景 [worst] 上卡片（垫层 [scrim] + 底部那档填充）的颜色
-  Color cardSurface(Color worst, double scrim) => dark
-      ? Color.alphaBlend(Colors.white.withValues(alpha: fill.bottom), Color.lerp(worst, Colors.black, scrim)!)
-      : Color.lerp(worst, Colors.white, 1 - (1 - scrim) * (1 - fill.bottom))!;
+  Color cardSurface(Color worst, double scrim) => _surface(worst, scrim, fill.bottom);
+
+  Color _surface(Color worst, double scrim, double fillBottom) => dark
+      ? Color.alphaBlend(Colors.white.withValues(alpha: fillBottom), Color.lerp(worst, Colors.black, scrim)!)
+      : Color.lerp(worst, Colors.white, 1 - (1 - scrim) * (1 - fillBottom))!;
 
   /// 卡片背后可能出现的最不利的背景色（已做饱和度提升）：底色渐层沿途、光斑叠在底色上的颜色、插画极值叠上那层底色。
   /// 模糊只会把颜色往中间拉，所以用未模糊的极值是保守的。
@@ -278,11 +327,12 @@ class MeowBackdrop {
       other.hueB == hueB &&
       other.diagonal == diagonal &&
       other.frost == frost &&
+      other.artImage == artImage &&
       other.base.length == base.length &&
       Iterable.generate(base.length).every((i) => other.base[i] == base[i]);
 
   @override
-  int get hashCode => Object.hash(pattern, dark, hueA, hueB, diagonal, frost, Object.hashAll(base));
+  int get hashCode => Object.hash(pattern, dark, hueA, hueB, diagonal, frost, artImage, Object.hashAll(base));
 }
 
 /// 玻璃卡片的固定画法参数（与底栏同一套高光）

@@ -353,6 +353,10 @@ abstract class MeowSettings with _$MeowSettings {
     MeowBgPattern bgPattern,
     @Default(0.5) double glassFrost,
 
+    /// 插画背景用自己选的图片：图片的编号（文件见 `lib/meowx/theme/glass_art.dart`，换图 = 换编号，背景按它重画）；
+    /// null = 还没选（插画背景先按光斑画）。经典主题不用
+    String? glassArtImage,
+
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,
   }) = _MeowSettings;

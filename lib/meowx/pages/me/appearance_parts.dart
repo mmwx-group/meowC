@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:bett_box/models/models.dart';
+import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,6 +9,7 @@ import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/color_picker.dart';
+import '../../theme/glass_art.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -315,7 +319,7 @@ class GlassPatternRow extends ConsumerWidget {
       caption: switch (pattern) {
         MeowBgPattern.flat => '只有底色，卡片照样磨砂（底下没有东西可模糊）。',
         MeowBgPattern.blobs => '底色化成几团大光斑铺在整屏，卡片透出模糊后的光斑。',
-        MeowBgPattern.art => '品牌插画铺满整屏、压一层底色，卡片透出模糊后的插画。',
+        MeowBgPattern.art => '自己选的图片铺满整屏、压一层底色，卡片透出模糊后的图片；磨砂调低时那层底色跟着变淡。还没选图时先按光斑画。',
       },
       child: MeowSegment<MeowBgPattern>(
         items: [for (final v in MeowBgPattern.values) (v, v.label)],
@@ -329,7 +333,82 @@ class GlassPatternRow extends ConsumerWidget {
   }
 }
 
-/// 卡片的磨砂强度（0 通透 – 1 厚，缺省 0.5）：拖动时只改这一行的数，松手才存（存了才重画背景与主题）。
+/// 插画背景用的图片（背景选了插画才出现）：缩略图 + 选择 / 更换。安卓从系统相册选（不要存储权限），Windows 选文件；
+/// 同一时间只存一张（见 [MeowGlassArt]）。
+class GlassArtRow extends ConsumerStatefulWidget {
+  const GlassArtRow({super.key});
+
+  @override
+  ConsumerState<GlassArtRow> createState() => _GlassArtRowState();
+}
+
+class _GlassArtRowState extends ConsumerState<GlassArtRow> {
+  bool _busy = false;
+  String? _fileId;
+  Future<File>? _file;
+
+  Future<void> _pick() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final id = await MeowGlassArt.pick();
+      if (id != null) _update(ref, (s) => s.copyWith(glassArtImage: id));
+    } catch (e) {
+      globalState.showNotifier(e is MeowGlassArtError ? e.message : '选择图片失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final id = ref.watch(meowSettingProvider.select((s) => s.glassArtImage));
+    if (id != _fileId) {
+      _fileId = id;
+      _file = id == null ? null : MeowGlassArt.file(id);
+    }
+    final dense = MeDense.of(context);
+    final side = dense ? 48.0 : 56.0;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    return _StackedRow(
+      label: '插画图片',
+      value: id == null ? '未选择' : null,
+      caption: id == null ? '选一张自己的图片铺在背景上。' : null,
+      child: Row(
+        children: [
+          if (_file != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: SizedBox.square(
+                  dimension: side,
+                  child: FutureBuilder<File>(
+                    future: _file,
+                    builder: (_, snap) => snap.data == null
+                        ? ColoredBox(color: mm.card2)
+                        // 只按缩略图的大小解码
+                        : Image.file(
+                            snap.data!,
+                            fit: BoxFit.cover,
+                            cacheWidth: (side * dpr).round(),
+                            gaplessPlayback: true,
+                            errorBuilder: (_, _, _) => ColoredBox(color: mm.card2),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          const Spacer(),
+          MePill(label: _busy ? '正在读取…' : (id == null ? '选择图片' : '更换图片'), height: dense ? 34 : 38, onTap: _busy ? null : _pick),
+        ],
+      ),
+    );
+  }
+}
+
+/// 卡片的磨砂强度（0 透明 – 1 厚，缺省 0.5）：拖动时只改这一行的数，松手才存（存了才重画背景与主题）。
 class GlassFrostRow extends ConsumerStatefulWidget {
   const GlassFrostRow({super.key});
 
@@ -340,7 +419,7 @@ class GlassFrostRow extends ConsumerStatefulWidget {
 class _GlassFrostRowState extends ConsumerState<GlassFrostRow> {
   double? _dragging;
 
-  static String _label(double v) => v < 0.34 ? '通透' : (v < 0.67 ? '适中' : '厚');
+  static String _label(double v) => v < 0.05 ? '透明' : (v < 0.34 ? '通透' : (v < 0.67 ? '适中' : '厚'));
 
   @override
   Widget build(BuildContext context) {
@@ -350,7 +429,7 @@ class _GlassFrostRowState extends ConsumerState<GlassFrostRow> {
     return _StackedRow(
       label: '磨砂强度',
       value: '${_label(value)} · ${(value * 100).round()}%',
-      caption: '越厚卡片越白、背后越模糊；对比度不够时卡片会自动加厚一点。',
+      caption: '越往右卡片越厚、背后越模糊，字看不清时会自动加厚；拉到最左是透明玻璃，不再自动加厚，插画背景上的罩色也一起去掉。',
       child: SliderTheme(
         data: SliderTheme.of(context).copyWith(
           activeTrackColor: mm.accent,
