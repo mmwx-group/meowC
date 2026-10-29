@@ -18,10 +18,11 @@ import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 /// 不画光斑与插画（自选的照片不能跟着分享出去）。卡片是不透明的 [MeowTokens.elevSolid]（经典 = 卡片色；液态玻璃 = 玻璃卡片叠在
 /// 页面底上的实色），不画玻璃效果。字、强调色、下载紫、分隔线都取同一份 token；页头 App 图标按深浅取浅 / 深两张（同 [BrandHead]）。
 /// 自上而下：页头（App 图标 + MeowX + 网络测速、右边日期时间）→ 下载主卡（大数字 + 峰值）→ 上传 / 延迟两张小卡 →
-/// 速率曲线（同详情页的画法）→ 测速源 · 线程、出站、出口三行 → 页脚。出口只写 ASN / 运营商，**不写 IP**
+/// 速率曲线（同详情页的画法）→ 测速源 · 线程、网络（记了才有）、出站、出口（查到才有）→ 页脚。出口只写 ASN / 运营商，**不写 IP**
 /// （直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。
 ///
 /// 按 450 宽的版式画、整张放大 2.4 倍（1080 / 450），字号层级同测速记录详情页；曲线卡占上下排完之后剩下的高度。
+/// 信息卡最多四行（多了「网络」那一行），主卡大数字 48、卡片上下留白与信息卡行距都收紧过，四行时曲线卡仍有原来三行时的高度。
 class SpeedTestShareImage {
   SpeedTestShareImage._();
 
@@ -99,6 +100,7 @@ class SpeedTestShareContent {
     required this.uploadNote,
     this.latency,
     required this.sourceLine,
+    this.network,
     required this.outbound,
     this.exit,
   });
@@ -119,6 +121,9 @@ class SpeedTestShareContent {
 
   /// 「Microsoft · 8 线程」/「Google · 单线程」（同记录详情页的 threadsTitle）
   final String sourceLine;
+
+  /// 本机网络「Wi-Fi」「5G」…；旧记录与没取到的 null
+  final String? network;
 
   /// 节点名；直连「直连 · 本机网络」
   final String outbound;
@@ -145,6 +150,7 @@ class SpeedTestShareContent {
           : (r.uploadPeakMbps == null ? '未测' : '峰值 ${fmtRecordMbps(r.uploadPeakMbps)} Mbps'),
       latency: r.latencyMs?.toString(),
       sourceLine: '${r.source.title} · ${r.threadsTitle}',
+      network: r.network,
       outbound: r.isDirect ? '直连 · 本机网络' : r.outbound,
       exit: exit.isEmpty ? null : exit,
     );
@@ -280,8 +286,8 @@ class _SharePainter {
 
   /// 下载主卡：「下载」、大数字 + Mbps、峰值。返回底边
   double _mainCard(Canvas canvas, double top) {
-    const padH = 20.0, padV = 14.0;
-    final numberStyle = _num(54, mm.down);
+    const padH = 20.0, padV = 12.0;
+    final numberStyle = _num(48, mm.down);
     final legendHeight = _text(' ', _style(13, mm.t2, weight: FontWeight.w700)).height;
     final numberHeight = _text('0', numberStyle).height;
     final peak = _text(content.downloadPeak ?? ' ', _style(13, mm.t2));
@@ -296,7 +302,7 @@ class _SharePainter {
 
   /// 上传 / 延迟两张小卡。返回底边
   double _smallCards(Canvas canvas, double top) {
-    const padH = 16.0, padV = 12.0, gap = 10.0;
+    const padH = 16.0, padV = 10.0, gap = 10.0;
     final cardWidth = (inner - gap) / 2;
     final valueHeight = _text('0', _num(30, mm.t1)).height;
     final noteHeight = _text(' ', _style(12, mm.t2)).height;
@@ -347,10 +353,15 @@ class _SharePainter {
     canvas.restore();
   }
 
-  /// 信息卡：测速源 · 线程、出站、出口（只有 ASN / 运营商）。[bottom] 是底边，返回顶边
+  /// 信息卡：测速源 · 线程、网络、出站、出口（只有 ASN / 运营商）。[bottom] 是底边，返回顶边
   double _infoCard(Canvas canvas, double bottom) {
-    const padH = 18.0, padV = 3.0, rowPad = 6.5;
-    final rows = [('测速源', content.sourceLine), ('出站', content.outbound), if (content.exit != null) ('出口', content.exit!)];
+    const padH = 18.0, padV = 3.0, rowPad = 5.0;
+    final rows = [
+      ('测速源', content.sourceLine),
+      if (content.network != null) ('网络', content.network!),
+      ('出站', content.outbound),
+      if (content.exit != null) ('出口', content.exit!),
+    ];
     final keyStyle = _style(13, mm.t2), valueStyle = _style(13, mm.t1);
     final rowHeight = _text(' ', valueStyle).height + rowPad * 2;
     final height = padV * 2 + rowHeight * rows.length;

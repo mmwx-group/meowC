@@ -1,5 +1,5 @@
 // 移植自 FlClash plugins/wifi_ssid（MIT，© 2025 FlClash，见本插件的 LICENSE）。
-// MeowX 的改动：加 getNetworkState（物理网络类型 + 定位权限 / 定位服务状态）、openAppSettings、openLocationSettings。
+// MeowX 的改动：加 getNetworkState（物理网络类型 + 蜂窝制式 + 定位权限 / 定位服务状态）、openAppSettings、openLocationSettings。
 package com.follow.clash.wifi_ssid
 
 import android.Manifest
@@ -160,6 +160,8 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     // 物理网络（不含 VPN）里有没有 Wi-Fi / 蜂窝 / 有线，以及读 SSID 要的定位权限与定位服务开关。
     // 开着 VPN 时系统的默认网络是 VPN，所以按全部非 VPN、能上网的网络看。
+    // cellularSubtype：能上网的蜂窝网络的制式（TelephonyManager.NETWORK_TYPE_*，测速记录显示 5G / 4G …，Dart 侧映射；
+    // 5G NSA 报 LTE）。NetworkInfo 已废弃但只要 ACCESS_NETWORK_STATE，不申请 READ_PHONE_STATE；没有蜂窝 / 取不到 = null。
     private fun getNetworkState(result: Result) {
         val ctx = context ?: run {
             result.error(ERROR_UNAVAILABLE, "Context not available", null)
@@ -168,6 +170,7 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         var wifi = false
         var cellular = false
         var ethernet = false
+        var cellularSubtype: Int? = null
         runCatching {
             val cm = connectivityManager
             @Suppress("DEPRECATION")
@@ -176,7 +179,12 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return@forEach
                 if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) return@forEach
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) wifi = true
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) cellular = true
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+                    cellular = true
+                    @Suppress("DEPRECATION")
+                    val info = cm.getNetworkInfo(network)
+                    if (cellularSubtype == null) cellularSubtype = info?.subtype
+                }
                 if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) ethernet = true
             }
         }
@@ -186,6 +194,7 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 "wifi" to wifi,
                 "cellular" to cellular,
                 "ethernet" to ethernet,
+                "cellularSubtype" to cellularSubtype,
                 "fineLocation" to hasForegroundLocation(ctx),
                 "backgroundLocation" to hasBackgroundLocation(ctx),
                 "locationEnabled" to (locationManager?.let(LocationManagerCompat::isLocationEnabled) ?: false),

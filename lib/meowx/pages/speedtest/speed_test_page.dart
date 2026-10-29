@@ -236,10 +236,10 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
       children: [
         Text(parts.join(' · '), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
         const SizedBox(height: 2),
-        // 从开测起就占着这一行（没用量时透明），数出来不再撑高
+        // 从开测起就占着这一行（没用量时透明），数出来不再撑高；本机网络取到了写在前面「Wi-Fi · 已用 …」
         Opacity(
           opacity: p.bytesUsed > 0 ? 1 : 0,
-          child: Text('已用 ${fmtSize(p.bytesUsed)}',
+          child: Text('${c.network == null ? '' : '${c.network} · '}已用 ${fmtSize(p.bytesUsed)}',
               maxLines: 1, style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
         ),
       ],

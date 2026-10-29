@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/haptics.dart';
+import 'speed_test_network.dart';
 
 /// 测速出站「直连」：mihomo 的内置出站 DIRECT（不是代理组），经本机网络直接测。
 const kSpeedTestDirect = 'DIRECT';
@@ -188,10 +189,13 @@ class SpeedTestProgress {
 /// 测速页的状态：测在 Go 核心里跑（meowSpeedTestStart / Status / Stop），这里发开始 / 停止、测的时候每 300ms 拉一次进度。
 /// 测速源与单 / 多线程记在本机偏好里。
 class SpeedTestController extends ChangeNotifier {
-  SpeedTestController({this.call});
+  SpeedTestController({this.call, this.networkProbe});
 
   /// 调核心（测试里换成假的）；缺省走 clashCore
   final Future<String?> Function(ActionMethod method, String data)? call;
+
+  /// 取本机网络（测试里换成假的）；缺省 [currentSpeedTestNetwork]
+  final Future<String?> Function()? networkProbe;
 
   static const multiConnections = 8;
 
@@ -211,6 +215,9 @@ class SpeedTestController extends ChangeNotifier {
   final SpeedTestHistory history = SpeedTestHistory();
 
   SpeedTestProgress progress = const SpeedTestProgress();
+
+  /// 这次测速的本机网络（Wi-Fi / 5G …，见 speed_test_network.dart）：点开始那一刻取，取不到 null；记进这次的记录
+  String? network;
 
   /// 没能开始的原因（未连接、核心太旧…）
   String? message;
@@ -281,7 +288,14 @@ class SpeedTestController extends ChangeNotifier {
     _lastRecordId = null;
     _starting = true;
     progress = SpeedTestProgress(phase: 'preparing', source: source, via: via, exitPending: true);
+    network = null;
     notifyListeners();
+    // 本机网络不等：和开测并行取（几毫秒），取到了「已用」那一行前面出现、测完记进记录
+    unawaited((networkProbe ?? currentSpeedTestNetwork)().then((value) {
+      if (generation != _generation || value == null) return;
+      network = value;
+      notifyListeners();
+    }));
     String? reason;
     try {
       reason = await _invoke(
@@ -317,7 +331,13 @@ class SpeedTestController extends ChangeNotifier {
               case 'failed':
                 MeowHaptics.error();
             }
-            final record = SpeedTestRecord.fromProgress(progress, source: source, connections: connections, outbound: via);
+            final record = SpeedTestRecord.fromProgress(
+              progress,
+              source: source,
+              connections: connections,
+              outbound: via,
+              network: network,
+            );
             if (record != null) {
               _lastRecordId = record.id; // 先记上再加：页面听 history 的通知时就取得到
               history.add(record);
@@ -361,6 +381,7 @@ class SpeedTestRecord {
     this.bytesUsed = 0,
     this.error,
     this.exit,
+    this.network,
   });
 
   final String id;
@@ -386,6 +407,9 @@ class SpeedTestRecord {
   /// 出口（ASN / 运营商 / IP）；旧记录与没查到的是 null
   final SpeedTestExit? exit;
 
+  /// 本机网络「Wi-Fi」「5G」「移动数据」「有线网络」…（点开始那一刻的）；旧记录与没取到的是 null
+  final String? network;
+
   bool get isDirect => outbound == kSpeedTestDirect;
   bool get failed => error != null;
 
@@ -403,6 +427,7 @@ class SpeedTestRecord {
     required SpeedTestSource source,
     required int connections,
     required String outbound,
+    String? network,
     DateTime? date,
   }) {
     if (p.phase != 'done' && p.phase != 'failed') return null;
@@ -424,6 +449,7 @@ class SpeedTestRecord {
       bytesUsed: p.bytesUsed,
       error: p.phase == 'failed' ? (p.error ?? '未知原因') : null,
       exit: p.exit,
+      network: network,
     );
   }
 
@@ -445,6 +471,7 @@ class SpeedTestRecord {
     'bytesUsed': bytesUsed,
     'error': ?error,
     'exit': ?exit?.toJson(),
+    'network': ?network,
   };
 
   /// 字段不全（id / 时间 / 出站缺了）返回 null，读盘时跳过
@@ -469,6 +496,7 @@ class SpeedTestRecord {
       bytesUsed: (j['bytesUsed'] as num?)?.toInt() ?? 0,
       error: j['error'] as String?,
       exit: SpeedTestExit.fromJson(j['exit']),
+      network: j['network'] as String?,
     );
   }
 

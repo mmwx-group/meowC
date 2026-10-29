@@ -10,6 +10,7 @@ class WifiNetworkState {
     this.wifi = false,
     this.cellular = false,
     this.ethernet = false,
+    this.cellularSubtype,
     this.fineLocation = false,
     this.backgroundLocation = false,
     this.locationEnabled = false,
@@ -19,6 +20,7 @@ class WifiNetworkState {
     wifi: m['wifi'] == true,
     cellular: m['cellular'] == true,
     ethernet: m['ethernet'] == true,
+    cellularSubtype: m['cellularSubtype'] is int ? m['cellularSubtype'] as int : null,
     fineLocation: m['fineLocation'] == true,
     backgroundLocation: m['backgroundLocation'] == true,
     locationEnabled: m['locationEnabled'] == true,
@@ -27,6 +29,9 @@ class WifiNetworkState {
   final bool wifi;
   final bool cellular;
   final bool ethernet;
+
+  /// 能上网的蜂窝网络的制式（TelephonyManager.NETWORK_TYPE_*，NetworkInfo.getSubtype；5G NSA 报 LTE）；没有蜂窝 / 取不到 null
+  final int? cellularSubtype;
 
   /// 「使用时允许」的精确定位（没有它任何时候都读不到 SSID）
   final bool fineLocation;

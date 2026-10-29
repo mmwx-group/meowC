@@ -36,6 +36,7 @@ SpeedTestRecord _record({
   String outbound = '🇭🇰 香港 IEPL 01',
   String? error,
   SpeedTestExit? exit = _kddi,
+  String? network = '5G',
 }) {
   final hasUpload = source.hasUpload;
   return SpeedTestRecord(
@@ -55,6 +56,7 @@ SpeedTestRecord _record({
     bytesUsed: 640 * 1024 * 1024,
     error: error,
     exit: exit,
+    network: network,
   );
 }
 
@@ -188,6 +190,12 @@ void main() {
       expect(single.sourceLine, 'Apple · 单线程');
       expect(single.outbound, '🇭🇰 香港 IEPL 01');
       expect(SpeedTestShareImage.fileName(_record()), 'MeowX-speedtest-20261029-1432.png');
+    });
+
+    test('网络：记了就有这一行（原样的文字），旧记录 / 没取到没有', () {
+      expect(SpeedTestShareContent.of(_record())!.network, '5G');
+      expect(SpeedTestShareContent.of(_record(network: 'Wi-Fi'))!.network, 'Wi-Fi');
+      expect(SpeedTestShareContent.of(_record(network: null))!.network, isNull);
     });
   });
 
@@ -365,6 +373,36 @@ void main() {
         }
       });
     }
+
+    testWidgets('信息卡：有网络多一行「网络」（测速源之后、出站之前），曲线卡让出这一行的高度；版面不挤', (tester) async {
+      // 沿左边距里侧（版式 x = 30，卡片里、字的左边）往上数卡片的上下边：卡片色与页面底交替
+      Future<List<int>> cardEdges(SpeedTestRecord record, String? preview) async {
+        // 从页头下面开始（页头的 App 图标里有白色，会被当成卡片）
+        final ys = [for (var y = 170; y < 1350; y++) y];
+        final colors = await sample(tester, MeowLook.classic, Brightness.light, [for (final y in ys) (72, y)],
+            record: record, preview: preview);
+        final edges = <int>[];
+        for (var i = 1; i < colors.length; i++) {
+          final card = colors[i] == MeowTokens.light.elev, before = colors[i - 1] == MeowTokens.light.elev;
+          if (card != before) edges.add(ys[i]);
+        }
+        return edges;
+      }
+
+      final withNet = await cardEdges(_record(), null);
+      final without = await cardEdges(_record(network: null), null);
+      // 五张卡（主卡、上传 / 延迟、曲线、信息）各一对上下边：左边距这一列只穿过主卡、上传、曲线、信息四张
+      expect(withNet.length, 8);
+      expect(without.length, 8);
+      // 主卡、上传卡不动；曲线卡底边上移、信息卡顶边上移一行（版式 13 × 1.2 + 10 = 25.6，放大 2.4 倍约 61 像素），底边不动
+      expect(withNet.sublist(0, 5), without.sublist(0, 5));
+      expect(without[5] - withNet[5], inInclusiveRange(58, 65));
+      expect(without[6] - withNet[6], inInclusiveRange(58, 65));
+      expect(withNet[7], without[7]);
+      // 曲线卡不挤：多了这一行之后在这一列量到的高度（两头各被 24 的圆角削掉约 19 像素）≥ 210，
+      // 与收紧版式之前三行信息卡时（约 219）差不多（以前直接多一行只剩约 150，曲线压成一条扁带）
+      expect(withNet[5] - withNet[4], greaterThanOrEqualTo(210));
+    });
 
     test('配色：液态玻璃不论磨砂调到多少都按缺省 0.5 推；经典就是 App 当前那一份', () {
       List<Color> colors(MeowTokens t) => [t.bg, t.elevSolid, t.t1, t.t2, t.accent, t.down, t.line, ...?t.bgGradient];

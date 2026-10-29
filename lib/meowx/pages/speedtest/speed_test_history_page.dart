@@ -817,6 +817,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
               _kv(mm, '经由', r.isDirect ? '直连（DIRECT）' : (r.via ?? r.outbound)),
               _kv(mm, '测速服务器', r.server ?? '–'),
               _kv(mm, '测速源 · 线程', '${r.source.title} · ${r.threadsTitle}'),
+              if (r.network != null) _kv(mm, '网络', r.network!),
               _kv(mm, '用量', fmtSize(r.bytesUsed), last: true),
             ],
           ),
