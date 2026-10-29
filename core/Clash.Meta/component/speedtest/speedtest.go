@@ -31,8 +31,9 @@ import (
 // 结果取去掉前 2 秒（TCP 慢启动）后的平均值，峰值取 1 秒窗口。收到的数据边读边丢，字节数记进 mihomo 的流量统计
 // （首页网速曲线看得到）。调用方 Start 开始、Status 轮询进度（约 300ms 一次）、Stop 取消；同一时间只跑一次。
 //
-// 四个源：Google（dl.google.com 上约 1GB 的安装包，32MB 一段 Range，只测下载）/ Apple（mensura.cdn-apple.com，
-// 系统 networkQuality 同一组地址）/ Speedtest（经节点向 speedtest.net 要离节点出口最近的服务器）/ Cloudflare。
+// 五个源：Google（dl.google.com 上约 1GB 的安装包，32MB 一段 Range，只测下载）/ Microsoft（微软下载站上约 100MB 的
+// VS Code 安装包，做法同 Google，只测下载）/ Apple（mensura.cdn-apple.com，系统 networkQuality 同一组地址）/
+// Speedtest（经节点向 speedtest.net 要离节点出口最近的服务器）/ Cloudflare。
 
 type Params struct {
 	Source      string `json:"source"`
@@ -68,10 +69,16 @@ const (
 	speedSampleEvery   = 250 * time.Millisecond
 	speedLatencyRounds = 6
 
-	speedGoogleHost  = "dl.google.com"
-	speedGooglePath  = "/dl/android/studio/install/3.4.1.0/android-studio-ide-183.5522156-windows.exe"
-	speedGoogleSize  = int64(1_018_566_480)
-	speedGoogleChunk = int64(32 * 1024 * 1024)
+	speedGoogleHost = "dl.google.com"
+	speedGooglePath = "/dl/android/studio/install/3.4.1.0/android-studio-ide-183.5522156-windows.exe"
+	speedGoogleSize = int64(1_018_566_480)
+	speedRangeChunk = int64(32 * 1024 * 1024)
+
+	// VS Code 1.98.2 的 Windows 安装包（支持 Range，Cache-Control 三天）。只有约 3 段 32MB：高速多线程下 10 秒内会读好几遍，
+	// 段按「连接序号 + 轮次」轮转、到尾回头（同 Google）
+	speedMicrosoftHost = "vscode.download.prss.microsoft.com"
+	speedMicrosoftPath = "/dbazure/download/stable/ddc367ed5c8936efe395cffeec279b04ffd7db78/VSCodeUserSetup-x64-1.98.2.exe"
+	speedMicrosoftSize = int64(107_513_920)
 )
 
 var speedState = struct {
@@ -586,22 +593,28 @@ func speedResolve(ctx context.Context, source string, proxy constant.Proxy) (*sp
 			uploadChunk: 25_000_000,
 			hasUpload:   true,
 		}, nil
+	case "microsoft":
+		return speedRangeEndpoints(speedMicrosoftHost, speedMicrosoftPath, speedMicrosoftSize), nil
 	default: // google
-		host := speedGoogleHost
-		return &speedEndpoints{
-			server:  host,
-			latency: speedTarget{host: host, path: speedGooglePath, headers: map[string]string{"Range": "bytes=0-0"}},
-			download: func(conn, round, conns int) speedTarget {
-				// 各连接错开取不同的段，绕满整个文件再从头
-				chunks := speedGoogleSize / speedGoogleChunk
-				slot := int64(conn+round*conns) % chunks
-				begin := slot * speedGoogleChunk
-				return speedTarget{host: host, path: speedGooglePath,
-					headers: map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", begin, begin+speedGoogleChunk-1)}}
-			},
-			upload:    func(int, int, int) speedTarget { return speedTarget{host: host, path: speedGooglePath} },
-			hasUpload: false,
-		}, nil
+		return speedRangeEndpoints(speedGoogleHost, speedGooglePath, speedGoogleSize), nil
+	}
+}
+
+// speedRangeEndpoints 一个大文件按 32MB 一段 Range 下载（Google / Microsoft），只测下载；延迟用同一地址的 bytes=0-0。
+func speedRangeEndpoints(host, path string, size int64) *speedEndpoints {
+	return &speedEndpoints{
+		server:  host,
+		latency: speedTarget{host: host, path: path, headers: map[string]string{"Range": "bytes=0-0"}},
+		download: func(conn, round, conns int) speedTarget {
+			// 各连接错开取不同的段，绕满整个文件再从头（只取完整的段，末尾不足一段的不用）
+			chunks := size / speedRangeChunk
+			slot := int64(conn+round*conns) % chunks
+			begin := slot * speedRangeChunk
+			return speedTarget{host: host, path: path,
+				headers: map[string]string{"Range": fmt.Sprintf("bytes=%d-%d", begin, begin+speedRangeChunk-1)}}
+		},
+		upload:    func(int, int, int) speedTarget { return speedTarget{host: host, path: path} },
+		hasUpload: false,
 	}
 }
 

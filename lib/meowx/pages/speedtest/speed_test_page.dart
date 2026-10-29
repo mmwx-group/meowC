@@ -136,14 +136,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _label(mm, '测速源'),
-                      MeowSegment<SpeedTestSource>(
-                        items: [for (final s in SpeedTestSource.values) (s, s.title)],
-                        value: c.source,
-                        onChanged: c.setSource,
-                        height: 38,
-                        fontSize: 13,
-                        onCard: true,
-                      ),
+                      _SourcePicker(value: c.source, onChanged: c.setSource),
                       const SizedBox(height: 12),
                       _label(mm, '线程'),
                       MeowSegment<bool>(
@@ -179,7 +172,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
             ),
             const MeCaption(
               '测速经所选节点直接连测速服务器，不经分流规则（只能选节点或直连，不能选代理组；直连测的是本机网络）。先测延迟，再下载、上传各 10 秒'
-              '（Google 只测下载）；多线程同时开 ${SpeedTestController.multiConnections} 条连接。数据边收边丢，但会照实消耗流量。',
+              '（Google、Microsoft 只测下载）；多线程同时开 ${SpeedTestController.multiConnections} 条连接。数据边收边丢，但会照实消耗流量。',
             ),
           ],
         );
@@ -240,6 +233,38 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     }
     c.start(node);
   }
+}
+
+/// 测速源：五段一排在手机宽度上放不下（每段约 55，「Cloudflare」「Speedtest」会被截），分两排——只测下载的
+/// Google / Microsoft 一排、Apple / Speedtest / Cloudflare 一排，滑块只画在选中的那一排。选中项换排时两排都重建
+/// （key 跟着变），滑块直接落在新的段上，不从那一排上一次的位置滑过来。
+class _SourcePicker extends StatelessWidget {
+  const _SourcePicker({required this.value, required this.onChanged});
+  final SpeedTestSource value;
+  final ValueChanged<SpeedTestSource> onChanged;
+
+  static const _rows = [
+    [SpeedTestSource.google, SpeedTestSource.microsoft],
+    [SpeedTestSource.apple, SpeedTestSource.speedtest, SpeedTestSource.cloudflare],
+  ];
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      for (final (i, row) in _rows.indexed) ...[
+        if (i > 0) const SizedBox(height: 6),
+        MeowSegment<SpeedTestSource>(
+          key: ValueKey((i, row.contains(value))),
+          items: [for (final s in row) (s, s.title)],
+          value: value,
+          onChanged: onChanged,
+          height: 38,
+          fontSize: 13,
+          onCard: true,
+        ),
+      ],
+    ],
+  );
 }
 
 class _StartButton extends StatelessWidget {

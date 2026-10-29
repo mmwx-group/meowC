@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:bett_box/common/navigator.dart';
+import 'package:bett_box/common/picker.dart';
+import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 
 import '../../state/format.dart';
@@ -8,6 +12,7 @@ import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
+import 'speed_test_share.dart';
 
 /// 测速记录（测速页右上角「记录」进来；与 iOS 的 SpeedTestHistoryView 同一套）：樱粉汇总卡 + 按节点筛选 + 按日列表，
 /// 左滑删除、右上角清空。点一条进详情。
@@ -127,11 +132,21 @@ class _SpeedTestHistoryPageState extends State<SpeedTestHistoryPage> {
   );
 }
 
-/// 一条记录的详情：曲线、参数；「用同样设置再测一次」预填后回测速页（pop 时带 true）。
+/// 存文件：缺省走 `picker.saveFile`（安卓系统「另存为」、Windows 另存新档），回存到的路径；用户取消回 null
+typedef SpeedTestSaveFile = Future<String?> Function(String fileName, Uint8List bytes);
+
+Future<String?> _pickerSave(String fileName, Uint8List bytes) =>
+    picker.saveFile(fileName, bytes, allowedExtensions: const ['png']);
+
+/// 一条记录的详情：曲线、参数；「保存分享图」（只有测完的记录）存一张 1080 × 1350 的分享图；
+/// 「用同样设置再测一次」预填后回测速页（pop 时带 true）。
 class SpeedTestRecordPage extends StatelessWidget {
-  const SpeedTestRecordPage({super.key, required this.controller, required this.id});
+  const SpeedTestRecordPage({super.key, required this.controller, required this.id, this.saveFile = _pickerSave});
   final SpeedTestController controller;
   final String id;
+
+  /// 测试里换成假的
+  final SpeedTestSaveFile saveFile;
 
   @override
   Widget build(BuildContext context) {
@@ -147,6 +162,7 @@ class SpeedTestRecordPage extends StatelessWidget {
               ? const []
               : [
                   SpeedTestRecordDetail(record: record),
+                  if (SpeedTestShareImage.canShare(record)) _ShareButton(record: record, saveFile: saveFile),
                   Row(
                     children: [
                       Expanded(
@@ -214,6 +230,68 @@ class SpeedTestRecordPage extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// 「保存分享图」：按 App 正文的字体画分享图（固定浅色经典配色，见 [SpeedTestShareImage]），再交给系统存成 PNG。
+/// 生成与存的过程中再点不响应。
+class _ShareButton extends StatefulWidget {
+  const _ShareButton({required this.record, required this.saveFile});
+  final SpeedTestRecord record;
+  final SpeedTestSaveFile saveFile;
+
+  @override
+  State<_ShareButton> createState() => _ShareButtonState();
+}
+
+class _ShareButtonState extends State<_ShareButton> {
+  bool _busy = false;
+
+  Future<void> _save() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final body = Theme.of(context).textTheme.bodyMedium;
+    try {
+      final bytes = await SpeedTestShareImage.render(
+        widget.record,
+        textStyle: TextStyle(fontFamily: body?.fontFamily, fontFamilyFallback: body?.fontFamilyFallback),
+      );
+      if (bytes == null) return;
+      final path = await widget.saveFile(SpeedTestShareImage.fileName(widget.record), bytes);
+      if (path != null) globalState.showNotifier('分享图已保存');
+    } catch (e) {
+      globalState.showNotifier('保存分享图失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 150),
+      opacity: _busy ? 0.45 : 1,
+      child: Material(
+        color: mm.buttonFill(MeowButtonFill.plain),
+        shape: StadiumBorder(side: mm.buttonSide),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _busy ? null : _save,
+          child: SizedBox(
+            height: 46,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.image_outlined, size: 18, color: mm.accent),
+                const SizedBox(width: 6),
+                Text('保存分享图', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: mm.accent)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 汇总卡（樱粉底；液态玻璃主题下和其它卡片一样是磨砂玻璃卡片）：最近 30 天次数、三项最好成绩（各带节点名）、下载速率走势。
@@ -641,7 +719,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
                   SizedBox(
                     height: 150,
                     child: CustomPaint(
-                      painter: _RecordChartPainter(r.downloadSamples, r.uploadSamples, mm.down, mm.accent, mm.line),
+                      painter: SpeedTestRecordChartPainter(r.downloadSamples, r.uploadSamples, mm.down, mm.accent, mm.line),
                       size: Size.infinite,
                     ),
                   ),
@@ -811,9 +889,9 @@ class _TrendPainter extends CustomPainter {
       !identical(old.values, values) || old.color != color || old.dotFill != dotFill;
 }
 
-/// 详情页的速率曲线：下载、上传两条叠在一张图上，纵轴共用；底线实线、中线虚线
-class _RecordChartPainter extends CustomPainter {
-  _RecordChartPainter(this.download, this.upload, this.downColor, this.upColor, this.lineColor);
+/// 详情页的速率曲线：下载、上传两条叠在一张图上，纵轴共用；底线实线、中线虚线（分享图同一画法）
+class SpeedTestRecordChartPainter extends CustomPainter {
+  SpeedTestRecordChartPainter(this.download, this.upload, this.downColor, this.upColor, this.lineColor);
   final List<double> download, upload;
   final Color downColor, upColor, lineColor;
 
@@ -846,7 +924,7 @@ class _RecordChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_RecordChartPainter old) =>
+  bool shouldRepaint(SpeedTestRecordChartPainter old) =>
       !identical(old.download, download) ||
       !identical(old.upload, upload) ||
       old.downColor != downColor ||

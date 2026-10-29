@@ -199,3 +199,7 @@
 - `lib/models/meow.dart MeowSettings`：增加 `ggyEnabled`（缺省关）与 `ggyTokens`（GGY 白名单分享链接里的 token，规范化后的原文、去重、最多 20 个）。本机偏好，退出登录不清；老配置没有这两项 = 关、没有 token。
 - 上报复用 po0 的 `meowPo0Report` 通道（参数多一个 `kind: "ggy"`），`core/constant.go` / `core/action.go` / `lib/enum/enum.dart` 都不用改：`core/meow_ggy.go` 用同一个直连 dialer 发 GET（头只有 Accept: application/json 与 Connection: close），证书照常校验（系统根证书 + mihomo 内置根证书）。
 - 其余在 `lib/meowx/`：token 解析（裸 token 或整条分享链接）/ 脱敏 / 应答判断（看 JSON 里的 `status`，HTTP 200 + status 400「无效或已失效」= token 失效）在 `panel/ggy.dart`，调度（启动、开关打开、新增 token 时立刻报，网络变化，每 10 分钟）在 `state/ggy_reporter.dart`，「我的 › 订阅同步」po0 那两行后面加「GGY 加白」开关与「GGY token」子页（`pages/settings/ggy_tokens_page.dart`）。不加分流规则。与 iOS / macOS / OpenWrt 同一套规则。
+
+## 2026-10-29 · 测速：Microsoft 测速源 + 测速记录分享图
+- `core/Clash.Meta/component/speedtest`（我们加的内核包）：加第五个测速源 `microsoft`（微软下载站上 VS Code 1.98.2 的 Windows 安装包，107,513,920 字节），做法同 Google：只测下载，32MB 一段 Range、按「连接序号 + 轮次」轮流取（文件只有 3 段完整的 32MB，到尾回头），延迟用同一地址的 `Range: bytes=0-0`；与 Google 共用 `speedRangeEndpoints`。旧界面不会发这个值。
+- 界面只在 `lib/meowx/`：测速源多一项（手机宽度一排五段放不下，分两排：Google / Microsoft、Apple / Speedtest / Cloudflare）；测速记录详情页加「保存分享图」，画一张 1080 × 1350 的 PNG（固定浅色经典配色，出口只写 ASN / 运营商、不写 IP），经 Bettbox 原有的 `picker.saveFile` 存（`lib/common/picker.dart` 没有改；不加分享插件）。

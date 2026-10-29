@@ -15,9 +15,10 @@ const kSpeedTestDirect = 'DIRECT';
 /// 界面上的出站名：DIRECT 显示「直连」
 String speedTestDisplayName(String name) => name == kSpeedTestDirect ? '直连' : name;
 
-/// 测速源（与 iOS / macOS 同一组）。Google 只有下载。
+/// 测速源（与 iOS / macOS 同一组）。Google、Microsoft 只有下载（都是一个大文件按 Range 分段下）。
 enum SpeedTestSource {
   google('Google'),
+  microsoft('Microsoft'),
   apple('Apple'),
   speedtest('Speedtest'),
   cloudflare('Cloudflare');
@@ -25,7 +26,7 @@ enum SpeedTestSource {
   const SpeedTestSource(this.title);
   final String title;
 
-  bool get hasUpload => this != SpeedTestSource.google;
+  bool get hasUpload => this != SpeedTestSource.google && this != SpeedTestSource.microsoft;
 }
 
 /// 测速出站的出口（核心在准备阶段经同一出站查 speed.cloudflare.com/meta）：界面显示「AS2516 KDDI · 203.0.113.8」。

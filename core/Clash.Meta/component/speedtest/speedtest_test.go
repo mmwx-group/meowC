@@ -2,6 +2,7 @@ package speedtest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -33,11 +34,60 @@ func TestGoogleRanges(t *testing.T) {
 			seen[ep.download(conn, round, 8).headers["Range"]] = true
 		}
 	}
-	if want := int(speedGoogleSize / speedGoogleChunk); len(seen) != want {
+	if want := int(speedGoogleSize / speedRangeChunk); len(seen) != want {
 		t.Fatalf("用到 %d 段，want %d", len(seen), want)
 	}
 	if ep.hasUpload {
 		t.Fatal("Google 不测上传")
+	}
+}
+
+// Microsoft 的文件只有 3 段完整的 32MB：所有 Range 都在文件之内（不会 416）、各连接与各轮次轮流取遍 3 段
+func TestMicrosoftRanges(t *testing.T) {
+	ep, err := speedResolve(context.Background(), "microsoft", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.server != speedMicrosoftHost || ep.hasUpload {
+		t.Fatalf("server %q hasUpload %v", ep.server, ep.hasUpload)
+	}
+	if got := ep.latency.headers["Range"]; got != "bytes=0-0" || ep.latency.path != speedMicrosoftPath {
+		t.Fatalf("延迟请求 %q %q", ep.latency.path, got)
+	}
+	chunks := int(speedMicrosoftSize / speedRangeChunk)
+	if chunks != 3 {
+		t.Fatalf("%d 段，want 3", chunks)
+	}
+	for _, conns := range []int{1, 8} {
+		seen := map[string]int{}
+		for conn := 0; conn < conns; conn++ {
+			// 单独一条连接上连续几轮也要换段（不是一直读同一段）
+			own := map[string]bool{}
+			for round := 0; round < 12; round++ {
+				target := ep.download(conn, round, conns)
+				if target.host != speedMicrosoftHost || target.path != speedMicrosoftPath {
+					t.Fatalf("地址 %s%s", target.host, target.path)
+				}
+				var begin, end int64
+				if _, err := fmt.Sscanf(target.headers["Range"], "bytes=%d-%d", &begin, &end); err != nil {
+					t.Fatal(err)
+				}
+				if begin < 0 || end >= speedMicrosoftSize || end-begin+1 != speedRangeChunk || begin%speedRangeChunk != 0 {
+					t.Fatalf("Range %d-%d 越界或不整段", begin, end)
+				}
+				seen[target.headers["Range"]]++
+				own[target.headers["Range"]] = true
+			}
+			if len(own) != chunks {
+				t.Fatalf("×%d 第 %d 条连接只用到 %d 段", conns, conn, len(own))
+			}
+		}
+		// 每段被取的次数相同（轮转均匀）
+		for r, n := range seen {
+			if n != conns*12/chunks {
+				t.Fatalf("×%d %s 取了 %d 次，want %d", conns, r, n, conns*12/chunks)
+			}
+		}
 	}
 }
 
@@ -47,7 +97,7 @@ func TestUnknownNode(t *testing.T) {
 	}
 }
 
-// SPEEDTEST_LIVE=1 go test ./component/speedtest -run Live -v：经直连把四个源各跑一次（单线程 + 8 线程）
+// SPEEDTEST_LIVE=1 go test ./component/speedtest -run Live -v：经直连把五个源各跑一次（单线程 + 8 线程）
 func TestLiveSources(t *testing.T) {
 	if os.Getenv("SPEEDTEST_LIVE") != "1" {
 		t.Skip("SPEEDTEST_LIVE=1 才跑")
@@ -64,7 +114,7 @@ func TestLiveSources(t *testing.T) {
 		}
 		proxy = p
 	}
-	sources := []string{"google", "apple", "speedtest", "cloudflare"}
+	sources := []string{"google", "microsoft", "apple", "speedtest", "cloudflare"}
 	if only := os.Getenv("SPEEDTEST_SOURCE"); only != "" {
 		sources = []string{only}
 	}
