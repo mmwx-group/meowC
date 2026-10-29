@@ -148,8 +148,8 @@ Future<void> _systemShare(String fileName, Uint8List bytes) => SharePlus.instanc
   ShareParams(files: [XFile.fromData(bytes, mimeType: 'image/png', name: fileName)], fileNameOverrides: [fileName]),
 );
 
-/// 分享一条测速记录（记录详情页底部的按钮、测速页页头的按钮共用）：按 App 正文的字体画分享图（固定浅色经典配色，
-/// 见 [SpeedTestShareImage]），安卓「分享」交给系统分享面板（分完 / 取消都不提示），其余「保存分享图」存成 PNG
+/// 分享一条测速记录（记录详情页底部的按钮、测速页页头的按钮共用）：按 App 正文的字体、App 当前的外观与深浅色画分享图
+/// （见 [SpeedTestShareImage]），安卓「分享」交给系统分享面板（分完 / 取消都不提示），其余「保存分享图」存成 PNG
 /// （存好提示「分享图已保存」）；出错提示「分享失败：…」/「保存分享图失败：…」。两处按钮的图标、文字也取这里的。
 /// 分享 / 存的函数可注入（测试用），缺省走平台。
 class SpeedTestShareAction {
@@ -169,10 +169,13 @@ class SpeedTestShareAction {
 
   /// 画图并交出去；出不了图（失败的记录）什么也不做。防连点由按钮自己管（等这个 Future 完成之前不响应）
   Future<void> run(BuildContext context, SpeedTestRecord record) async {
-    final body = Theme.of(context).textTheme.bodyMedium;
+    final theme = Theme.of(context);
+    final body = theme.textTheme.bodyMedium;
     try {
       final bytes = await SpeedTestShareImage.render(
         record,
+        tokens: context.mm,
+        brightness: theme.brightness,
         textStyle: TextStyle(fontFamily: body?.fontFamily, fontFamilyFallback: body?.fontFamilyFallback),
       );
       if (bytes == null) return;

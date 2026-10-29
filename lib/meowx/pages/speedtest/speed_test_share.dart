@@ -6,13 +6,17 @@ import 'package:flutter/services.dart';
 
 import '../../state/speed_test.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart' show meowRounded;
+import '../../theme/widgets.dart' show BrandHead, meowRounded;
 import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 
 /// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1080 × 1350 像素的 4:5 竖图，从记录详情页生成 PNG：
 /// 安卓「分享」经 share_plus 弹系统分享面板（同 iOS），Windows「保存分享图」经 `picker.saveFile` 另存新档。
 ///
-/// 固定用浅色经典那一套 token（[MeowTokens.light]），不跟深浅色、不跟玻璃主题：分享出去的图都一样。
+/// 配色跟着分享时 App 实际生效的外观（主题色 + 深浅，同 iOS / macOS）：传进来的 [MeowTokens] 就是 App 当前那一份
+/// （`context.mm`：「我的 › 外观」的设置在当前深浅色下解析出来的）。页面底：经典 = 平涂 [MeowTokens.bg]；液态玻璃 = 底色渐层
+/// （[MeowTokens.bgGradient]，方向照 [MeowTokens.bgDiagonal]），不画光斑与插画（自选的照片不能跟着分享出去）。卡片是不透明的
+/// [MeowTokens.elevSolid]（经典 = 卡片色；液态玻璃 = 玻璃卡片叠在页面底上的实色），不画玻璃效果。字、强调色、下载紫、分隔线都取同一份
+/// token；页头 App 图标按深浅取浅 / 深两张（同 [BrandHead]）。
 /// 自上而下：页头（App 图标 + MeowX + 网络测速、右边日期时间）→ 下载主卡（大数字 + 峰值）→ 上传 / 延迟两张小卡 →
 /// 速率曲线（同详情页的画法）→ 测速源 · 线程、出站、出口三行 → 页脚。出口只写 ASN / 运营商，**不写 IP**
 /// （直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。
@@ -25,7 +29,9 @@ class SpeedTestShareImage {
   static const height = 1350;
   static const _scale = width / 450;
 
-  static const iconAsset = 'assets/images/icon_light_256.png';
+  /// 页头的 App 图标：浅色白发、深色黑发（同 [BrandHead]）
+  static String iconAsset(Brightness brightness) =>
+      brightness == Brightness.dark ? 'assets/images/icon_256.png' : 'assets/images/icon_light_256.png';
 
   /// 失败的记录不给分享
   static bool canShare(SpeedTestRecord record) => !record.failed;
@@ -37,15 +43,22 @@ class SpeedTestShareImage {
     return 'MeowX-speedtest-${d.year}${two(d.month)}${two(d.day)}-${two(d.hour)}${two(d.minute)}.png';
   }
 
-  /// 生成 PNG；失败的记录返回 null。[textStyle] 是 App 正文的字族（含回落字族），图里的字都用它；[icon] 缺省读 [iconAsset]。
-  static Future<Uint8List?> render(SpeedTestRecord record, {TextStyle? textStyle, ui.Image? icon}) async {
+  /// 生成 PNG；失败的记录返回 null。[tokens] / [brightness] = App 当前的配色与深浅（`context.mm` 与 `Theme.of(context).brightness`）；
+  /// [textStyle] 是 App 正文的字族（含回落字族），图里的字都用它；[icon] 缺省按深浅读 [iconAsset]。
+  static Future<Uint8List?> render(
+    SpeedTestRecord record, {
+    required MeowTokens tokens,
+    required Brightness brightness,
+    TextStyle? textStyle,
+    ui.Image? icon,
+  }) async {
     final content = SpeedTestShareContent.of(record);
     if (content == null) return null;
-    final logo = icon ?? await _loadIcon();
+    final logo = icon ?? await _loadIcon(iconAsset(brightness));
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
-      _SharePainter(record, content, textStyle ?? const TextStyle(), logo).paint(canvas);
+      _SharePainter(record, content, tokens, textStyle ?? const TextStyle(), logo).paint(canvas);
       final picture = recorder.endRecording();
       final image = await picture.toImage(width, height);
       picture.dispose();
@@ -57,9 +70,9 @@ class SpeedTestShareImage {
     }
   }
 
-  static Future<ui.Image?> _loadIcon() async {
+  static Future<ui.Image?> _loadIcon(String asset) async {
     try {
-      final data = await rootBundle.load(iconAsset);
+      final data = await rootBundle.load(asset);
       final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
       final frame = await codec.getNextFrame();
       codec.dispose();
@@ -135,13 +148,13 @@ class SpeedTestShareContent {
 
 /// 在 1080 × 1350 的画布上画（坐标按 450 宽的版式，画之前整体放大 [SpeedTestShareImage._scale]）。
 class _SharePainter {
-  _SharePainter(this.record, this.content, this.base, this.icon);
+  _SharePainter(this.record, this.content, this.mm, this.base, this.icon);
   final SpeedTestRecord record;
   final SpeedTestShareContent content;
+  final MeowTokens mm;
   final TextStyle base;
   final ui.Image? icon;
 
-  static const mm = MeowTokens.light;
   static const w = 450.0, h = 1350 / SpeedTestShareImage._scale;
   static const side = 24.0;
   static const inner = w - side * 2;
@@ -172,8 +185,16 @@ class _SharePainter {
     return p;
   }
 
+  /// 卡片：不透明的实色（液态玻璃下 [MeowTokens.elev] 是半透明的，用叠好的 [MeowTokens.elevSolid]）
   void _card(Canvas canvas, Rect rect, double radius) =>
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)), Paint()..color = mm.elev);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)), Paint()..color = mm.elevSolid);
+
+  /// 页面底：平涂 [MeowTokens.bg]；液态玻璃是底色渐层，按整张图铺（斜向 = 左上 → 右下，否则自上而下，同 App 里按整屏铺）
+  Paint _page() {
+    final g = mm.bgGradient;
+    if (g == null) return Paint()..color = mm.bg;
+    return Paint()..shader = ui.Gradient.linear(Offset.zero, mm.bgDiagonal ? const Offset(w, h) : const Offset(0, h), g);
+  }
 
   /// 圆点 + 标题（同详情页的图例）；返回占的高度
   double _legend(Canvas canvas, Offset at, String title, Color? dot) {
@@ -204,7 +225,7 @@ class _SharePainter {
     canvas
       ..save()
       ..scale(SpeedTestShareImage._scale)
-      ..drawRect(const Rect.fromLTWH(0, 0, w, h), Paint()..color = mm.bg);
+      ..drawRect(const Rect.fromLTWH(0, 0, w, h), _page());
     try {
       var y = _header(canvas, 24);
       y = _mainCard(canvas, y + 14);
