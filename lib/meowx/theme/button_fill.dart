@@ -35,13 +35,15 @@ extension MeowButtonColors on MeowTokens {
     return tint == null ? card2 : Color.alphaBlend(tint, card2);
   }
 
+  bool get _darkBg => ThemeData.estimateBrightnessForColor(bg) == Brightness.dark;
+
   /// 玻璃下按钮的细亮边（浅 白 70% / 深 白 16%）；经典 = 没有（[BorderSide.none]，形状照旧）
-  BorderSide get buttonSide => glass
-      ? BorderSide(
-          color: Colors.white.withValues(alpha: ThemeData.estimateBrightnessForColor(bg) == Brightness.dark ? 0.16 : 0.7),
-          width: 0.8,
-        )
-      : BorderSide.none;
+  BorderSide get buttonSide =>
+      glass ? BorderSide(color: Colors.white.withValues(alpha: _darkBg ? 0.16 : 0.7), width: 0.8) : BorderSide.none;
+
+  /// 分段滑块（没有真玻璃透镜时）：中性、比槽（次级块那档白）亮的一块白，配墨色字，同 iOS 分段的玻璃滑块；
+  /// 强调色那档（[MeowButtonFill.selected]）留给选中的筛选胶囊。经典 = 墨色实心
+  Color get segmentThumb => glass ? Colors.white.withValues(alpha: _darkBg ? 0.16 : 0.72) : t1;
 
   /// [buttonSide] 给 [BoxDecoration] 用；经典 = null
   Border? get buttonBorder => glass ? Border.fromBorderSide(buttonSide) : null;

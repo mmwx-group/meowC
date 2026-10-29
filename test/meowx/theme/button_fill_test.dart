@@ -134,7 +134,7 @@ void main() {
       }
     });
 
-    testWidgets('分段（没要玻璃的）与选中的胶囊：玻璃下选中的字是强调色，经典下是页面底色', (tester) async {
+    testWidgets('分段（没要玻璃的）与选中的胶囊：玻璃下分段是中性的白滑块 + 墨色字、选中的胶囊是强调色的字；经典下都是墨色实心 + 页面底色的字', (tester) async {
       Widget row() => Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -163,7 +163,9 @@ void main() {
       await tester.pumpWidget(_app(row(), look: _glassLook, host: true));
       await tester.pumpAndSettle();
       expect(find.byType(MeowGlassBox), findsNothing, reason: '没要玻璃的分段不加透镜');
-      expect(segText(), mm.accent);
+      expect(segText(), mm.t1, reason: '分段同 iOS 的玻璃滑块：中性、墨色字');
+      expect(mm.segmentThumb, Colors.white.withValues(alpha: 0.72));
+      expect(MeowTokens.light.segmentThumb, MeowTokens.light.t1);
       expect(pillText(), mm.accent);
       final pill = tester.widget<Material>(find.ancestor(of: find.text('系统应用'), matching: find.byType(Material)).first);
       expect(pill.color, mm.buttonFill(MeowButtonFill.selected));

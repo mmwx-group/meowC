@@ -187,3 +187,10 @@
 - `lib/models/meow.dart MeowSettings`：增加 `bgPattern`（平涂 / 光斑 / 插画，缺省光斑，认不出的值回到光斑）与 `glassFrost`（磨砂强度 0–1，缺省 0.5）；老配置缺这两项按缺省。
 - `assets/images/glass_art_light.jpg` / `glass_art_dark.jpg`：插画背景用的品牌插画（design/brand/icon-art-*.png 缩到 900px）。
 - 其余在 `lib/meowx/`：背景与磨砂参数（`theme/backdrop.dart`），背景宿主（`app/backdrop_host.dart`：换设置 / 改尺寸时防抖、一次性渲染整屏清晰背景与 1/4 分辨率的预模糊图，挂在 `app/glass_host.dart` 里），磨砂玻璃卡片（`theme/card_surface.dart` 的 `MeowFrostBox` / `MeowCard`：按卡片在屏幕上的位置裁预模糊图当底，不逐帧实时模糊），外观设置的「背景」与「磨砂强度」两行。经典主题与底栏玻璃不变。
+
+## 2026-10-28 · 液态玻璃：透明段、罩色、取样分辨率、自己的插画图片、卡片一致、按钮不实色（同 MeowX iOS）
+- `lib/models/meow.dart MeowSettings`：增加 `glassArtImage`（插画背景用自己选的图片的编号，可空；老配置没有 = 还没选，插画先按光斑画）。
+- 删掉 `assets/images/glass_art_light.jpg` / `glass_art_dark.jpg`：插画只用自己选的图（同 iOS），不再内置品牌插画。
+- 其余在 `lib/meowx/`：磨砂强度 0.5 以下往透明走（填充、模糊、提饱和、对比度垫层上限一起降，次级字与强调色仍按 0.5 那档修正）；插画罩色与选中态的底跟着磨砂淡掉；背景宿主的清晰图插画按像素比、光斑半个像素，预模糊图的分辨率跟着模糊半径走，两张都不超过 420 万像素，插画按需要的大小解码、画完释放；自己的图片存在数据目录 `meowx/`（`theme/glass_art.dart`：安卓用 image_picker 从系统相册选、原生端缩到 3200，Windows 用 file_picker）。
+- 全部卡片一致：液态玻璃下连接主卡连上也是玻璃卡（不再是启动卡片颜色的斜向渐变，`heroGradient` 一并删掉），账户卡、代理组卡、应用代理主卡、测速记录汇总卡、订阅「当前」档不再填启动卡片颜色 / 淡粉；启动卡片颜色在玻璃下只给电源键的液面。
+- 按钮不再是实色（`theme/button_fill.dart`）：玻璃下 = 次级块那档白 + 一点主题色 + 0.8 细亮边，静态、不做实时模糊；经典照旧。`theme/meow_theme.dart` 的全局 `filledButtonTheme` 也走它，所以 Bettbox 原页面（`lib/views`）在液态玻璃主题下的 FilledButton 也跟着变，经典主题不变。电源键在玻璃下没有墨色实心底、液面 55%、图标墨色，玻璃改用圆钮那一档。

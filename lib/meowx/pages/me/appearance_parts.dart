@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/color_picker.dart';
 import '../../theme/glass_art.dart';
@@ -116,7 +117,7 @@ class _StyleChoice extends StatelessWidget {
       label: style.label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? mm.soft : mm.card2,
+        color: selected ? mm.buttonFill(MeowButtonFill.accent) : mm.card2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
@@ -147,7 +148,7 @@ class _StyleChoice extends StatelessWidget {
   }
 }
 
-/// 缩略图（设计稿同款）：页面底 + 樱粉主卡 + 一张卡片 + 底栏胶囊；液态玻璃那张的底栏是带高光的半透明玻璃。
+/// 缩略图（设计稿同款）：页面底 + 主卡 + 一张卡片 + 底栏胶囊；液态玻璃那张的主卡与卡片一样是玻璃（全部卡片一致），底栏是带高光的半透明玻璃。
 /// 只是示意图：用普通的半透明与描边画，不放真玻璃（设置页不多出玻璃层）。
 class _StyleThumb extends StatelessWidget {
   const _StyleThumb({required this.glass});
@@ -176,9 +177,9 @@ class _StyleThumb extends StatelessWidget {
               height: 16,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: glass ? null : base.hero,
-                  gradient: glass ? LinearGradient(colors: spec.hero) : null,
+                  color: glass ? card : base.hero,
                   borderRadius: BorderRadius.circular(5),
+                  border: glass ? Border.all(color: shades.rim, width: 0.8) : null,
                 ),
               ),
             ),
@@ -266,7 +267,7 @@ class _AppIconChoice extends StatelessWidget {
       label: icon.label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? mm.soft : mm.card2,
+        color: selected ? mm.buttonFill(MeowButtonFill.accent) : mm.card2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
           side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
@@ -487,8 +488,11 @@ enum MeowColorKind {
   /// [glass] = 液态玻璃主题
   String label(bool glass) => glass && this == card ? '底色' : _label;
   String pickerTitle(bool glass) => glass && this == card ? '自定义底色' : _pickerTitle;
-  String caption(bool glass) =>
-      glass && this == card ? '铺满整页的底色（取同色相的柔和渐层），内容卡片是半透明的玻璃；选「白」保持原来的底色。深色下取同色相的深底。' : _caption;
+  String caption(bool glass) => switch (this) {
+    card when glass => '铺满整页的底色（取同色相的柔和渐层），内容卡片是半透明的玻璃；选「白」保持原来的底色。深色下取同色相的深底。',
+    hero when glass => '电源键的液面颜色（液态玻璃下连接主卡和其它卡片一样是玻璃）；深色下取同色相的深色。',
+    _ => _caption,
+  };
 
   List<(String, int)> get presets => switch (this) {
     card => MeowCardColors.presets,
@@ -975,14 +979,19 @@ class ColorPreview extends StatelessWidget {
             ),
           );
         case MeowColorKind.hero:
+          // 液态玻璃下连接主卡和其它卡片一样是玻璃，启动卡片颜色只给电源键的液面
           final hero = MeowTokens.heroShades(color, dark: dark);
           inner = Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: glass ? null : hero.hero,
-              gradient: glass ? LinearGradient(colors: hero.gradient) : null,
-              borderRadius: BorderRadius.circular(12),
-            ),
+            decoration: glass
+                ? MeowCardDecoration(
+                    color: white.card,
+                    borderRadius: BorderRadius.circular(12),
+                    rim: white.rim,
+                    sheen: white.sheen,
+                    shadow: white.shadow,
+                  )
+                : BoxDecoration(color: hero.hero, borderRadius: BorderRadius.circular(12)),
             child: Row(
               children: [
                 Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),

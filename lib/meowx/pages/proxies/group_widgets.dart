@@ -331,7 +331,7 @@ class GroupCard extends ConsumerWidget {
     if (list) return _listCard(context, mm, current, delay, open);
     return MeowCardMaterial(
       // 深色主题的 soft 是半透明的，先叠到卡片底上
-      color: selected ? Color.alphaBlend(mm.soft, mm.elev) : null,
+      color: selected ? mm.selectedCard : null,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),

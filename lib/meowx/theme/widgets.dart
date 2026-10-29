@@ -107,7 +107,8 @@ class _GlyphPainter extends CustomPainter {
 /// [onCard] = 放在白卡片上时槽用次级底（放在主卡 / 页面底上时槽用卡片底）。
 /// 换段时滑块用弹跳弹簧滑过去（只平移、不拉伸，越过两端的部分被槽的圆角裁掉），段内文字颜色 220ms 交叉渐变。
 /// [track] 换槽的颜色（主卡上的半透明白）；[glass] = 液态玻璃主题下滑块换成一块玻璃透镜、选中的字用墨色（经典主题照旧是墨色实心块）。
-/// 液态玻璃主题下其余的滑块（没要玻璃的、低端机上画不了玻璃的）也不是墨色实心块：选中态那档静态半透明 + 细亮边、强调色的字（[MeowButtonFill.selected]）。
+/// 液态玻璃主题下其余的滑块（没要玻璃的、低端机上画不了玻璃的）也不是墨色实心块：中性的静态半透明 + 细亮边、墨色的字
+/// （同 iOS 分段的玻璃滑块；强调色那档留给选中的筛选胶囊）。
 class MeowSegment<T> extends StatefulWidget {
   const MeowSegment({
     super.key,
@@ -185,7 +186,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
                       fontSize: widget.fontSize,
                       fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
                       // 玻璃滑块是透明的，选中的字仍用墨色
-                      color: i == index ? (glass ? mm.t1 : mm.onSelected) : mm.t2,
+                      color: i == index ? (glass ? mm.t1 : mm.onProminent) : mm.t2,
                     ),
                     child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
@@ -223,7 +224,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
             pos: _pos,
             count: widget.items.length,
             visible: index >= 0,
-            color: mm.buttonFill(MeowButtonFill.selected),
+            color: mm.segmentThumb,
             stroke: mm.glass ? mm.buttonSide : null,
             radius: outer - _segGap,
             slotRadius: outer,

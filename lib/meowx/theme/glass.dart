@@ -27,9 +27,7 @@ abstract final class MeowGlassMetrics {
   /// 「着色」相对「透明」：底色往不透明走剩余透明度的这个比例、模糊多这么多（iOS 26.1 的「着色」= 更厚、对比度更高）
   static const tintedOpacity = 0.5, tintedBlur = 6.0, tintedContrast = 1.5;
 
-  /// 电源键的玻璃几乎不着色：背后的卡片与半透明的樱粉液面透上来（液态玻璃主题下没有墨色底），玻璃只给边缘的折射与高光（「着色」稍厚一点）。
-  /// 折射收小：按钮背后的色块与按钮一样大，照圆钮那一档（60 / 20）边缘会把主卡的浅底整条拉进来，盖住墨色
-  static const powerTint = 0.05, powerTintTinted = 0.14;
+  /// 电源键玻璃的折射收小：按钮背后的色块与按钮一样大，照圆钮那一档（60 / 20）边缘会把主卡的底整条拉进来、盖住液面
   static const powerRefraction = 10.0, powerBevel = 8.0;
 
   /// 电源键玻璃外面那一层很淡的投影（不加光晕：用户明确不要）
@@ -88,15 +86,10 @@ abstract final class MeowGlassStyles {
   static List<BoxShadow> menuShadows(BuildContext context, [double depth = 1]) =>
       glassMenuShadows(scheme(context), depth);
 
-  /// 电源键：樱粉着色那一档的边缘与高光，底色几乎透明（颜色来自背后的卡片与液面）
-  static LiquidGlassStyle power(BuildContext context) {
-    final mm = context.mm;
-    return LiquidGlassStyle.tinted(scheme(context), mm.btnOn).copyWith(
-      tint: Colors.white.withValues(alpha: mm.glassTinted ? MeowGlassMetrics.powerTintTinted : MeowGlassMetrics.powerTint),
-      refraction: MeowGlassMetrics.powerRefraction,
-      bevel: MeowGlassMetrics.powerBevel,
-    );
-  }
+  /// 电源键：圆钮那一档的玻璃（同 iOS 电源键的系统玻璃），折射收小。以前底下垫着墨色实心块，玻璃只着 5% 的白、颜色靠底透上来；
+  /// 2026-10-28 去掉实心底之后（按钮别再是纯色）再那么薄，没连上时就只剩一圈边
+  static LiquidGlassStyle power(BuildContext context) =>
+      control(context).copyWith(refraction: MeowGlassMetrics.powerRefraction, bevel: MeowGlassMetrics.powerBevel);
 
   /// 分段的选中块：圆钮那一档的玻璃（白底带高光，同 iOS 分段的滑块）。底栏那块透明透镜（lens）放在一条匀色的槽上几乎看不出来
   static LiquidGlassStyle lens(BuildContext context) => control(context);

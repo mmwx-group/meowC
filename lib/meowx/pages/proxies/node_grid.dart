@@ -292,7 +292,7 @@ class _NodeCell extends ConsumerWidget {
         decoration: glass
             ? null
             : BoxDecoration(
-                color: selected ? Color.alphaBlend(mm.soft, mm.elev) : mm.elev,
+                color: selected ? mm.selectedCard : mm.elev,
                 borderRadius: radius,
                 border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
               ),
@@ -370,7 +370,7 @@ class _NodeCell extends ConsumerWidget {
       onTap: onTap,
       // 液态玻璃：磨砂玻璃格子（选中 = 淡粉叠在填充上 + 强调色描边）
       child: glass
-          ? MeowFrostBox(radius: radius, tint: selected ? Color.alphaBlend(mm.soft, mm.elev) : null, child: cell)
+          ? MeowFrostBox(radius: radius, tint: selected ? mm.selectedCard : null, child: cell)
           : cell,
     );
   }

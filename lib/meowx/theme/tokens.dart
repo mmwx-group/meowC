@@ -38,7 +38,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     required this.cardEdge,
     this.glass = false,
     this.glassTinted = false,
-    this.heroGradient,
     required this.onHero,
     required this.heroTrack,
     required this.glassPanel,
@@ -85,9 +84,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
   /// 电源键、首页模式分段的滑块），画不画还要看外层的玻璃宿主（见 glass.dart 的 [meowGlassOn]）；
   /// 内容卡片是半透明 + 高光的「静态玻璃」（[cardRim] 等，见 card_surface.dart），不取背景。
   final bool glass, glassTinted;
-
-  /// 连接主卡（已连接时）的斜向渐变：只有液态玻璃主题有，经典是平涂 [hero]
-  final Gradient? heroGradient;
 
   /// 主卡上的「当前节点」行与「规则 | 全局 | 直连」分段的槽：经典 = 卡片底；液态玻璃 = 半透明白，不挡主卡的底色
   final Color onHero, heroTrack;
@@ -204,9 +200,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     final glass = look.glass;
     final hero = heroShades(Color(look.heroColor), dark: isDark);
     final g = MeowGlassSpec.of(isDark);
-    final heroGradient = glass
-        ? LinearGradient(begin: const Alignment(-0.5, -1), end: const Alignment(0.5, 1), colors: hero.gradient)
-        : null;
     final MeowTokens tokens;
     final List<Color> pageBgs;
     if (glass) {
@@ -249,7 +242,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         t2: ensureContrast(base.t2, [...pageBgs, ...backdrop.referenceSurfaces(t1)], lighten: isDark),
         glass: true,
         glassTinted: look.glassTint == MeowGlassTint.tinted,
-        heroGradient: heroGradient,
         onHero: g.onHero,
         heroTrack: g.heroTrack,
         glassPanel: g.panel,
@@ -275,13 +267,13 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     return tokens._withColors(hero: hero.hero, btnOn: hero.btnOn, pink: hero.pink, accent: accent.accent, soft: accent.soft, fill: accent.fill);
   }
 
-  /// 启动卡片颜色 → 主卡底、电源键填充（同色相更饱和的一档）、电源键光晕的粉、液态玻璃下的斜向渐变（稍亮 → 稍深）。
+  /// 启动卡片颜色 → 主卡底、电源键填充（同色相更饱和的一档）、电源键光晕的粉。
   /// 浅色：直接用（亮度不到 80% 的提到 80%，墨色字才读得清）；深色：不直接用，取色相压成与原来 #45283A 同饱和度 / 亮度的深色。
-  /// 缺省樱粉给回原来的值（渐变即 #FBDCE7 → #F2BED2 / #5A2C47 → #33202F）。
-  static ({Color hero, Color btnOn, Color pink, List<Color> gradient}) heroShades(Color pick, {required bool dark}) {
+  /// 缺省樱粉给回原来的值。
+  static ({Color hero, Color btnOn, Color pink}) heroShades(Color pick, {required bool dark}) {
     final base = dark ? MeowTokens.dark : light;
     if (pick.toARGB32() == MeowHeroColors.sakura) {
-      return (hero: base.hero, btnOn: base.btnOn, pink: base.pink, gradient: MeowGlassSpec.of(dark).hero);
+      return (hero: base.hero, btnOn: base.btnOn, pink: base.pink);
     }
     final hsl = HSLColor.fromColor(pick.withValues(alpha: 1));
     final h = hsl.hue, s = hsl.saturation;
@@ -295,20 +287,12 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         hero: hsl.lightness >= 0.80 && hsl.lightness <= 0.94 ? pick.withValues(alpha: 1) : HSLColor.fromAHSL(1, h, heroS, l).toColor(),
         btnOn: HSLColor.fromAHSL(1, h, btnS, 0.70).toColor(),
         pink: pink,
-        gradient: [
-          HSLColor.fromAHSL(1, h, heroS, (l + 0.04).clamp(0.0, 0.97)).toColor(),
-          HSLColor.fromAHSL(1, h, heroS, l - 0.04).toColor(),
-        ],
       );
     }
     return (
       hero: HSLColor.fromAHSL(1, h, s.clamp(0.0, 0.27), 0.21).toColor(),
       btnOn: pink,
       pink: pink,
-      gradient: [
-        HSLColor.fromAHSL(1, h, s.clamp(0.0, 0.34), 0.26).toColor(),
-        HSLColor.fromAHSL(1, h, s.clamp(0.0, 0.23), 0.16).toColor(),
-      ],
     );
   }
 
@@ -407,7 +391,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     cardEdge: cardEdge,
     glass: glass,
     glassTinted: glassTinted,
-    heroGradient: heroGradient,
     onHero: onHero,
     heroTrack: heroTrack,
     glassPanel: glassPanel,
@@ -555,7 +538,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     Color? glassTint,
     bool? glass,
     bool? glassTinted,
-    Gradient? heroGradient,
     Color? onHero,
     Color? heroTrack,
     Color? glassPanel,
@@ -598,7 +580,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
     cardEdge: cardEdge,
     glass: glass ?? this.glass,
     glassTinted: glassTinted ?? this.glassTinted,
-    heroGradient: heroGradient ?? this.heroGradient,
     onHero: onHero ?? this.onHero,
     heroTrack: heroTrack ?? this.heroTrack,
     glassPanel: glassPanel ?? this.glassPanel,
@@ -648,7 +629,6 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
       // 两种主题之间不插值：过一半就换成另一边的
       glass: t < 0.5 ? glass : other.glass,
       glassTinted: t < 0.5 ? glassTinted : other.glassTinted,
-      heroGradient: Gradient.lerp(heroGradient, other.heroGradient, t),
       onHero: c(onHero, other.onHero),
       heroTrack: c(heroTrack, other.heroTrack),
       glassPanel: c(glassPanel, other.glassPanel),
@@ -825,24 +805,21 @@ abstract final class MeowAccentColors {
 }
 
 /// 液态玻璃主题下改的几种颜色（经典主题不用）：更亮更素的浅色底 / 纯黑深色底（同 iOS，玻璃的高光与亮边才显得出来）、
-/// 连接主卡的斜向渐变、主卡上的半透明白（节点行 / 分段槽）、底部卡片里分组卡的半透明白。
+/// 主卡上的半透明白（节点行 / 分段槽）、底部卡片里分组卡的半透明白。
 @immutable
 class MeowGlassSpec {
   const MeowGlassSpec._({
     required this.bg,
-    required this.hero,
     required this.onHero,
     required this.heroTrack,
     required this.panel,
   });
 
   final Color bg;
-  final List<Color> hero;
   final Color onHero, heroTrack, panel;
 
   static const light = MeowGlassSpec._(
     bg: Color(0xFFF5F1EC),
-    hero: [Color(0xFFFBDCE7), Color(0xFFF2BED2)],
     onHero: Color(0x9EFFFFFF), // 白 62%
     heroTrack: Color(0x66FFFFFF), // 白 40%
     panel: Color(0x8CFFFFFF), // 白 55%
@@ -850,7 +827,6 @@ class MeowGlassSpec {
 
   static const dark = MeowGlassSpec._(
     bg: Color(0xFF000000),
-    hero: [Color(0xFF5A2C47), Color(0xFF33202F)],
     onHero: Color(0x14FFFFFF), // 白 8%
     heroTrack: Color(0x14FFFFFF),
     panel: Color(0x12FFFFFF), // 白 7%

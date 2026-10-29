@@ -83,7 +83,6 @@ void main() {
       expect(identical(MeowTokens.resolve(Brightness.light, MeowLook.classic), MeowTokens.light), isTrue);
       expect(identical(MeowTokens.resolve(Brightness.dark, MeowLook.classic), MeowTokens.dark), isTrue);
       expect(MeowTokens.light.glass, isFalse);
-      expect(MeowTokens.light.heroGradient, isNull);
     });
 
     test('经典 + 别的卡片色：只换卡片两档，底色、樱粉主卡、电源键、选中态、强调色不变', () {
@@ -97,11 +96,10 @@ void main() {
         expect(t.onHero, t.elev, reason: '经典主题下节点行就是卡片底');
         expect([t.hero, t.btnOn, t.soft, t.accent, t.t1, t.pink], [base.hero, base.btnOn, base.soft, base.accent, base.t1, base.pink]);
         expect(t.glass, isFalse);
-        expect(t.heroGradient, isNull);
       }
     });
 
-    test('液态玻璃 + 白 + 平涂背景：浅色底 #F5F1EC、深色纯黑；卡片底是磨砂填充的中间值；主卡渐变、半透明白', () {
+    test('液态玻璃 + 白 + 平涂背景：浅色底 #F5F1EC、深色纯黑；卡片底是磨砂填充的中间值；主卡上的半透明白', () {
       const flat = MeowLook(style: MeowThemeStyle.glass, bgPattern: MeowBgPattern.flat);
       final light = MeowTokens.resolve(Brightness.light, flat);
       final dark = MeowTokens.resolve(Brightness.dark, flat);
@@ -115,8 +113,6 @@ void main() {
       expect(dark.card2, Colors.white.withValues(alpha: 0.07));
       expect(light.elevSolid, Color.alphaBlend(light.elev, const Color(0xFFF5F1EC)));
       expect(light.glass && dark.glass, isTrue);
-      expect((light.heroGradient! as LinearGradient).colors, const [Color(0xFFFBDCE7), Color(0xFFF2BED2)]);
-      expect((dark.heroGradient! as LinearGradient).colors, const [Color(0xFF5A2C47), Color(0xFF33202F)]);
       expect(light.onHero, const Color(0x9EFFFFFF));
       expect(dark.onHero, const Color(0x14FFFFFF));
       expect(light.glassPanel, const Color(0x8CFFFFFF));
@@ -336,8 +332,6 @@ void main() {
       final d = MeowTokens.heroShades(const Color(MeowHeroColors.sakura), dark: true);
       expect((l.hero, l.btnOn), (const Color(0xFFF7CDDB), const Color(0xFFE77FA6)));
       expect((d.hero, d.btnOn), (const Color(0xFF45283A), const Color(0xFFF3A6BF)));
-      expect(l.gradient, const [Color(0xFFFBDCE7), Color(0xFFF2BED2)]);
-      expect(d.gradient, const [Color(0xFF5A2C47), Color(0xFF33202F)]);
       final a = MeowTokens.accentShades(const Color(MeowAccentColors.rose), dark: false);
       expect((a.accent, a.soft, a.fill), (const Color(0xFFB02E63), const Color(0xFFFCE4EC), const Color(0xFFF3A6BF)));
       expect(MeowTokens.accentShades(const Color(MeowAccentColors.rose), dark: true).accent, const Color(0xFFF7B6CB));
@@ -349,14 +343,11 @@ void main() {
       double dist(Color a, Color b) =>
           [(a.r - b.r).abs(), (a.g - b.g).abs(), (a.b - b.b).abs()].reduce((x, y) => x > y ? x : y);
       final l = MeowTokens.heroShades(near, dark: false);
-      expect(dist(l.gradient[0], const Color(0xFFFBDCE7)), lessThan(0.04));
-      expect(dist(l.gradient[1], const Color(0xFFF2BED2)), lessThan(0.04));
+      expect(dist(l.hero, const Color(0xFFF7CDDB)), lessThan(0.04));
       expect(dist(l.btnOn, const Color(0xFFE77FA6)), lessThan(0.06));
       final d = MeowTokens.heroShades(near, dark: true);
       // 原来的深色几档色相偏紫一点（约 323°，樱粉是 340°），差在 5% 以内
       expect(dist(d.hero, const Color(0xFF45283A)), lessThan(0.05));
-      expect(dist(d.gradient[0], const Color(0xFF5A2C47)), lessThan(0.05));
-      expect(dist(d.gradient[1], const Color(0xFF33202F)), lessThan(0.05));
     });
 
     test('启动卡片：电源键跟着色相走（薄荷卡上不是粉按钮）；很深的自定义色提亮到墨色字读得清；深色压成深色', () {
@@ -409,8 +400,9 @@ void main() {
       expect(t.accent, MeowTokens.accentShades(const Color(0xFF2F6FD0), dark: false).accent);
       expect(t.fill, isNot(base.fill));
       expect([t.good, t.slow, t.t1, t.bg, t.elev], [base.good, base.slow, base.t1, base.bg, base.elev]);
+      // 液态玻璃下启动卡片颜色只给电源键（连接主卡和其它卡片一样是玻璃）
       final glass = MeowTokens.resolve(Brightness.light, const MeowLook(style: MeowThemeStyle.glass, heroColor: 0xFFCDEBDD));
-      expect((glass.heroGradient! as LinearGradient).colors, MeowTokens.heroShades(const Color(0xFFCDEBDD), dark: false).gradient);
+      expect(glass.btnOn, MeowTokens.heroShades(const Color(0xFFCDEBDD), dark: false).btnOn);
     });
   });
 
@@ -846,7 +838,9 @@ void main() {
       await tester.pumpAndSettle();
       final box = tester.widget<MeowGlassBox>(find.byType(MeowGlassBox));
       expect(box.radius, BorderRadius.circular(80 * 0.325));
-      expect(box.style.tint.a, lessThan(0.2), reason: '几乎不着色：颜色来自背后的卡片与液面');
+      // 圆钮那一档的玻璃（底下没有墨色实心块了，太薄的话没连上时只剩一圈边），折射收小
+      expect(box.style.tint.a, greaterThan(0.2));
+      expect(box.style.refraction, MeowGlassMetrics.powerRefraction);
     });
 
     testWidgets('弹出菜单：玻璃下面板是一块玻璃（菜单那一档），经典下是实色', (tester) async {
