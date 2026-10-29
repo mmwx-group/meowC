@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/window_controls.dart';
+import 'button_fill.dart';
 import 'glass.dart';
 import 'tokens.dart';
 import 'widgets.dart';
@@ -51,7 +52,7 @@ class PageTitle extends StatelessWidget {
 }
 
 /// 标题右侧的圆形按钮（44，卡片底；[filled] = 墨色实底，用于该页的主操作）。
-/// 液态玻璃主题下非实底的那种换成玻璃圆钮（[MeowGlassButton]）；实底的主操作仍是墨色实心块。
+/// 液态玻璃主题下非实底的那种换成玻璃圆钮（[MeowGlassButton]）；主操作不再是墨色实心块，是按钮那档静态半透明（[MeowButtonFill.prominent]，墨色图标）。
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
@@ -88,8 +89,8 @@ class RoundGlassButton extends StatelessWidget {
       );
     }
     final btn = Material(
-      color: filled ? mm.t1 : mm.elev,
-      shape: const CircleBorder(),
+      color: mm.buttonFill(filled ? MeowButtonFill.prominent : MeowButtonFill.plain),
+      shape: CircleBorder(side: mm.buttonSide),
       child: InkWell(
         customBorder: const CircleBorder(),
         onTap: busy ? null : onTap,
@@ -109,10 +110,10 @@ class RoundGlassButton extends StatelessWidget {
           height: 14,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: filled ? mm.bg : mm.t2,
+            color: filled ? mm.onProminent : mm.t2,
           ),
         )
       : glyph != null
-      ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.bg : mm.t1))
-      : Icon(icon, size: 20, color: color ?? (filled ? mm.bg : mm.t1));
+      ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.onProminent : mm.t1))
+      : Icon(icon, size: 20, color: color ?? (filled ? mm.onProminent : mm.t1));
 }

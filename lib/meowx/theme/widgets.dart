@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'button_fill.dart';
 import 'glass.dart';
 import 'motion.dart';
 import 'svg_path.dart';
@@ -106,6 +107,7 @@ class _GlyphPainter extends CustomPainter {
 /// [onCard] = 放在白卡片上时槽用次级底（放在主卡 / 页面底上时槽用卡片底）。
 /// 换段时滑块用弹跳弹簧滑过去（只平移、不拉伸，越过两端的部分被槽的圆角裁掉），段内文字颜色 220ms 交叉渐变。
 /// [track] 换槽的颜色（主卡上的半透明白）；[glass] = 液态玻璃主题下滑块换成一块玻璃透镜、选中的字用墨色（经典主题照旧是墨色实心块）。
+/// 液态玻璃主题下其余的滑块（没要玻璃的、低端机上画不了玻璃的）也不是墨色实心块：选中态那档静态半透明 + 细亮边、强调色的字（[MeowButtonFill.selected]）。
 class MeowSegment<T> extends StatefulWidget {
   const MeowSegment({
     super.key,
@@ -183,7 +185,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
                       fontSize: widget.fontSize,
                       fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
                       // 玻璃滑块是透明的，选中的字仍用墨色
-                      color: i == index ? (glass ? mm.t1 : mm.bg) : mm.t2,
+                      color: i == index ? (glass ? mm.t1 : mm.onSelected) : mm.t2,
                     ),
                     child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),
@@ -221,7 +223,8 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
             pos: _pos,
             count: widget.items.length,
             visible: index >= 0,
-            color: mm.t1,
+            color: mm.buttonFill(MeowButtonFill.selected),
+            stroke: mm.glass ? mm.buttonSide : null,
             radius: outer - _segGap,
             slotRadius: outer,
           ),
@@ -274,6 +277,7 @@ class _SegmentThumb extends CustomPainter {
     required this.color,
     required this.radius,
     required this.slotRadius,
+    this.stroke,
   }) : super(repaint: pos);
 
   final Animation<double> pos;
@@ -282,17 +286,26 @@ class _SegmentThumb extends CustomPainter {
   final Color color;
   final double radius, slotRadius;
 
+  /// 液态玻璃主题下滑块的细亮边（[MeowButtonColors.buttonSide]）；经典 = null
+  final BorderSide? stroke;
+
   @override
   void paint(Canvas canvas, Size size) {
     if (!visible || count <= 0) return;
     final w = (size.width - _segGap * (count - 1)) / count;
     final x = pos.value * (w + _segGap);
+    final thumb = RRect.fromRectAndRadius(Rect.fromLTWH(x, 0, w, size.height), Radius.circular(radius));
     // 弹簧越过两端时滑块伸进槽的内边距，再往外就被槽的圆角裁掉
     canvas
       ..save()
       ..clipRRect(RRect.fromRectAndRadius((Offset.zero & size).inflate(_segGap), Radius.circular(slotRadius)))
-      ..drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, 0, w, size.height), Radius.circular(radius)), Paint()..color = color)
-      ..restore();
+      ..drawRRect(thumb, Paint()..color = color);
+    final s = stroke;
+    if (s != null) {
+      // 描在滑块里面（同 BoxDecoration 的边框）
+      canvas.drawRRect(thumb.deflate(s.width / 2), s.toPaint());
+    }
+    canvas.restore();
   }
 
   @override
@@ -301,6 +314,7 @@ class _SegmentThumb extends CustomPainter {
       old.count != count ||
       old.visible != visible ||
       old.color != color ||
+      old.stroke != stroke ||
       old.radius != radius ||
       old.slotRadius != slotRadius;
 }
@@ -310,8 +324,9 @@ class _SegmentThumb extends CustomPainter {
 /// - 连上（[on]）：弹簧补满，同时一圈樱粉描边外扩一次（涟漪），图标从 0.6 弹回 1、颜色渐变成墨色；
 /// - 断开 / 连接失败：350ms 排空。
 /// 初值按出现时的状态给：切回首页时已连接就是满的，不重放。不可用 = 半透明。
-/// 液态玻璃主题：墨色底与液面之上盖一块几乎不着色的玻璃（樱粉着色那一档的边缘折射与高光），液面照旧在里面涨；
-/// 形状仍是圆角方块、不加光晕（用户明确不要正圆和光晕），只留一层很淡的投影。
+/// 液态玻璃主题：没有墨色实心底（用户 2026-10-28 要求按钮别再是纯色，同 iOS），液面半透明（55%）地在里面涨、图标用墨色；
+/// 液面之上盖一块几乎不着色的玻璃（樱粉着色那一档的边缘折射与高光），形状仍是圆角方块、不加光晕（用户明确不要正圆和光晕），
+/// 只留一层很淡的投影。低端机画不了玻璃时底换成按钮那档静态半透明 + 细亮边（[MeowButtonFill.plain]），照样不是实心块。
 class MeowPowerButton extends StatefulWidget {
   const MeowPowerButton({
     super.key,
@@ -397,7 +412,9 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
     final on = widget.on;
     final size = widget.size;
     final radius = BorderRadius.circular(size * 0.325);
+    // 玻璃透镜画不画看宿主（低端机不画）；没有实心底 / 半透明液面 / 墨色图标看主题（低端机上也一样）
     final glass = meowGlassOn(context);
+    final glassTheme = mm.glass;
     return Semantics(
       button: true,
       enabled: widget.enabled,
@@ -411,9 +428,16 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                // 底：阴影只换颜色、半径不变（玻璃下不要这圈光晕，投影由玻璃自己带）
+                // 底：阴影只换颜色、半径不变（玻璃下不要这圈光晕，投影由玻璃自己带）。
+                // 液态玻璃主题没有实心底：有透镜时透镜读的就是背后的卡片；低端机没有透镜，垫一层静态半透明
                 Positioned.fill(
-                  child: glass
+                  child: glassTheme
+                      ? (glass
+                            ? const SizedBox.shrink()
+                            : DecoratedBox(
+                                decoration: BoxDecoration(color: mm.buttonFill(MeowButtonFill.plain), borderRadius: radius),
+                              ))
+                      : glass
                       ? DecoratedBox(decoration: BoxDecoration(color: mm.t1, borderRadius: radius))
                       : AnimatedContainer(
                           duration: MeowMotion.of(context, MeowMotion.colorFade),
@@ -441,7 +465,8 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
                         transform: Matrix4.diagonal3Values(1, _level.value.clamp(0.0, 1.5), 1),
                         child: child,
                       ),
-                      child: ColoredBox(color: mm.btnOn),
+                      // 液态玻璃主题：液面半透明（直接用带透明度的颜色，不套 Opacity 层）
+                      child: ColoredBox(color: glassTheme ? mm.btnOn.withValues(alpha: mm.btnOn.a * 0.55) : mm.btnOn),
                     ),
                   ),
                 ),
@@ -452,6 +477,13 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
                       style: MeowGlassStyles.power(context),
                       radius: radius,
                       shadows: MeowGlassMetrics.powerShadow,
+                    ),
+                  )
+                // 低端机：细亮边描在液面上面（同其它按钮）
+                else if (glassTheme)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(decoration: BoxDecoration(border: mm.buttonBorder, borderRadius: radius)),
                     ),
                   ),
                 // 涟漪：连上那一下外扩一圈，平时不画
@@ -481,7 +513,8 @@ class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderSt
                   child: ScaleTransition(
                     scale: _icon,
                     child: TweenAnimationBuilder<Color?>(
-                      tween: ColorTween(end: on ? mm.onBtn : mm.bg),
+                      // 液态玻璃主题下没有墨色底，连没连上图标都是墨色
+                      tween: ColorTween(end: glassTheme ? mm.t1 : (on ? mm.onBtn : mm.bg)),
                       duration: MeowMotion.of(context, MeowMotion.colorFade),
                       builder: (_, c, _) => MeowIcon(MeowGlyph.power, size: size * 0.43, color: c, stroke: 2.2),
                     ),

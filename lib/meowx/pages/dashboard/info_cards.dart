@@ -19,6 +19,7 @@ import '../../state/exit_ip.dart';
 import '../../state/format.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/glass_card.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
@@ -214,13 +215,14 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
       ),
     );
 
-    // 直连档 = 实心「选择订阅」（墨色底配页面底色的字，同实心主按钮）；在用订阅 = 淡粉底玫红字「切换订阅」
-    final fg = direct ? mm.bg : mm.accent;
+    // 直连档 = 实心「选择订阅」（墨色底配页面底色的字，同实心主按钮）；在用订阅 = 淡粉底玫红字「切换订阅」。
+    // 液态玻璃主题下两种都是按钮那档静态半透明（见 button_fill.dart）
+    final fg = direct ? mm.onProminent : mm.accent;
     final chip = menu(
       alignEnd: true,
       trigger: (open) => Material(
-        color: direct ? mm.t1 : mm.soft,
-        shape: const StadiumBorder(),
+        color: mm.buttonFill(direct ? MeowButtonFill.prominent : MeowButtonFill.accent),
+        shape: StadiumBorder(side: mm.buttonSide),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: open,

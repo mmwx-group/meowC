@@ -27,7 +27,7 @@ abstract final class MeowGlassMetrics {
   /// 「着色」相对「透明」：底色往不透明走剩余透明度的这个比例、模糊多这么多（iOS 26.1 的「着色」= 更厚、对比度更高）
   static const tintedOpacity = 0.5, tintedBlur = 6.0, tintedContrast = 1.5;
 
-  /// 电源键的玻璃几乎不着色：背后的墨色底与樱粉液面透上来，玻璃只给边缘的折射与高光（「着色」稍厚一点）。
+  /// 电源键的玻璃几乎不着色：背后的卡片与半透明的樱粉液面透上来（液态玻璃主题下没有墨色底），玻璃只给边缘的折射与高光（「着色」稍厚一点）。
   /// 折射收小：按钮背后的色块与按钮一样大，照圆钮那一档（60 / 20）边缘会把主卡的浅底整条拉进来，盖住墨色
   static const powerTint = 0.05, powerTintTinted = 0.14;
   static const powerRefraction = 10.0, powerBevel = 8.0;
@@ -88,7 +88,7 @@ abstract final class MeowGlassStyles {
   static List<BoxShadow> menuShadows(BuildContext context, [double depth = 1]) =>
       glassMenuShadows(scheme(context), depth);
 
-  /// 电源键：樱粉着色那一档的边缘与高光，底色几乎透明（颜色来自背后的墨色底与液面）
+  /// 电源键：樱粉着色那一档的边缘与高光，底色几乎透明（颜色来自背后的卡片与液面）
   static LiquidGlassStyle power(BuildContext context) {
     final mm = context.mm;
     return LiquidGlassStyle.tinted(scheme(context), mm.btnOn).copyWith(

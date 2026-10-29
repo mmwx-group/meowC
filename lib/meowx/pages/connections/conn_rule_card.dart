@@ -8,6 +8,7 @@ import '../../state/connection.dart';
 import '../../state/custom_rules.dart';
 import '../../state/meow_settings.dart';
 import '../../state/overrides.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -154,6 +155,7 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
 }
 
 /// 动作按钮：选中 = 墨色实心配页面底色的字（同分段的选中态），未选 = 次级底配动作色的字。
+/// 液态玻璃主题下选中是选中态那档静态半透明 + 强调色的字（见 button_fill.dart）。
 class _ActionButton extends StatelessWidget {
   const _ActionButton({required this.label, required this.color, required this.selected, required this.onTap});
   final String label;
@@ -168,8 +170,8 @@ class _ActionButton extends StatelessWidget {
       button: true,
       selected: selected,
       child: Material(
-        color: selected ? mm.t1 : mm.card2,
-        borderRadius: BorderRadius.circular(12),
+        color: mm.buttonFill(selected ? MeowButtonFill.selected : MeowButtonFill.secondary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: mm.buttonSide),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
@@ -182,7 +184,7 @@ class _ActionButton extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? mm.bg : color),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? mm.onSelected : color),
             ),
           ),
         ),

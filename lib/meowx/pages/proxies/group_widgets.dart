@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/strings.dart';
 import '../../state/latency.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/motion.dart';
 import '../../theme/popover.dart';
 import '../../theme/tokens.dart';
@@ -78,7 +79,10 @@ class GroupPickerButton extends StatelessWidget {
                 Container(
                   constraints: const BoxConstraints(minHeight: 32),
                   padding: const EdgeInsets.only(left: 12, right: 8),
-                  decoration: ShapeDecoration(color: Color.alphaBlend(mm.soft, mm.elev), shape: const StadiumBorder()),
+                  decoration: ShapeDecoration(
+                    color: mm.buttonFill(MeowButtonFill.accent, classic: Color.alphaBlend(mm.soft, mm.elev)),
+                    shape: StadiumBorder(side: mm.buttonSide),
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -299,7 +303,8 @@ class AutoSelectToggle extends ConsumerWidget {
 /// 组卡：名 + 类型 / 当前选中 + 延迟。三处用：
 /// - 宽屏左栏的一行（[selected] = 柔粉底 + 玫红 2px 描边）；
 /// - 单组布局选组面板里的一行（同上，[showCount] 多画成员数）；
-/// - 手机列表布局里可展开的组头（[expanded] 非 null）：多画成员数、测速钮和箭头，展开时换成樱粉底，下面接节点网格。
+/// - 手机列表布局里可展开的组头（[expanded] 非 null）：多画成员数、测速钮和箭头，展开时换成樱粉底（液态玻璃主题下不换，
+///   全部卡片一致，展开看箭头），下面接节点网格。
 class GroupCard extends ConsumerWidget {
   const GroupCard({
     super.key,
@@ -401,8 +406,10 @@ class GroupCard extends ConsumerWidget {
   /// 列表布局的组卡（同 iOS 节点页）：第一行 图标 · 组名 · 类型标签 ……… 成员数 · 延迟测速钮 · 展开钮；
   /// 第二行 当前选中 ……… 奖牌 / 解锁（贴卡片右边，按钮只占第一行）。延迟在测速钮上，第二行不再重复。
   Widget _listCard(BuildContext context, MeowTokens mm, String current, int? delay, bool open) {
+    // 液态玻璃主题下展开了也是普通的玻璃卡片
+    final hero = open && !mm.glass;
     return MeowCardMaterial(
-      color: open ? mm.hero : null,
+      color: hero ? mm.hero : null,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22))),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -439,7 +446,7 @@ class GroupCard extends ConsumerWidget {
                             child: FittedBox(
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
-                              child: GroupTypeTag(group.type, bg: open ? mm.elev : mm.card2),
+                              child: GroupTypeTag(group.type, bg: hero ? mm.elev : mm.card2),
                             ),
                           ),
                         ],
@@ -525,7 +532,8 @@ class _GroupChevronState extends State<_GroupChevron> with SingleTickerProviderS
   );
 }
 
-/// 当前组摘要（樱粉主卡）：类型 + 成员数 + 当前选中 + 延迟 + 测速；url-test / fallback 组带「自动选择」开关，手选 = 固定。
+/// 当前组摘要（樱粉主卡；液态玻璃主题下和其它卡片一样是磨砂玻璃卡片）：类型 + 成员数 + 当前选中 + 延迟 + 测速；
+/// url-test / fallback 组带「自动选择」开关，手选 = 固定。
 /// 手机（单组布局组按钮下面）按 ANodes 排成两行；[wide] = 宽屏右栏，按 WNodes 排成一行并带组名。
 class GroupSummary extends ConsumerWidget {
   const GroupSummary({super.key, required this.group, this.wide = false});
@@ -552,12 +560,15 @@ class GroupSummary extends ConsumerWidget {
       overflow: TextOverflow.ellipsis,
       style: TextStyle(fontSize: 12, color: mm.t2),
     );
-    final tag = GroupTypeTag(group.type, bg: mm.elev);
+    // 樱粉主卡上的小标签用卡片底；液态玻璃主题下主卡是普通的玻璃卡片，标签用卡片里的次级块
+    final tag = GroupTypeTag(group.type, bg: mm.glass ? mm.card2 : mm.elev);
+    final heroColor = mm.glass ? null : mm.hero;
 
     if (wide) {
-      return Container(
+      return MeowCard(
         padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-        decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(20)),
+        radius: BorderRadius.circular(20),
+        color: heroColor,
         child: Row(
           children: [
             Expanded(
@@ -624,9 +635,10 @@ class GroupSummary extends ConsumerWidget {
       );
     }
 
-    return Container(
+    return MeowCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(22)),
+      radius: BorderRadius.circular(22),
+      color: heroColor,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

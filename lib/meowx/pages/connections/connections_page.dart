@@ -19,6 +19,7 @@ import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
@@ -860,6 +861,7 @@ class _ConnRow extends StatelessWidget {
 }
 
 /// 类型筛选胶囊（全部 / 推送 / DNS / 直连 / 代理）：选中 = 柔粉底玫红字，其余白底（同 iOS 的 MeowPill .soft / .card）。
+/// 液态玻璃主题下是按钮那档静态半透明 + 细亮边（见 button_fill.dart），不是一颗颗磨砂卡片——选中的那颗以前叠的淡粉是不透明的，等于实色块。
 class _KindFilter extends StatelessWidget {
   const _KindFilter({required this.value, required this.onChanged, this.compact = false});
   final ActivityKind value;
@@ -874,9 +876,11 @@ class _KindFilter extends StatelessWidget {
       child: Row(
         children: [
           for (final k in ActivityKind.values) ...[
-            MeowCardMaterial(
-              color: k == value ? Color.alphaBlend(mm.soft, mm.elev) : null,
-              shape: const StadiumBorder(),
+            Material(
+              color: k == value
+                  ? mm.buttonFill(MeowButtonFill.accent, classic: Color.alphaBlend(mm.soft, mm.elev))
+                  : mm.buttonFill(MeowButtonFill.plain),
+              shape: StadiumBorder(side: mm.buttonSide),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () => onChanged(k),
@@ -1043,7 +1047,7 @@ class _ConnTableRow extends StatelessWidget {
   }
 }
 
-/// 详情里的小卡片：小字标题 + 值。[hero] = 樱粉主卡。
+/// 详情里的小卡片：小字标题 + 值。[hero] = 樱粉主卡（液态玻璃主题下和其它卡片一样，全部卡片一致）。
 class _InfoCard extends StatelessWidget {
   const _InfoCard({required this.label, required this.value, this.hero = false, this.mono = false});
   final String label, value;
@@ -1055,7 +1059,7 @@ class _InfoCard extends StatelessWidget {
     return MeowCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       radius: BorderRadius.circular(20),
-      color: hero ? mm.hero : null,
+      color: hero && !mm.glass ? mm.hero : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

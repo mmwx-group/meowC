@@ -3,6 +3,7 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/pages/dashboard/active_connections_card.dart';
 import 'package:bett_box/meowx/pages/dashboard/dashboard_page.dart';
+import 'package:bett_box/meowx/pages/dashboard/hero_card.dart';
 import 'package:bett_box/meowx/pages/dashboard/info_cards.dart';
 import 'package:bett_box/meowx/pages/dashboard/speed_card.dart';
 import 'package:bett_box/meowx/pages/dashboard/takeover_card.dart';
@@ -10,6 +11,9 @@ import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/exit_ip.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
+import 'package:bett_box/meowx/theme/card_surface.dart';
+import 'package:bett_box/meowx/theme/meow_theme.dart';
+import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -257,6 +261,7 @@ Future<void> _pump(
   double bottomInset = 0,
   Brightness brightness = Brightness.light,
   bool disableAnimations = false,
+  ThemeData? theme,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -269,7 +274,7 @@ Future<void> _pump(
     ProviderScope(
       overrides: overrides,
       child: MaterialApp(
-        theme: ThemeData(brightness: brightness),
+        theme: theme ?? ThemeData(brightness: brightness),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(textScale),
@@ -675,5 +680,36 @@ void main() {
 
     await pump(const AccessControl(enable: true, rejectList: ['a', 'b']));
     expect(find.text('黑名单 · 选中的 2 个应用不走代理'), findsOneWidget);
+  });
+
+  testWidgets('液态玻璃：连接主卡连没连上都是和其它卡片一样的磨砂玻璃（不再换成樱粉渐变）；经典主题照旧', (tester) async {
+    Future<void> pump(MeowLook look, {required bool running}) => _pump(
+      tester,
+      const SingleChildScrollView(child: HomeHeroCard()),
+      size: const Size(412, 892),
+      overrides: _overrides(running: running, profile: _profile),
+      textScale: 1,
+      theme: meowThemeData(brightness: Brightness.light, look: look),
+    );
+    // 主卡自己那层（电源键经典画法里也有 AnimatedContainer，在它里面、排在后面）
+    BoxDecoration card() => tester
+            .widget<AnimatedContainer>(find.descendant(of: find.byType(HomeHeroCard), matching: find.byType(AnimatedContainer)).first)
+            .decoration!
+        as BoxDecoration;
+
+    for (final running in [false, true]) {
+      await pump(const MeowLook(style: MeowThemeStyle.glass), running: running);
+      final frost = tester.widget<MeowFrostBox>(find.descendant(of: find.byType(HomeHeroCard), matching: find.byType(MeowFrostBox)));
+      expect(frost.enabled, isTrue, reason: '连上了也画玻璃（running: $running）');
+      expect(frost.tint, isNull, reason: '和其它卡片同一种白色填充');
+      expect(card().color, isNull);
+      expect(card().gradient, isNull);
+    }
+
+    await pump(MeowLook.classic, running: true);
+    expect(find.byType(MeowFrostBox), findsNothing);
+    expect(card().color, MeowTokens.light.hero);
+    await pump(MeowLook.classic, running: false);
+    expect(card().color, MeowTokens.light.card2);
   });
 }

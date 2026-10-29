@@ -283,6 +283,7 @@ String _usageText(int used, int total) {
 }
 
 /// 当前档：柔粉底 + 玫红描边；名 +「当前」+「⋯」菜单；用量进度条；已用 / 总量、到期、更新时间。
+/// 液态玻璃主题下和其它档一样是卡片里的次级块（用户 2026-10-28：全部卡片一致），不画淡粉底与描边，靠「当前」标签认出来。
 class _CurrentTile extends StatelessWidget {
   const _CurrentTile({required this.profile, required this.menu});
   final Profile profile;
@@ -314,11 +315,13 @@ class _CurrentTile extends StatelessWidget {
     ].join(' · ');
     final small = TextStyle(fontSize: MeowFont.caption2, color: mm.t2);
     return Container(
-      decoration: BoxDecoration(
-        color: mm.soft,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: mm.accent, width: 2),
-      ),
+      decoration: mm.glass
+          ? BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(16))
+          : BoxDecoration(
+              color: mm.soft,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: mm.accent, width: 2),
+            ),
       padding: const EdgeInsets.fromLTRB(12, 4, 4, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
