@@ -146,10 +146,12 @@ class MeowBackdrop {
     return (h + 360) % 360;
   }
 
-  /// 插画上面压的那层底色（左上 → 右下，保字的对比度）：跟着磨砂强度的左半段淡掉，到 0 没有——用户拉到透明要看的是图片本身
-  /// （同 MeowX iOS：罩色把对比度砍掉近一半，用户实报「插画背景很糊」）；≥ 0.5 不变
+  /// 插画上面压的那层底色（左上 → 右下，保字的对比度）：浅色跟着磨砂强度的左半段淡掉，到 0 没有——用户拉到透明要看的是图片本身
+  /// （同 MeowX iOS：罩色把对比度砍掉近一半，用户实报「插画背景很糊」）；≥ 0.5 不变。
+  /// 深色不淡（2026-10-29）：深色模式的字是白的，背景照片原样亮着时，压在亮处的卡片只能垫得很黑、和背景反差很大
+  /// （用户实报「安卓的玻璃还是很黑」），标题直接写在亮背景上也看不清；深色时照片一律压暗（同深色模式把壁纸调暗）
   List<Color> get veil {
-    final k = frostWeight(frost);
+    final k = dark ? 1.0 : frostWeight(frost);
     return dark
         ? [HSLColor.fromAHSL(0.55 * k, hueA, 0.5, 0.12).toColor(), HSLColor.fromAHSL(0.60 * k, hueB, 0.5, 0.07).toColor()]
         : [HSLColor.fromAHSL(0.35 * k, hueA, 0.5, 0.92).toColor(), HSLColor.fromAHSL(0.45 * k, hueB, 0.5, 0.88).toColor()];

@@ -539,7 +539,7 @@ void main() {
       }
     });
 
-    test('磨砂强度 < 0.5 往透明走：0 = 浅 (0.08, 0.02) / 深 (0.03, 0)、模糊 1、不提饱和、没有罩色、不垫；0.25 在两端正中', () {
+    test('磨砂强度 < 0.5 往透明走：0 = 浅 (0.08, 0.02) / 深 (0.03, 0)、模糊 1、不提饱和、浅色没有罩色（深色照片照样压暗）、不垫；0.25 在两端正中', () {
       MeowBackdrop at(double f, bool dark) =>
           MeowBackdrop.of(MeowLook(style: MeowThemeStyle.glass, bgPattern: MeowBgPattern.art, glassFrost: f), dark: dark);
       final l0 = at(0, false), d0 = at(0, true);
@@ -548,7 +548,9 @@ void main() {
       expect(d0.fill.top, closeTo(0.03, 1e-9));
       expect(d0.fill.bottom, closeTo(0, 1e-9));
       expect((l0.blurSigma, l0.saturation, d0.saturation), (1, 1, 1));
-      expect([...l0.veil, ...d0.veil].every((c) => c.a == 0), isTrue);
+      expect(l0.veil.every((c) => c.a == 0), isTrue);
+      // 深色的罩色不跟着淡：亮照片上的卡片不用垫得很黑，标题白字也看得清
+      expect(d0.veil.map((c) => c.a), [closeTo(0.55, 0.01), closeTo(0.60, 0.01)]);
       expect(l0.scrim(const Color(0xFF2A2130)), 0);
       expect(d0.scrim(const Color(0xFFF7F0F3)), 0);
       final l = at(0.25, false), hi = at(0.5, false);
@@ -557,7 +559,7 @@ void main() {
       expect(l.blurSigma, closeTo(15, 1e-9));
       expect(l.saturation, closeTo(1.4, 1e-9));
       expect(l.veil[0].a, closeTo(0.35 / 2, 0.01));
-      expect(at(0.25, true).veil[1].a, closeTo(0.60 / 2, 0.01));
+      expect(at(0.25, true).veil[1].a, closeTo(0.60, 0.01));
       // 0.5 起与第一版一样
       expect(hi.blurSigma, 29);
       expect(hi.veil[0].a, closeTo(0.35, 0.01));

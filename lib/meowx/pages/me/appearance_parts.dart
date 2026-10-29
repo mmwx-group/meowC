@@ -430,7 +430,7 @@ class _GlassFrostRowState extends ConsumerState<GlassFrostRow> {
     return _StackedRow(
       label: '磨砂强度',
       value: '${_label(value)} · ${(value * 100).round()}%',
-      caption: '越往右卡片越厚、背后越模糊；拉到最左是透明玻璃，插画背景上的罩色也一起去掉。卡片压在太暗（深色下是太亮）的地方会自动加厚到字看得清，别处保持透明。',
+      caption: '越往右卡片越厚、背后越模糊；拉到最左是透明玻璃，插画背景上的罩色也一起去掉（深色模式下照片仍会压暗）。卡片压在太暗（深色下是太亮）的地方会自动加厚到字看得清，别处保持透明。',
       child: SliderTheme(
         data: SliderTheme.of(context).copyWith(
           activeTrackColor: mm.accent,
