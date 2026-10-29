@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:bett_box/models/meow.dart';
@@ -368,6 +369,7 @@ class MeowBackdropImages {
     required this.sharpScale,
     required this.frost,
     required this.frostScale,
+    this.localScrim = false,
   });
 
   final MeowBackdrop spec;
@@ -375,9 +377,111 @@ class MeowBackdropImages {
   final ui.Image sharp, frost;
   final double sharpScale, frostScale;
 
+  /// [frost] 里已经叠了局部垫层（[MeowScrimMap]）：卡片不再画整套统一的那层
+  final bool localScrim;
+
   void dispose() {
     sharp.dispose();
     frost.dispose();
+  }
+}
+
+/// 局部对比度垫层（2026-10-29，用户实报「自定义背景有的字和背景融在一起看不见」「卡片像熏黑的玻璃」）。
+/// 以前整套卡片共用一个垫层，按整张背景最不利的那一点算（自选插画还按纯黑纯白算），压在亮处的卡片也跟着被压暗 / 蒙白；
+/// 磨砂低于 0.5 时垫层又跟着降到 0，字落在图片暗处就看不见。现在按屏幕上每一小格（[cell]）背后的模糊背景各算
+/// 「要垫多少，正文与次级字才看得清」，做成一张小遮罩叠进卡片用的预模糊图里（backdrop_host.dart）：卡片按位置裁那张图当底，
+/// 自然只在底下太暗（深色是太亮）的地方变浓、别处照样透明；跨两块的卡片上下各是各的，拆成几截画的卡片拼接处也连续。
+/// 磨砂再低也保底（正文 ≥ [bodyTarget]、次级字 ≥ 4.5），上限照旧 0.85。
+abstract final class MeowScrimMap {
+  /// 一格多大（dp）：遮罩每格一个像素，叠进模糊图时双线性放大
+  static const cell = 8.0;
+
+  /// 正文的对比度要求：磨砂 ≥ 0.5 是 7（同以前），往透明走降到 4.5（AA）为止，不再降到不保证
+  static double bodyTarget(double frost) => 4.5 + 2.5 * MeowBackdrop.frostWeight(frost);
+
+  /// 一格背后的颜色 [bg]：要垫多少（浅色垫白、深色垫黑），[texts]（颜色, 要求的对比度）才都够。
+  /// 卡片的叠法同 [MeowBackdrop.scrimFor]：垫层在填充（[fillAlpha]）下面；浅色的 [cap] 是白的总覆盖率（含填充），
+  /// 深色是黑垫层本身。二分到 1/1024，结果随背景连续变（不按 0.02 一档跳）。
+  static double scrimAt(
+    Color bg, {
+    required double fillAlpha,
+    required bool dark,
+    required List<(Color, double)> texts,
+    double cap = 0.85,
+  }) {
+    const white = Color(0xFFFFFFFF), black = Color(0xFF000000);
+    Color surface(double s) => dark
+        ? Color.alphaBlend(white.withValues(alpha: fillAlpha), Color.lerp(bg, black, s)!)
+        : Color.lerp(bg, white, 1 - (1 - s) * (1 - fillAlpha))!;
+    bool ok(double s) {
+      final c = surface(s);
+      return texts.every((t) => MeowTokens.contrast(t.$1, c) >= t.$2 - 1e-9);
+    }
+
+    if (ok(0)) return 0;
+    final max = dark ? cap : (cap <= fillAlpha ? 0.0 : 1 - (1 - cap) / (1 - fillAlpha));
+    if (max <= 0 || !ok(max)) return math.max(0, max);
+    var lo = 0.0, hi = max;
+    for (var i = 0; i < 10; i++) {
+      final m = (lo + hi) / 2;
+      if (ok(m)) {
+        hi = m;
+      } else {
+        lo = m;
+      }
+    }
+    return hi;
+  }
+
+  /// 每格一个像素的背景（RGBA，宽 [w] 高 [h]）→ 每格的垫层不透明度。每格再取周围 3×3 格里最大的：
+  /// 一行字跨在两格之间、或贴着亮暗交界时也够（双线性放大会把格子之间抹平，这样不会抹到要求以下）
+  static Float32List build(
+    Uint8List rgba,
+    int w,
+    int h, {
+    required double fillAlpha,
+    required bool dark,
+    required List<(Color, double)> texts,
+    double cap = 0.85,
+  }) {
+    final raw = Float32List(w * h);
+    final memo = <int, double>{};
+    for (var i = 0; i < w * h; i++) {
+      final key = (rgba[i * 4] << 16) | (rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+      raw[i] = memo[key] ??= scrimAt(
+        Color.fromARGB(255, rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2]),
+        fillAlpha: fillAlpha,
+        dark: dark,
+        texts: texts,
+        cap: cap,
+      );
+    }
+    final out = Float32List(w * h);
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var m = 0.0;
+        for (var dy = -1; dy <= 1; dy++) {
+          final yy = y + dy;
+          if (yy < 0 || yy >= h) continue;
+          for (var dx = -1; dx <= 1; dx++) {
+            final xx = x + dx;
+            if (xx < 0 || xx >= w) continue;
+            m = math.max(m, raw[yy * w + xx]);
+          }
+        }
+        out[y * w + x] = m;
+      }
+    }
+    return out;
+  }
+
+  /// 遮罩的像素：黑色 + 垫层不透明度（预乘与否都一样）；浅色叠的时候染成白（backdrop_host.dart）
+  static Uint8List mask(Float32List scrim) {
+    final out = Uint8List(scrim.length * 4);
+    for (var i = 0; i < scrim.length; i++) {
+      out[i * 4 + 3] = (scrim[i].clamp(0.0, 1.0) * 255).round();
+    }
+    return out;
   }
 }
 

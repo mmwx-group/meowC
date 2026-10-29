@@ -269,7 +269,7 @@ class MeowCard extends StatelessWidget {
 }
 
 /// 磨砂玻璃卡片的底（画在子树下面）：投影 → 卡片背后那块预模糊背景（按卡片此刻在屏幕上的位置裁 [MeowBackdropImages.frost]）
-/// → 对比度垫层（整套卡片统一，见 [MeowBackdrop.scrim]）→ 白色填充（自上而下两档；[tint] 换成这个颜色，如选中态）
+/// → 对比度垫层（叠在预模糊图里、按位置算，见 [MeowScrimMap]；图还没好时整套卡片统一，见 [MeowBackdrop.scrim]）→ 白色填充（自上而下两档；[tint] 换成这个颜色，如选中态）
 /// → 顶部 1dp 内高光、底部 1dp 内暗边 → 顶部反光 → 140° 渐变高光边。参数见 [MeowFrostStyle]，与底栏同一套。
 ///
 /// 不逐帧实时模糊：背景是静止的，预模糊图只在换设置 / 改尺寸时重新渲染（../app/backdrop_host.dart）。卡片在屏幕上挪了位置时自己重画：
@@ -499,9 +499,10 @@ class _RenderMeowFrostBox extends RenderProxyBox {
           ),
       );
     }
-    // 对比度垫层：整套卡片统一的值（见 MeowBackdrop.scrim），选中态等自带不透明底色的不垫
+    // 对比度垫层：模糊图里已经叠了按位置算的局部垫层（MeowScrimMap）就不再画；图还没好时用整套卡片统一的值
+    // （见 MeowBackdrop.scrim）。选中态等自带不透明底色的不垫
     final tint = c.tint;
-    if (tint == null && c.scrim > 0) {
+    if (tint == null && c.scrim > 0 && !(images?.localScrim ?? false)) {
       canvas.drawRRect(rrect, Paint()..color = (dark ? Colors.black : Colors.white).withValues(alpha: c.scrim));
     }
     canvas.drawRRect(
