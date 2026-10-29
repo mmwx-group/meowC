@@ -12,11 +12,11 @@ import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 /// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1080 × 1350 像素的 4:5 竖图，从记录详情页生成 PNG：
 /// 安卓「分享」经 share_plus 弹系统分享面板（同 iOS），Windows「保存分享图」经 `picker.saveFile` 另存新档。
 ///
-/// 配色跟着分享时 App 实际生效的外观（主题色 + 深浅，同 iOS / macOS）：传进来的 [MeowTokens] 就是 App 当前那一份
-/// （`context.mm`：「我的 › 外观」的设置在当前深浅色下解析出来的）。页面底：经典 = 平涂 [MeowTokens.bg]；液态玻璃 = 底色渐层
-/// （[MeowTokens.bgGradient]，方向照 [MeowTokens.bgDiagonal]），不画光斑与插画（自选的照片不能跟着分享出去）。卡片是不透明的
-/// [MeowTokens.elevSolid]（经典 = 卡片色；液态玻璃 = 玻璃卡片叠在页面底上的实色），不画玻璃效果。字、强调色、下载紫、分隔线都取同一份
-/// token；页头 App 图标按深浅取浅 / 深两张（同 [BrandHead]）。
+/// 配色跟着分享时 App 实际生效的外观（主题色 + 深浅，同 iOS / macOS），但**磨砂强度固定按缺省 0.5**（[tokensFor]）：
+/// 液态玻璃浅色下卡片与页面底本来就只差一点，磨砂调到 0 时按当前那份画，卡片在图上完全看不出来。
+/// 页面底：经典 = 平涂 [MeowTokens.bg]；液态玻璃 = 底色渐层（[MeowTokens.bgGradient]，方向照 [MeowTokens.bgDiagonal]），
+/// 不画光斑与插画（自选的照片不能跟着分享出去）。卡片是不透明的 [MeowTokens.elevSolid]（经典 = 卡片色；液态玻璃 = 玻璃卡片叠在
+/// 页面底上的实色），不画玻璃效果。字、强调色、下载紫、分隔线都取同一份 token；页头 App 图标按深浅取浅 / 深两张（同 [BrandHead]）。
 /// 自上而下：页头（App 图标 + MeowX + 网络测速、右边日期时间）→ 下载主卡（大数字 + 峰值）→ 上传 / 延迟两张小卡 →
 /// 速率曲线（同详情页的画法）→ 测速源 · 线程、出站、出口三行 → 页脚。出口只写 ASN / 运营商，**不写 IP**
 /// （直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。
@@ -33,6 +33,11 @@ class SpeedTestShareImage {
   static String iconAsset(Brightness brightness) =>
       brightness == Brightness.dark ? 'assets/images/icon_256.png' : 'assets/images/icon_light_256.png';
 
+  /// 分享图用的配色：App 当前的外观（[look]，「我的 › 外观」）在实际深浅色下解析，只把磨砂强度换成缺省 0.5。
+  /// 经典主题不受磨砂影响，就是 App 当前那一份。
+  static MeowTokens tokensFor(Brightness brightness, MeowLook look) =>
+      MeowTokens.resolve(brightness, look.withGlassFrost(0.5));
+
   /// 失败的记录不给分享
   static bool canShare(SpeedTestRecord record) => !record.failed;
 
@@ -43,11 +48,11 @@ class SpeedTestShareImage {
     return 'MeowX-speedtest-${d.year}${two(d.month)}${two(d.day)}-${two(d.hour)}${two(d.minute)}.png';
   }
 
-  /// 生成 PNG；失败的记录返回 null。[tokens] / [brightness] = App 当前的配色与深浅（`context.mm` 与 `Theme.of(context).brightness`）；
+  /// 生成 PNG；失败的记录返回 null。[look] / [brightness] = App 当前的外观与实际深浅（配色按 [tokensFor] 推）；
   /// [textStyle] 是 App 正文的字族（含回落字族），图里的字都用它；[icon] 缺省按深浅读 [iconAsset]。
   static Future<Uint8List?> render(
     SpeedTestRecord record, {
-    required MeowTokens tokens,
+    required MeowLook look,
     required Brightness brightness,
     TextStyle? textStyle,
     ui.Image? icon,
@@ -58,7 +63,7 @@ class SpeedTestShareImage {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
-      _SharePainter(record, content, tokens, textStyle ?? const TextStyle(), logo).paint(canvas);
+      _SharePainter(record, content, tokensFor(brightness, look), textStyle ?? const TextStyle(), logo).paint(canvas);
       final picture = recorder.endRecording();
       final image = await picture.toImage(width, height);
       picture.dispose();

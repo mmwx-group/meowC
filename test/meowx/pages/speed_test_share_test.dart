@@ -7,6 +7,7 @@ import 'package:bett_box/meowx/pages/speedtest/speed_test_history_page.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_page.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_share.dart';
 import 'package:bett_box/meowx/state/connection.dart';
+import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/speed_test.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
@@ -194,10 +195,10 @@ void main() {
     final style = _theme(Brightness.light).textTheme.bodyMedium!;
     final textStyle = TextStyle(fontFamily: style.fontFamily, fontFamilyFallback: style.fontFamilyFallback);
 
-    /// 画一张图，取 [points] 处的像素；顺带存预览
+    /// 按外观 [look] 画一张图，取 [points] 处的像素；顺带存预览
     Future<List<Color>> sample(
       WidgetTester tester,
-      MeowTokens tokens,
+      MeowLook look,
       Brightness brightness,
       List<(int, int)> points, {
       SpeedTestRecord? record,
@@ -206,7 +207,7 @@ void main() {
       final out = await tester.runAsync(() async {
         final png = (await SpeedTestShareImage.render(
           record ?? _record(),
-          tokens: tokens,
+          look: look,
           brightness: brightness,
           textStyle: textStyle,
         ))!;
@@ -243,7 +244,7 @@ void main() {
     testWidgets('经典浅色：平涂的浅色页面底 + 白卡；失败的记录不生成', (tester) async {
       final [corner, far, inCard] = await sample(
         tester,
-        MeowTokens.light,
+        MeowLook.classic,
         Brightness.light,
         [topLeft, bottomRight, card],
         preview: 'meowc-share-classic-light.png',
@@ -253,7 +254,7 @@ void main() {
       final failed = await tester.runAsync(
         () => SpeedTestShareImage.render(
           _record(error: '连接超时'),
-          tokens: MeowTokens.light,
+          look: MeowLook.classic,
           brightness: Brightness.light,
           textStyle: textStyle,
         ),
@@ -262,7 +263,7 @@ void main() {
       final direct = await tester.runAsync(
         () => SpeedTestShareImage.render(
           _record(source: SpeedTestSource.microsoft, connections: 1, outbound: kSpeedTestDirect),
-          tokens: MeowTokens.light,
+          look: MeowLook.classic,
           brightness: Brightness.light,
           textStyle: textStyle,
         ),
@@ -273,7 +274,7 @@ void main() {
     testWidgets('经典深色：深色页面底 + 深色卡片', (tester) async {
       final [corner, far, inCard] = await sample(
         tester,
-        MeowTokens.dark,
+        MeowLook.classic,
         Brightness.dark,
         [topLeft, bottomRight, card],
         preview: 'meowc-share-classic-dark.png',
@@ -283,11 +284,12 @@ void main() {
     });
 
     testWidgets('经典 + 卡片颜色 / 强调色：卡片是所选卡片色，上传那张卡的圆点是所选强调色', (tester) async {
-      final t = MeowTokens.resolve(Brightness.light, const MeowLook(cardColor: 0xFFFFF6EA, accentColor: 0xFF2F6FD0));
+      const look = MeowLook(cardColor: 0xFFFFF6EA, accentColor: 0xFF2F6FD0);
+      final t = MeowTokens.resolve(Brightness.light, look);
       expect(t.elevSolid, isNot(MeowTokens.light.elev));
       expect(t.accent, isNot(MeowTokens.light.accent));
       // 上传卡的图例圆点在版式 x = 44（放大后 105.6），沿这一列往下找
-      final column = await sample(tester, t, Brightness.light, [card, for (var y = 300; y < 700; y++) (105, y)]);
+      final column = await sample(tester, look, Brightness.light, [card, for (var y = 300; y < 700; y++) (105, y)]);
       expect(column.first, t.elevSolid);
       expect(column.skip(1), contains(t.accent));
       expect(column.skip(1), isNot(contains(MeowTokens.light.accent)));
@@ -308,7 +310,7 @@ void main() {
         final points = [topLeft, bottomRight, card, ...margins];
         final [corner, far, inCard, ...rest] = await sample(
           tester,
-          t,
+          look,
           brightness,
           [...points, for (var y = 180; y < 320; y++) (115, y)],
           preview: 'meowc-share-glass-gradient-${brightness.name}.png',
@@ -331,7 +333,7 @@ void main() {
       final t = MeowTokens.resolve(Brightness.dark, look);
       final [corner, inCard, ...rest] = await sample(
         tester,
-        t,
+        look,
         Brightness.dark,
         [topLeft, card, ...margins],
         preview: 'meowc-share-glass-dark.png',
@@ -352,7 +354,7 @@ void main() {
         expect(t.backdrop?.pattern, MeowBgPattern.art);
         final [inCard, ...rest] = await sample(
           tester,
-          t,
+          look,
           brightness,
           [card, topLeft, bottomRight, ...margins],
           preview: 'meowc-share-glass-art-${brightness.name}.png',
@@ -361,6 +363,55 @@ void main() {
         for (final (i, (x, y)) in [topLeft, bottomRight, ...margins].indexed) {
           expect(rest[i], near(gradientAt(t, x, y)), reason: '($x, $y)');
         }
+      });
+    }
+
+    test('配色：液态玻璃不论磨砂调到多少都按缺省 0.5 推；经典就是 App 当前那一份', () {
+      List<Color> colors(MeowTokens t) => [t.bg, t.elevSolid, t.t1, t.t2, t.accent, t.down, t.line, ...?t.bgGradient];
+      for (final brightness in Brightness.values) {
+        expect(SpeedTestShareImage.tokensFor(brightness, MeowLook.classic), same(MeowTokens.resolve(brightness, MeowLook.classic)));
+        const custom = MeowLook(cardColor: 0xFFFFF6EA, accentColor: 0xFF2F6FD0);
+        expect(colors(SpeedTestShareImage.tokensFor(brightness, custom)), colors(MeowTokens.resolve(brightness, custom)));
+        for (final base in const [
+          MeowLook(style: MeowThemeStyle.glass),
+          MeowLook(style: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient, bgPattern: MeowBgPattern.flat),
+          MeowLook(style: MeowThemeStyle.glass, glassTint: MeowGlassTint.tinted, cardColor: 0xFFFFEFF4),
+        ]) {
+          final want = colors(MeowTokens.resolve(brightness, base));
+          for (final frost in [0.0, 0.2, 0.8, 1.0]) {
+            final look = base.withGlassFrost(frost);
+            expect(colors(SpeedTestShareImage.tokensFor(brightness, look)), want, reason: '${brightness.name} $frost');
+          }
+          // App 里磨砂 0 的那份确实不一样（卡片几乎透明）
+          expect(MeowTokens.resolve(brightness, base.withGlassFrost(0)).elevSolid, isNot(want[1]));
+        }
+      }
+    });
+
+    for (final brightness in Brightness.values) {
+      testWidgets('液态玻璃 · 磨砂调到 0 · ${brightness.name}：卡片与页面底的差同磨砂 0.5（整张图一样）', (tester) async {
+        const frost0 = MeowLook(style: MeowThemeStyle.glass, glassFrost: 0);
+        const frost05 = MeowLook(style: MeowThemeStyle.glass);
+        // 主卡里一块、主卡左边紧挨着的页面底，加上四角与边距
+        const beside = (20, 230);
+        final points = [card, beside, topLeft, bottomRight, ...margins];
+        final a = await sample(
+          tester,
+          frost0,
+          brightness,
+          points,
+          preview: 'meowc-share-glass-frost0-${brightness.name}.png',
+        );
+        final b = await sample(tester, frost05, brightness, points);
+        expect(a, b);
+        final t = MeowTokens.resolve(brightness, frost05);
+        expect(a[0], near(t.elevSolid, tolerance: 1));
+        expect(a[1], near(gradientAt(t, beside.$1, beside.$2)));
+        // 卡片与页面底之间的差就是磨砂 0.5 那份的差；按 App 里磨砂 0 的那份画会小得多
+        double diff(Color x, Color y) => (x.r - y.r).abs() + (x.g - y.g).abs() + (x.b - y.b).abs();
+        final app = MeowTokens.resolve(brightness, frost0);
+        expect(diff(a[0], a[1]), closeTo(diff(t.elevSolid, gradientAt(t, beside.$1, beside.$2)), 6 / 255));
+        expect(diff(app.elevSolid, gradientAt(app, beside.$1, beside.$2)), lessThan(diff(a[0], a[1])));
       });
     }
 
@@ -385,7 +436,7 @@ void main() {
       ];
       for (final brightness in Brightness.values) {
         for (final look in looks) {
-          final t = MeowTokens.resolve(brightness, look);
+          final t = SpeedTestShareImage.tokensFor(brightness, look);
           final g = t.bgGradient ?? [t.bg, t.bg];
           final page = [for (var i = 0; i <= 8; i++) Color.lerp(g.first, g.last, i / 8)!];
           final reason = '${brightness.name} ${look.style.name} ${look.bgStyle.name} ${look.bgPattern.name} ${look.glassFrost}';
@@ -413,17 +464,21 @@ void main() {
       final c = SpeedTestController(call: (_, _) async => '');
       c.history.add(record);
       await tester.pumpWidget(
-        RepaintBoundary(
-          key: const ValueKey('page'),
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: _theme(brightness, look: look),
-            home: SpeedTestRecordPage(
-              controller: c,
-              id: record.id,
-              systemShare: systemShare,
-              saveFile: save ?? (_, _) async => null,
-              shareFile: share ?? (_, _) async {},
+        ProviderScope(
+          // 分享图按 App 当前的外观画（见 SpeedTestShareAction.run）
+          overrides: [meowLookProvider.overrideWithValue(look)],
+          child: RepaintBoundary(
+            key: const ValueKey('page'),
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: _theme(brightness, look: look),
+              home: SpeedTestRecordPage(
+                controller: c,
+                id: record.id,
+                systemShare: systemShare,
+                saveFile: save ?? (_, _) async => null,
+                shareFile: share ?? (_, _) async {},
+              ),
             ),
           ),
         ),
@@ -431,9 +486,10 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    /// 真的去画图要在真实的事件循环里跑：直接调按钮的回调，等 [done] 拿到交出去的文件名与 PNG，回（文件名, 宽, 高, 左上角像素）
+    /// 真的去画图要在真实的事件循环里跑：直接调按钮的回调，等 [done] 拿到交出去的文件名与 PNG，回（文件名, 宽, 高, 左上角像素）；
+    /// [card] 给了时把主卡里 (80, 230) 那一点存进去
     Future<(String, int, int, Color)?> tapAndDecode(
-        WidgetTester tester, String label, Completer<(String, Uint8List)> Function() done) {
+        WidgetTester tester, String label, Completer<(String, Uint8List)> Function() done, {List<Color>? card}) {
       final ink = tester.widget<InkWell>(find.ancestor(of: find.text(label), matching: find.byType(InkWell)));
       return tester.runAsync(() async {
         final completer = done();
@@ -441,6 +497,7 @@ void main() {
         final (name, bytes) = await completer.future.timeout(const Duration(seconds: 20));
         final image = await _decode(bytes);
         final info = (name, image.width, image.height, await _pixel(image, 4, 4));
+        card?.add(await _pixel(image, 80, 230));
         image.dispose();
         return info;
       });
@@ -483,27 +540,36 @@ void main() {
       });
     }
 
-    testWidgets('液态玻璃 · 深色的 App 里点分享：图用 App 当前那一份（深色的底色渐层）', (tester) async {
-      const look = MeowLook(style: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient, bgPattern: MeowBgPattern.flat);
-      late Completer<(String, Uint8List)> shared;
-      await pumpRecord(
-        tester,
-        Brightness.dark,
-        _record(),
-        systemShare: true,
-        look: look,
-        share: (name, bytes) async => shared.complete((name, bytes)),
-      );
-      final out = await tapAndDecode(tester, '分享', () => shared = Completer());
-      final first = MeowTokens.resolve(Brightness.dark, look).bgGradient!.first;
-      final corner = out!.$4;
-      expect(
-        [(corner.r, first.r), (corner.g, first.g), (corner.b, first.b)].every((e) => ((e.$1 - e.$2) * 255).abs() <= 4),
-        isTrue,
-        reason: '$corner vs $first',
-      );
-      await tester.pumpAndSettle();
-    });
+    for (final brightness in Brightness.values) {
+      testWidgets('液态玻璃 · ${brightness.name}、磨砂调到 0 的 App 里点分享：图用 App 当前的外观与深浅，卡片按磨砂 0.5', (tester) async {
+        const look = MeowLook(
+          style: MeowThemeStyle.glass,
+          bgStyle: MeowBgStyle.gradient,
+          bgPattern: MeowBgPattern.flat,
+          glassFrost: 0,
+        );
+        late Completer<(String, Uint8List)> shared;
+        await pumpRecord(
+          tester,
+          brightness,
+          _record(),
+          systemShare: true,
+          look: look,
+          share: (name, bytes) async => shared.complete((name, bytes)),
+        );
+        final card = <Color>[];
+        final out = await tapAndDecode(tester, '分享', () => shared = Completer(), card: card);
+        final want = MeowTokens.resolve(brightness, look.withGlassFrost(0.5));
+        bool near(Color p, Color c, int tolerance) =>
+            [(p.r, c.r), (p.g, c.g), (p.b, c.b)].every((e) => ((e.$1 - e.$2) * 255).abs() <= tolerance);
+        final corner = out!.$4, first = want.bgGradient!.first;
+        expect(near(corner, first, 4), isTrue, reason: '$corner vs $first');
+        expect(near(card.single, want.elevSolid, 1), isTrue, reason: '${card.single} vs ${want.elevSolid}');
+        // 不是 App 里磨砂 0 的那份卡片色
+        expect(near(card.single, MeowTokens.resolve(brightness, look).elevSolid, 1), isFalse);
+        await tester.pumpAndSettle();
+      });
+    }
 
     testWidgets('安卓：按钮是「分享」，点了把 PNG 交给系统分享（文件名 .png），不存文件', (tester) async {
       late Completer<(String, Uint8List)> shared;

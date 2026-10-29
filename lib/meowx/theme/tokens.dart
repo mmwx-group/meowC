@@ -721,6 +721,21 @@ class MeowLook {
 
   bool get glass => style == MeowThemeStyle.glass;
 
+  /// 只换磨砂强度（测速分享图固定按缺省 0.5 画，见 SpeedTestShareImage.tokensFor）
+  MeowLook withGlassFrost(double value) => MeowLook(
+    style: style,
+    glassTint: glassTint,
+    cardColor: cardColor,
+    heroColor: heroColor,
+    accentColor: accentColor,
+    bgStyle: bgStyle,
+    gradientFrom: gradientFrom,
+    gradientTo: gradientTo,
+    bgPattern: bgPattern,
+    glassFrost: value,
+    artImage: artImage,
+  );
+
   @override
   bool operator ==(Object other) =>
       other is MeowLook &&
