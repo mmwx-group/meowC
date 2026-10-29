@@ -192,6 +192,70 @@ void main() {
     expect(failed.history.records.single.connections, 1);
   });
 
+  test('控制器：测速页页头「分享」取这次刚测完的那条；开测即清，失败 / 停掉 / 没能开始都没有，记录删了也取不到', () async {
+    var status = '{"runID":1,"phase":"done","downloadMbps":120}';
+    String? startReply = '';
+    var stopMidway = false;
+    SpeedTestRecord? atStart;
+    late SpeedTestController c;
+    c = SpeedTestController(call: (method, data) async {
+      switch (method) {
+        case ActionMethod.meowSpeedTestStart:
+          atStart = c.shareableRecord;
+          return startReply;
+        case ActionMethod.meowSpeedTestStatus:
+          if (stopMidway) c.stop();
+          return status;
+        default:
+          return '';
+      }
+    });
+    expect(c.shareableRecord, isNull); // 还没测过
+
+    await c.start('n');
+    final first = c.history.records.single;
+    expect(c.shareableRecord?.id, first.id);
+
+    // 再测一次：开测那一刻就没了；这次失败 → 也没有（上一次测完的那条还在记录里也不给）
+    status = '{"runID":2,"phase":"failed","error":"连不上"}';
+    await c.start('n');
+    expect(atStart, isNull);
+    expect(c.history.records.length, 2);
+    expect(c.history.byId(first.id), isNotNull);
+    expect(c.shareableRecord, isNull);
+
+    // 测完之后又测了一次、中途停掉（停掉的不记）：没有
+    status = '{"runID":3,"phase":"done","downloadMbps":90}';
+    await c.start('n');
+    expect(c.shareableRecord?.id, c.history.records.first.id);
+    stopMidway = true;
+    await c.start('n');
+    stopMidway = false;
+    expect(c.progress.phase, 'cancelled');
+    expect(c.history.records.length, 3);
+    expect(c.shareableRecord, isNull);
+
+    // 核心不让开始：没有
+    await c.start('n');
+    expect(c.shareableRecord, isNotNull);
+    startReply = '找不到节点 n';
+    await c.start('n');
+    expect(c.message, '找不到节点 n');
+    expect(c.shareableRecord, isNull);
+    startReply = '';
+
+    // 那条记录被删了 / 记录清空了：取不到
+    await c.start('n');
+    final last = c.shareableRecord!;
+    expect(last.downloadMbps, 90);
+    c.history.delete(last.id);
+    expect(c.shareableRecord, isNull);
+    await c.start('n');
+    expect(c.shareableRecord, isNotNull);
+    c.history.clear();
+    expect(c.shareableRecord, isNull);
+  });
+
   Widget app(Widget home) => MaterialApp(theme: meowThemeData(brightness: Brightness.light), home: home);
 
   testWidgets('记录页：汇总卡、筛选胶囊、最快角标；左滑删除；清空要确认', (tester) async {

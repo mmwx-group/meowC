@@ -323,6 +323,218 @@ void main() {
     });
   });
 
+  group('测速页页头：分享这次测速结果（「测速记录」左边）', () {
+    const downloading = '{"runID":1,"phase":"download","source":"apple","via":"香港 01","currentMbps":200}';
+    const done = '{"runID":1,"phase":"done","source":"apple","via":"香港 01","latencyMs":38,"downloadMbps":486.4,'
+        '"uploadMbps":92.7,"downloadSamples":[0,120,310,420],"uploadSamples":[0,40,80,95]}';
+    const failed = '{"runID":1,"phase":"failed","error":"连不上"}';
+
+    /// 核心依次回 [statuses] 里的进度（最后一个一直回）；测试中途可以改这个列表换下一次的进度
+    SpeedTestController fake(List<String> statuses) => SpeedTestController(
+      call: (method, data) async => switch (method) {
+        ActionMethod.meowSpeedTestStatus => statuses.length > 1 ? statuses.removeAt(0) : statuses.first,
+        _ => '',
+      },
+    );
+
+    Future<void> pumpPage(WidgetTester tester, SpeedTestController c,
+        {required bool systemShare, SpeedTestSaveFile? save, SpeedTestShareFile? share}) async {
+      tester.view.devicePixelRatio = 3;
+      tester.view.physicalSize = const Size(360 * 3, 900 * 3);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            isRunningProvider.overrideWithValue(true),
+            currentGroupsStateProvider.overrideWithValue(
+              GroupsState(
+                value: [
+                  Group(
+                    name: '节点选择',
+                    type: GroupType.Selector,
+                    now: '香港 01',
+                    all: const [Proxy(name: '香港 01', type: 'Vless')],
+                  ),
+                ],
+              ),
+            ),
+            currentNodeProvider.overrideWithValue(CurrentNode(group: '节点选择', path: const ['节点选择'], leaf: '香港 01')),
+          ],
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: _theme(Brightness.light),
+            home: SpeedTestPage(
+              controller: c,
+              systemShare: systemShare,
+              saveFile: save ?? (_, _) async => null,
+              shareFile: share ?? (_, _) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    /// 开测并走完（先「下载中」，300ms 后拿到下一个进度）
+    Future<void> runToEnd(WidgetTester tester, SpeedTestController c) async {
+      unawaited(c.start('香港 01'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+    }
+
+    InkWell inkOf(WidgetTester tester, Finder button) =>
+        tester.widget<InkWell>(find.descendant(of: button, matching: find.byType(InkWell)));
+
+    testWidgets('安卓：测完出现「分享」、在「测速记录」左边；点了把 1080 × 1350 的 PNG 交给系统分享，分享中再点不响应',
+        (tester) async {
+      var shareCalls = 0, saveCalls = 0;
+      late Completer<(String, Uint8List)> shared;
+      late Completer<void> release;
+      final c = fake([downloading, done]);
+      await pumpPage(
+        tester,
+        c,
+        systemShare: true,
+        share: (name, bytes) async {
+          shareCalls++;
+          shared.complete((name, bytes));
+          await release.future; // 分享面板开着
+        },
+        save: (_, _) async {
+          saveCalls++;
+          return null;
+        },
+      );
+      expect(find.byTooltip('测速记录'), findsOneWidget);
+      expect(find.byTooltip('分享'), findsNothing); // 还没测过
+
+      unawaited(c.start('香港 01'));
+      await tester.pump();
+      expect(c.isRunning, isTrue);
+      expect(find.byTooltip('分享'), findsNothing); // 正在测
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump();
+      expect(c.progress.phase, 'done');
+
+      final button = find.byTooltip('分享'), history = find.byTooltip('测速记录');
+      expect(button, findsOneWidget);
+      expect(find.byTooltip('保存分享图'), findsNothing);
+      expect(find.descendant(of: button, matching: find.byIcon(Icons.share_outlined)), findsOneWidget);
+      expect(tester.getCenter(button).dx, lessThan(tester.getCenter(history).dx));
+      expect(tester.getCenter(button).dy, tester.getCenter(history).dy);
+
+      final record = c.history.records.single;
+      final out = await tester.runAsync(() async {
+        // Completer 要在真实的事件循环里建（见上面记录详情页的用例）
+        shared = Completer();
+        release = Completer();
+        inkOf(tester, button).onTap!();
+        final (name, bytes) = await shared.future.timeout(const Duration(seconds: 20));
+        final image = await _decode(bytes);
+        final info = (name, image.width, image.height, await _pixel(image, 4, 4));
+        image.dispose();
+        return info;
+      });
+      expect(out, (SpeedTestShareImage.fileName(record), 1080, 1350, MeowTokens.light.bg));
+      expect(out!.$1, matches(RegExp(r'^MeowX-speedtest-\d{8}-\d{4}\.png$')));
+
+      // 分享面板还开着：按钮转圈、不响应
+      await tester.pump();
+      expect(find.descendant(of: button, matching: find.byType(CircularProgressIndicator)), findsOneWidget);
+      expect(inkOf(tester, button).onTap, isNull);
+      await tester.runAsync(() async {
+        release.complete();
+        await Future<void>.delayed(Duration.zero);
+      });
+      await tester.pump();
+      expect(inkOf(tester, button).onTap, isNotNull);
+      expect((shareCalls, saveCalls), (1, 0));
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('Windows：按钮是「保存分享图」，点了把 PNG 交给保存（同一个文件名），不走系统分享', (tester) async {
+      var shareCalls = 0;
+      late Completer<(String, Uint8List)> saved;
+      final c = fake([downloading, done]);
+      await pumpPage(
+        tester,
+        c,
+        systemShare: false,
+        save: (name, bytes) async {
+          saved.complete((name, bytes));
+          return '/storage/$name';
+        },
+        share: (_, _) async => shareCalls++,
+      );
+      await runToEnd(tester, c);
+
+      final button = find.byTooltip('保存分享图');
+      expect(button, findsOneWidget);
+      expect(find.byTooltip('分享'), findsNothing);
+      expect(find.descendant(of: button, matching: find.byIcon(Icons.image_outlined)), findsOneWidget);
+      expect(tester.getCenter(button).dx, lessThan(tester.getCenter(find.byTooltip('测速记录')).dx));
+
+      final record = c.history.records.single;
+      final out = await tester.runAsync(() async {
+        saved = Completer();
+        inkOf(tester, button).onTap!();
+        final (name, bytes) = await saved.future.timeout(const Duration(seconds: 20));
+        final image = await _decode(bytes);
+        final info = (name, image.width, image.height);
+        image.dispose();
+        await Future<void>.delayed(Duration.zero);
+        return info;
+      });
+      expect(out, (SpeedTestShareImage.fileName(record), 1080, 1350));
+      expect(shareCalls, 0);
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('失败了、停掉了、那条记录被删了都不出现；重新开测立刻消失', (tester) async {
+      final statuses = [downloading, failed];
+      final c = fake(statuses);
+      void next(List<String> list) => statuses
+        ..clear()
+        ..addAll(list);
+      await pumpPage(tester, c, systemShare: true);
+
+      // 失败：记了一条，但不出现
+      await runToEnd(tester, c);
+      expect(c.progress.phase, 'failed');
+      expect(c.history.records.single.failed, isTrue);
+      expect(find.byTooltip('分享'), findsNothing);
+
+      // 测完：出现；再开测：立刻消失
+      next([downloading, done]);
+      await runToEnd(tester, c);
+      expect(find.byTooltip('分享'), findsOneWidget);
+      next([downloading]);
+      unawaited(c.start('香港 01'));
+      await tester.pump();
+      expect(c.isRunning, isTrue);
+      expect(find.byTooltip('分享'), findsNothing);
+
+      // 中途停掉：不出现
+      await tester.tap(find.text('停止'));
+      await tester.pump();
+      expect(c.progress.phase, 'cancelled');
+      expect(find.byTooltip('分享'), findsNothing);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // 测完后把这条记录删了：不出现
+      next([downloading, done]);
+      await runToEnd(tester, c);
+      expect(find.byTooltip('分享'), findsOneWidget);
+      c.history.delete(c.history.records.first.id);
+      await tester.pump();
+      expect(find.byTooltip('分享'), findsNothing);
+      expect(find.byTooltip('测速记录'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+    });
+  });
+
   group('测速源选择', () {
     Future<SpeedTestController> pumpPage(WidgetTester tester, double width, {double textScale = 1}) async {
       tester.view.devicePixelRatio = 3;

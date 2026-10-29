@@ -23,15 +23,21 @@ import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
 import '../proxies/proxies_page.dart' show allLeafProxies;
 import 'speed_test_history_page.dart';
+import 'speed_test_share.dart';
 
 /// 网络测速（点首页网速卡打开；与 iOS / macOS 同一套）：选测速源、单 / 多线程、测速节点（节点或直连，不能选代理组），
 /// 测延迟 → 下载 → 上传。测完 / 失败记一条测速记录（右上角「记录」）。测在 Go 核心里跑、经所选节点直连测速服务器（不经分流规则），见 core/meow_speedtest.go。
-/// 离开页面即停止。
+/// 测完之后「记录」左边多一个按钮直接分享这次的结果（同记录详情页的「分享」/「保存分享图」）。离开页面即停止。
 class SpeedTestPage extends ConsumerStatefulWidget {
-  const SpeedTestPage({super.key, this.controller});
+  const SpeedTestPage({super.key, this.controller, this.saveFile, this.shareFile, this.systemShare});
 
   /// 测试里换成假的；缺省用全局那一份
   final SpeedTestController? controller;
+
+  /// 分享这次结果：测试里换成假的，缺省走平台（见 [SpeedTestShareAction]）
+  final SpeedTestSaveFile? saveFile;
+  final SpeedTestShareFile? shareFile;
+  final bool? systemShare;
 
   @override
   ConsumerState<SpeedTestPage> createState() => _SpeedTestPageState();
@@ -39,6 +45,24 @@ class SpeedTestPage extends ConsumerStatefulWidget {
 
 class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
   late final SpeedTestController c = widget.controller ?? speedTestController;
+  late final share = SpeedTestShareAction(
+    saveFile: widget.saveFile,
+    shareFile: widget.shareFile,
+    systemShare: widget.systemShare,
+  );
+
+  /// 正在生成 / 分享：页头按钮转圈、不响应
+  bool _sharing = false;
+
+  Future<void> _share(SpeedTestRecord record) async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      await share.run(context, record);
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
 
   @override
   void initState() {
@@ -72,9 +96,18 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
         final shown = running ? (c.progress.via ?? node) : node;
         final canStart = connected && node != null;
         final last = c.history.records.firstOrNull;
+        // 这次刚测完的那条（还没测过 / 在测 / 停掉 / 失败 / 被删了都没有）：不画，不画成禁用
+        final shareable = c.shareableRecord;
         return MeSubPage.list(
           title: '网络测速',
           actions: [
+            if (shareable != null && SpeedTestShareImage.canShare(shareable))
+              RoundGlassButton(
+                icon: share.icon,
+                tooltip: share.label,
+                busy: _sharing,
+                onTap: () => _share(shareable),
+              ),
             RoundGlassButton(
               icon: Icons.history_rounded,
               tooltip: '测速记录',

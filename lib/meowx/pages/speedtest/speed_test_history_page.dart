@@ -148,6 +148,47 @@ Future<void> _systemShare(String fileName, Uint8List bytes) => SharePlus.instanc
   ShareParams(files: [XFile.fromData(bytes, mimeType: 'image/png', name: fileName)], fileNameOverrides: [fileName]),
 );
 
+/// 分享一条测速记录（记录详情页底部的按钮、测速页页头的按钮共用）：按 App 正文的字体画分享图（固定浅色经典配色，
+/// 见 [SpeedTestShareImage]），安卓「分享」交给系统分享面板（分完 / 取消都不提示），其余「保存分享图」存成 PNG
+/// （存好提示「分享图已保存」）；出错提示「分享失败：…」/「保存分享图失败：…」。两处按钮的图标、文字也取这里的。
+/// 分享 / 存的函数可注入（测试用），缺省走平台。
+class SpeedTestShareAction {
+  SpeedTestShareAction({SpeedTestSaveFile? saveFile, SpeedTestShareFile? shareFile, this.systemShare})
+    : saveFile = saveFile ?? _pickerSave,
+      shareFile = shareFile ?? _systemShare;
+
+  final SpeedTestSaveFile saveFile;
+  final SpeedTestShareFile shareFile;
+
+  /// 走系统分享还是存文件；null = 按平台（安卓分享、其余存文件），测试里指定
+  final bool? systemShare;
+
+  bool get sharing => systemShare ?? system.isAndroid;
+  IconData get icon => sharing ? Icons.share_outlined : Icons.image_outlined;
+  String get label => sharing ? '分享' : '保存分享图';
+
+  /// 画图并交出去；出不了图（失败的记录）什么也不做。防连点由按钮自己管（等这个 Future 完成之前不响应）
+  Future<void> run(BuildContext context, SpeedTestRecord record) async {
+    final body = Theme.of(context).textTheme.bodyMedium;
+    try {
+      final bytes = await SpeedTestShareImage.render(
+        record,
+        textStyle: TextStyle(fontFamily: body?.fontFamily, fontFamilyFallback: body?.fontFamilyFallback),
+      );
+      if (bytes == null) return;
+      final name = SpeedTestShareImage.fileName(record);
+      if (sharing) {
+        await shareFile(name, bytes); // 分享面板本身就是反馈，分完 / 取消都不再提示
+        return;
+      }
+      final path = await saveFile(name, bytes);
+      if (path != null) globalState.showNotifier('分享图已保存');
+    } catch (e) {
+      globalState.showNotifier('${sharing ? '分享' : '保存分享图'}失败：$e');
+    }
+  }
+}
+
 /// 一条记录的详情：曲线、参数；只有测完的记录有分享图（1080 × 1350）：安卓「分享」弹系统分享面板，Windows「保存分享图」存文件；
 /// 「用同样设置再测一次」预填后回测速页（pop 时带 true）。
 class SpeedTestRecordPage extends StatelessWidget {
@@ -186,8 +227,7 @@ class SpeedTestRecordPage extends StatelessWidget {
                   if (SpeedTestShareImage.canShare(record))
                     _ShareButton(
                       record: record,
-                      saveFile: saveFile,
-                      shareFile: (systemShare ?? system.isAndroid) ? shareFile : null,
+                      action: SpeedTestShareAction(saveFile: saveFile, shareFile: shareFile, systemShare: systemShare),
                     ),
                   Row(
                     children: [
@@ -258,15 +298,11 @@ class SpeedTestRecordPage extends StatelessWidget {
   );
 }
 
-/// 「分享」（安卓）/「保存分享图」（Windows）：按 App 正文的字体画分享图（固定浅色经典配色，见 [SpeedTestShareImage]），
-/// 再交给系统分享面板或存成 PNG。生成与分享 / 存的过程中再点不响应。
+/// 「分享」（安卓）/「保存分享图」（Windows），见 [SpeedTestShareAction]。生成与分享 / 存的过程中再点不响应。
 class _ShareButton extends StatefulWidget {
-  const _ShareButton({required this.record, required this.saveFile, this.shareFile});
+  const _ShareButton({required this.record, required this.action});
   final SpeedTestRecord record;
-  final SpeedTestSaveFile saveFile;
-
-  /// 有 = 走系统分享（安卓）；null = 存文件
-  final SpeedTestShareFile? shareFile;
+  final SpeedTestShareAction action;
 
   @override
   State<_ShareButton> createState() => _ShareButtonState();
@@ -278,23 +314,8 @@ class _ShareButtonState extends State<_ShareButton> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final body = Theme.of(context).textTheme.bodyMedium;
     try {
-      final bytes = await SpeedTestShareImage.render(
-        widget.record,
-        textStyle: TextStyle(fontFamily: body?.fontFamily, fontFamilyFallback: body?.fontFamilyFallback),
-      );
-      if (bytes == null) return;
-      final name = SpeedTestShareImage.fileName(widget.record);
-      final share = widget.shareFile;
-      if (share != null) {
-        await share(name, bytes); // 分享面板本身就是反馈，分完 / 取消都不再提示
-        return;
-      }
-      final path = await widget.saveFile(name, bytes);
-      if (path != null) globalState.showNotifier('分享图已保存');
-    } catch (e) {
-      globalState.showNotifier('${widget.shareFile != null ? '分享' : '保存分享图'}失败：$e');
+      await widget.action.run(context, widget.record);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -303,7 +324,7 @@ class _ShareButtonState extends State<_ShareButton> {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final sharing = widget.shareFile != null;
+    final action = widget.action;
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 150),
       opacity: _busy ? 0.45 : 1,
@@ -318,10 +339,10 @@ class _ShareButtonState extends State<_ShareButton> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(sharing ? Icons.share_outlined : Icons.image_outlined, size: 18, color: mm.accent),
+                Icon(action.icon, size: 18, color: mm.accent),
                 const SizedBox(width: 6),
                 Text(
-                  sharing ? '分享' : '保存分享图',
+                  action.label,
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: mm.accent),
                 ),
               ],

@@ -218,7 +218,18 @@ class SpeedTestController extends ChangeNotifier {
   int _generation = 0;
   bool _loaded = false;
 
+  /// 本次 App 运行里最后一次测完（测完 / 失败）记下的那条记录的 id；开测时清掉
+  String? _lastRecordId;
+
   bool get isRunning => _starting || progress.isRunning;
+
+  /// 测速页页头「分享」这次结果的那条记录：没在测、这次是测完（不是失败 / 停掉）、记下的那条还在记录里（没被删），否则 null。
+  /// 能不能出分享图页面再按 SpeedTestShareImage.canShare 判断。
+  SpeedTestRecord? get shareableRecord {
+    final id = _lastRecordId;
+    if (id == null || isRunning || progress.phase != 'done') return null;
+    return history.byId(id);
+  }
 
   Future<void> load() async {
     if (_loaded) return;
@@ -267,6 +278,7 @@ class SpeedTestController extends ChangeNotifier {
     final source = this.source;
     final connections = multiThread ? multiConnections : 1;
     message = null;
+    _lastRecordId = null;
     _starting = true;
     progress = SpeedTestProgress(phase: 'preparing', source: source, via: via, exitPending: true);
     notifyListeners();
@@ -306,7 +318,10 @@ class SpeedTestController extends ChangeNotifier {
                 MeowHaptics.error();
             }
             final record = SpeedTestRecord.fromProgress(progress, source: source, connections: connections, outbound: via);
-            if (record != null) history.add(record);
+            if (record != null) {
+              _lastRecordId = record.id; // 先记上再加：页面听 history 的通知时就取得到
+              history.add(record);
+            }
             return;
           }
         }
