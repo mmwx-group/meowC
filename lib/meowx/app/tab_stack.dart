@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../theme/card_surface.dart';
 import '../theme/motion.dart';
 import '../theme/page_background.dart';
 import 'meow_tab.dart';
@@ -76,6 +77,8 @@ class _MeowTabStackState extends State<MeowTabStack> with SingleTickerProviderSt
   late List<_Layer> _layers = [_Layer(_shown, 0, 0)];
 
   late final AnimationController _slide = AnimationController(vsync: this, duration: MeowMotion.tabSlide)
+    // 平推的每一帧：玻璃卡片按这一帧的位置重画（同一帧，不晚一帧，见 [MeowFrostFollow]）
+    ..addListener(MeowFrostBox.markAllMoved)
     ..addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         setState(() => _layers = [_Layer(_shown, 0, 0)]);

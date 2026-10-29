@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -272,18 +273,21 @@ class MeowCard extends StatelessWidget {
 /// → 顶部 1dp 内高光、底部 1dp 内暗边 → 顶部反光 → 140° 渐变高光边。参数见 [MeowFrostStyle]，与底栏同一套。
 ///
 /// 不逐帧实时模糊：背景是静止的，预模糊图只在换设置 / 改尺寸时重新渲染（../app/backdrop_host.dart）。卡片在屏幕上挪了位置时自己重画：
-/// 滚动时由宿主统一叫醒（[markAllMoved]），其它情况（转场、平推、展开）每帧画完后核对一次位置，变了就下一帧重画。
-/// 预模糊图还没渲染好时先按底色渐层画。
+/// 滚动时由宿主统一叫醒（[markAllMoved]），切 Tab 平推与页面转场由 [MeowFrostFollow] 在动画推进的那一刻叫醒（和位移同一帧画），
+/// 其它情况（展开等）每帧画完后核对一次位置，变了就下一帧重画。预模糊图还没渲染好时先按底色渐层画。
+///
+/// 卡片自己是一层（repaint boundary），内容再单独一层：挪位置时只重录卡片底这一小张，不连带整页 / 整个列表项重录
+/// （2026-10 安卓用户反馈液态玻璃下动画卡：以前每张卡片挪一下，它所在的整页都要重新录一遍，而且只能晚一帧、隔一帧画）。
 class MeowFrostBox extends SingleChildRenderObjectWidget {
-  const MeowFrostBox({
+  MeowFrostBox({
     super.key,
     required this.radius,
     this.tint,
     this.openTop = false,
     this.openBottom = false,
     this.enabled = true,
-    super.child,
-  });
+    Widget? child,
+  }) : super(child: child == null ? null : RepaintBoundary(child: child));
 
   final BorderRadiusGeometry radius;
   final Color? tint;
@@ -292,12 +296,22 @@ class MeowFrostBox extends SingleChildRenderObjectWidget {
   /// false = 这一刻不画玻璃（如连接主卡连上后换成实色渐变；留着这一层，切换时子树不重建）
   final bool enabled;
 
-  /// 滚动时让所有玻璃卡片重画（它们按新位置裁背景）
+  /// 让屏幕上的玻璃卡片按新位置重画（滚动、平推、转场时；在位移生效的那一帧画之前叫，当帧就画对）。
+  /// 不在屏幕上的（隐藏的 Tab 页、列表缓存区里的）跳过，轮到它们露面时自然会画
   static void markAllMoved() {
     for (final box in _RenderMeowFrostBox._live) {
-      box.markNeedsPaint();
+      if (box._onScreen) box.markNeedsPaint();
     }
   }
+
+  /// 测试用：玻璃卡片的底一共画了几次
+  @visibleForTesting
+  static int get debugPaintCount => _RenderMeowFrostBox._paints;
+
+  /// 测试用：用投影九宫格图画一张卡片（圆角 [r]）的投影
+  @visibleForTesting
+  static void debugPaintShadow(Canvas canvas, Rect card, double r, Color color, double dpr) =>
+      _FrostShadow.paint(canvas, card, r, color, dpr);
 
   @override
   RenderObject createRenderObject(BuildContext context) => _RenderMeowFrostBox(_config(context));
@@ -318,6 +332,7 @@ class MeowFrostBox extends SingleChildRenderObjectWidget {
       scrim: mm.backdropScrim,
       fallback: mm.bgGradient ?? [mm.bg, mm.bg],
       screen: MediaQuery.sizeOf(context),
+      dpr: MediaQuery.devicePixelRatioOf(context),
     );
   }
 }
@@ -334,6 +349,7 @@ class _FrostConfig {
     required this.scrim,
     required this.fallback,
     required this.screen,
+    required this.dpr,
   });
 
   final MeowBackdrop? spec;
@@ -344,6 +360,7 @@ class _FrostConfig {
   final double scrim;
   final List<Color> fallback;
   final Size screen;
+  final double dpr;
 
   @override
   bool operator ==(Object other) =>
@@ -355,6 +372,7 @@ class _FrostConfig {
       other.openTop == openTop &&
       other.openBottom == openBottom &&
       other.screen == screen &&
+      other.dpr == dpr &&
       other.scrim == scrim &&
       other.fallback.length == fallback.length &&
       Iterable.generate(fallback.length).every((i) => other.fallback[i] == fallback[i]);
@@ -368,19 +386,28 @@ class _RenderMeowFrostBox extends RenderProxyBox {
 
   static final _live = <_RenderMeowFrostBox>{};
   static bool _checking = false;
+  static int _paints = 0;
 
-  /// 每帧画完后核对一次：卡片在屏幕上的位置变了（转场、平推、展开把它挪走了，而它所在的那层没重画）就下一帧重画
+  /// 每帧画完后核对一次：卡片在屏幕上的位置变了（展开等把它挪走了，又没有人叫醒它）就下一帧重画。
+  /// 只看屏幕上的：隐藏页里的卡片以前在这里每帧都被标一次、却永远不画
   static void _ensureFrameCheck() {
     if (_checking) return;
     _checking = true;
     SchedulerBinding.instance.addPersistentFrameCallback((_) {
       for (final box in _live) {
-        if (!box.attached || !box.hasSize || box._painted == null) continue;
+        if (!box._onScreen || !box.hasSize || box._painted == null) continue;
         final now = box.localToGlobal(Offset.zero);
         if ((now - box._painted!).distanceSquared > 0.25) box.markNeedsPaint();
       }
     });
   }
+
+  /// 自己是一层：挪位置时只重录这一层（卡片底），内容在下面单独一层（见 [MeowFrostBox] 的构造）
+  @override
+  bool get isRepaintBoundary => true;
+
+  /// 这一层此刻在画面的图层树里（隐藏的 Tab 页、没画过的为 false）
+  bool get _onScreen => attached && (layer?.attached ?? false);
 
   _FrostConfig _config;
   set config(_FrostConfig v) {
@@ -413,6 +440,7 @@ class _RenderMeowFrostBox extends RenderProxyBox {
     if (spec == null) return super.paint(context, offset);
     final origin = localToGlobal(Offset.zero);
     _painted = origin;
+    _paints++;
     final canvas = context.canvas;
     final dark = spec.dark;
     final rect = offset & size;
@@ -439,36 +467,48 @@ class _RenderMeowFrostBox extends RenderProxyBox {
       ));
     }
 
-    // 投影（卡片底是不透明的背景图，盖得住投影落在卡片下面的那部分）
+    // 投影（卡片底是不透明的背景图，盖得住投影落在卡片下面的那部分）。四角圆角一样时用全 App 共用的九宫格图
+    // （[_FrostShadow]）：以前每张卡片每次重画都现算两次高斯模糊，滚动、平推时每帧都在算
     final drop = MeowFrostStyle.drop(dark, spec.hueA);
-    canvas.drawRRect(
-      edge.shift(const Offset(0, MeowFrostStyle.dropDy)),
-      Paint()
-        ..color = drop
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, Shadow.convertRadiusToSigma(MeowFrostStyle.dropBlur / 2)),
-    );
-    canvas.drawRRect(
-      edge.shift(const Offset(0, 1)),
-      Paint()
-        ..color = drop
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
-    );
+    final r = edge.tlRadiusX;
+    final uniform = [edge.tlRadiusY, edge.trRadiusX, edge.trRadiusY, edge.blRadiusX, edge.blRadiusY, edge.brRadiusX, edge.brRadiusY]
+        .every((v) => (v - r).abs() < 0.01);
+    if (uniform) {
+      _FrostShadow.paint(canvas, edge.outerRect, r, drop, c.dpr);
+    } else {
+      canvas.drawRRect(
+        edge.shift(const Offset(0, MeowFrostStyle.dropDy)),
+        Paint()
+          ..color = drop
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, _FrostShadow.sigma),
+      );
+      canvas.drawRRect(
+        edge.shift(const Offset(0, 1)),
+        Paint()
+          ..color = drop
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
+      );
+    }
 
-    canvas.save();
-    canvas.clipRRect(rrect);
+    // 卡片背后那块背景：预模糊图按屏幕坐标贴成着色器、直接画成这个圆角形状（不先按圆角裁切：裁切在 Impeller 下要多走模板缓冲）
     final images = c.images;
     final fill = spec.fill;
     // 换设置后新图渲染完之前（防抖 + 渲染，一两百毫秒）先用旧图
     if (images != null) {
+      // 图上的像素 p 在屏幕上是 p / k，屏幕点 g 在这块画布上是 g − origin + offset
       final k = images.frostScale;
-      final src = Rect.fromLTWH(origin.dx * k, origin.dy * k, size.width * k, size.height * k);
-      canvas.drawImageRect(images.frost, src, rect, Paint()..filterQuality = FilterQuality.low);
+      final dx = offset.dx - origin.dx, dy = offset.dy - origin.dy;
+      final matrix = Float64List.fromList([1 / k, 0, 0, 0, 0, 1 / k, 0, 0, 0, 0, 1, 0, dx, dy, 0, 1]);
+      canvas.drawRRect(
+        rrect,
+        Paint()..shader = ImageShader(images.frost, TileMode.clamp, TileMode.clamp, matrix, filterQuality: FilterQuality.low),
+      );
     } else {
       // 预模糊图还没好：先按底色渐层（屏幕坐标）画
       final screen = c.screen;
       final start = rect.topLeft - origin;
-      canvas.drawRect(
-        rect,
+      canvas.drawRRect(
+        rrect,
         Paint()
           ..shader = ui.Gradient.linear(
             start,
@@ -480,10 +520,10 @@ class _RenderMeowFrostBox extends RenderProxyBox {
     // 对比度垫层：整套卡片统一的值（见 MeowBackdrop.scrim），选中态等自带不透明底色的不垫
     final tint = c.tint;
     if (tint == null && c.scrim > 0) {
-      canvas.drawRect(rect, Paint()..color = (dark ? Colors.black : Colors.white).withValues(alpha: c.scrim));
+      canvas.drawRRect(rrect, Paint()..color = (dark ? Colors.black : Colors.white).withValues(alpha: c.scrim));
     }
-    canvas.drawRect(
-      rect,
+    canvas.drawRRect(
+      rrect,
       tint != null
           ? (Paint()..color = tint)
           : (Paint()
@@ -492,7 +532,6 @@ class _RenderMeowFrostBox extends RenderProxyBox {
                 Colors.white.withValues(alpha: fill.bottom),
               ])),
     );
-    canvas.restore();
 
     // 顶部 1dp 内高光、底部 1dp 内暗边：沿边线描一道，往里很快淡掉（圆角处顺着弧线）
     final band = math.max(rrect.tlRadius.y, 6.0);
@@ -539,4 +578,117 @@ class _RenderMeowFrostBox extends RenderProxyBox {
     if (open) canvas.restore();
     super.paint(context, offset);
   }
+}
+
+/// 玻璃卡片的投影图：按（圆角、颜色、像素比）画一张九宫格图、全 App 共用，每张卡片画的时候只贴图。
+/// 图里是一张卡片连同四周的投影（与原来的两层一样：模糊 [MeowFrostStyle.dropBlur] 下移 [MeowFrostStyle.dropDy]
+/// + 1dp 的贴边小影），中间一像素拉伸成卡片的长宽——直边上的模糊处处一样，拉伸出来与现算的一致。
+/// 图里那张卡片的中心离每条边都要有 r + 三倍 sigma：卡片太小的话四边的模糊互相影响，中间那一像素到不了全浓度，
+/// 拉伸出来整圈投影淡一成（最初按 2r+1 的小卡片画就是这样）。
+/// 投影本来就是糊的，图最多按 1.5 倍像素画（一张二三百 KB，常用的圆角十来种）。
+abstract final class _FrostShadow {
+  static final sigma = Shadow.convertRadiusToSigma(MeowFrostStyle.dropBlur / 2);
+
+  /// 三倍 sigma（模糊伸出去 / 伸进来的距离）
+  static final _spread = (3 * sigma).ceilToDouble();
+
+  /// 卡片四周要留的边：三倍 sigma 加下移量
+  static final margin = _spread + MeowFrostStyle.dropDy;
+
+  static final _cache = <(double, int, double), ui.Image>{};
+
+  static ui.Image _image(double r, Color color, double scale) {
+    final key = (r, color.toARGB32(), scale);
+    final hit = _cache[key];
+    if (hit != null) return hit;
+    if (_cache.length > 24) {
+      for (final image in _cache.values) {
+        image.dispose();
+      }
+      _cache.clear();
+    }
+    final inner = 2 * (r + _spread) + 1;
+    final side = inner + 2 * margin;
+    final card = RRect.fromRectAndRadius(Rect.fromLTWH(margin, margin, inner, inner), Radius.circular(r));
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(scale);
+    canvas.drawRRect(
+      card.shift(const Offset(0, MeowFrostStyle.dropDy)),
+      Paint()
+        ..color = color
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigma),
+    );
+    canvas.drawRRect(
+      card.shift(const Offset(0, 1)),
+      Paint()
+        ..color = color
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1),
+    );
+    final picture = recorder.endRecording();
+    final px = (side * scale).ceil();
+    final image = picture.toImageSync(px, px);
+    picture.dispose();
+    return _cache[key] = image;
+  }
+
+  /// 在卡片 [card]（圆角 [r]）四周画投影
+  static void paint(Canvas canvas, Rect card, double r, Color color, double dpr) {
+    if (color.a == 0) return;
+    final scale = math.min(dpr, 1.5);
+    final image = _image(r, color, scale);
+    final m = margin, c = (m + r + _spread) * scale;
+    canvas.save();
+    canvas.scale(1 / scale);
+    canvas.drawImageNine(
+      image,
+      Rect.fromLTWH(c, c, scale, scale),
+      Rect.fromLTRB((card.left - m) * scale, (card.top - m) * scale, (card.right + m) * scale, (card.bottom + m) * scale),
+      Paint()..filterQuality = FilterQuality.low,
+    );
+    canvas.restore();
+  }
+}
+
+/// 跟着这些动画让屏幕上的玻璃卡片逐帧按新位置重画（切 Tab 平推、页面转场）：在动画推进的那一刻（这一帧的 build 之前）叫醒，
+/// 和页面位移同一帧画——以前靠每帧画完后的位置核对，卡片里的背景总晚一帧、隔一帧才动一次，看起来一顿一顿的。
+class MeowFrostFollow extends StatefulWidget {
+  const MeowFrostFollow({super.key, required this.animations, required this.child});
+
+  final List<Listenable> animations;
+  final Widget child;
+
+  @override
+  State<MeowFrostFollow> createState() => _MeowFrostFollowState();
+}
+
+class _MeowFrostFollowState extends State<MeowFrostFollow> {
+  @override
+  void initState() {
+    super.initState();
+    for (final a in widget.animations) {
+      a.addListener(MeowFrostBox.markAllMoved);
+    }
+  }
+
+  @override
+  void didUpdateWidget(MeowFrostFollow old) {
+    super.didUpdateWidget(old);
+    for (final a in old.animations) {
+      a.removeListener(MeowFrostBox.markAllMoved);
+    }
+    for (final a in widget.animations) {
+      a.addListener(MeowFrostBox.markAllMoved);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final a in widget.animations) {
+      a.removeListener(MeowFrostBox.markAllMoved);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }

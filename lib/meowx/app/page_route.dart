@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../theme/card_surface.dart';
 import '../theme/page_background.dart';
 
 /// 手机上进二级页的路由（`BaseNavigator.push` 用）：共享轴横向转场 + 推迟一帧开始。
@@ -171,28 +172,32 @@ class SharedXPageTransition extends StatelessWidget {
       ),
       child: child,
     );
-    return DualTransitionBuilder(
-      animation: animation,
-      forwardBuilder: (_, animation, child) => _overPageBelow(
-        animation,
-        _fadeOut,
-        SlideTransition(
-          position: enterSlide.animate(animation),
-          child: _PageFade(opacity: _takeOver.animate(animation), fill: fill, opaque: true, child: child),
-        ),
-      ),
-      reverseBuilder: (_, animation, child) => IgnorePointer(
-        ignoring: animation.status == AnimationStatus.forward,
-        child: _overPageBelow(
+    // 转场的每一帧：玻璃卡片按这一帧的位置重画（同一帧，不晚一帧）
+    return MeowFrostFollow(
+      animations: [animation, secondaryAnimation],
+      child: DualTransitionBuilder(
+        animation: animation,
+        forwardBuilder: (_, animation, child) => _overPageBelow(
           animation,
-          _fadeIn,
+          _fadeOut,
           SlideTransition(
-            position: exitSlide.animate(animation),
-            child: _PageFade(opacity: _handBack.animate(animation), fill: fill, opaque: true, child: child),
+            position: enterSlide.animate(animation),
+            child: _PageFade(opacity: _takeOver.animate(animation), fill: fill, opaque: true, child: child),
           ),
         ),
+        reverseBuilder: (_, animation, child) => IgnorePointer(
+          ignoring: animation.status == AnimationStatus.forward,
+          child: _overPageBelow(
+            animation,
+            _fadeIn,
+            SlideTransition(
+              position: exitSlide.animate(animation),
+              child: _PageFade(opacity: _handBack.animate(animation), fill: fill, opaque: true, child: child),
+            ),
+          ),
+        ),
+        child: MeowBgBox(fill: fill, opacity: secondaryAnimation.isAnimating ? 1 : 0, child: covered),
       ),
-      child: MeowBgBox(fill: fill, opacity: secondaryAnimation.isAnimating ? 1 : 0, child: covered),
     );
   }
 }
