@@ -82,7 +82,10 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     final connected = ref.watch(isRunningProvider);
     final groups = ref.watch(currentGroupsStateProvider).value;
     // 只列真正的节点：内置的 DIRECT / REJECT / PASS 不算（同 iOS）
-    final nodes = [for (final p in allLeafProxies(groups)) if (builtinSubtitle(p.name) == null) p.name];
+    final leaves = allLeafProxies(groups);
+    final nodes = [for (final p in leaves) if (builtinSubtitle(p.name) == null) p.name];
+    // 节点 → 协议（开测时记进记录、「已用」那一行前面显示）
+    final protocols = {for (final p in leaves) p.name: p.type};
     final exitLeaf = ref.watch(currentNodeProvider)?.leaf ?? '';
     return ListenableBuilder(
       listenable: Listenable.merge([c, c.history]),
@@ -146,7 +149,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                       MeowHaptics.tap();
                       c.stop();
                     } else {
-                      _requestStart(node!);
+                      _requestStart(node!, protocol: speedTestProtocolTitle(protocols[node]));
                     }
                   },
                 ),
@@ -236,10 +239,10 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
       children: [
         Text(parts.join(' · '), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis, style: style),
         const SizedBox(height: 2),
-        // 从开测起就占着这一行（没用量时透明），数出来不再撑高；本机网络取到了写在前面「Wi-Fi · 已用 …」
+        // 从开测起就占着这一行（没用量时透明），数出来不再撑高；节点协议、本机网络有就写在前面「VLESS · Wi-Fi · 已用 …」
         Opacity(
           opacity: p.bytesUsed > 0 ? 1 : 0,
-          child: Text('${c.network == null ? '' : '${c.network} · '}已用 ${fmtSize(p.bytesUsed)}',
+          child: Text([?c.protocol, ?c.network, '已用 ${fmtSize(p.bytesUsed)}'].join(' · '),
               maxLines: 1, style: style.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
         ),
       ],
@@ -247,7 +250,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
   }
 
   /// 按流量计费的网络（蜂窝）先确认一次
-  Future<void> _requestStart(String node) async {
+  Future<void> _requestStart(String node, {String? protocol}) async {
     final net = await Connectivity().checkConnectivity();
     if (!mounted) return;
     if (net.contains(ConnectivityResult.mobile)) {
@@ -264,7 +267,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
       );
       if (go != true || !mounted) return;
     }
-    c.start(node);
+    c.start(node, protocol: protocol);
   }
 }
 

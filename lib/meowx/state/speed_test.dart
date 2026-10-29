@@ -16,6 +16,32 @@ const kSpeedTestDirect = 'DIRECT';
 /// 界面上的出站名：DIRECT 显示「直连」
 String speedTestDisplayName(String name) => name == kSpeedTestDirect ? '直连' : name;
 
+/// 节点协议的显示名（只到顶层，不带 REALITY / WS / gRPC 这些外层，与 iOS / macOS 同一张表）：
+/// 核心的 proxies 里 [type] 是 mihomo 的写法（「Vless」「Shadowsocks」「Hysteria2」…），配置里是小写（「vless」「ss」…），
+/// 两种都认（不分大小写）；表里没有的原样显示；空 / null（直连）没有协议。
+String? speedTestProtocolTitle(String? type) {
+  final t = type?.trim();
+  if (t == null || t.isEmpty) return null;
+  return switch (t.toLowerCase()) {
+    'ss' || 'shadowsocks' => 'Shadowsocks',
+    'vmess' => 'VMess',
+    'vless' => 'VLESS',
+    'trojan' => 'Trojan',
+    'hysteria2' => 'Hysteria2',
+    'hysteria' => 'Hysteria',
+    'tuic' => 'TUIC',
+    'socks5' => 'SOCKS5',
+    'http' => 'HTTP',
+    'anytls' => 'AnyTLS',
+    'mieru' => 'Mieru',
+    'wireguard' => 'WireGuard',
+    'miu' => 'Miu',
+    'snell' => 'Snell',
+    'ssh' => 'SSH',
+    _ => t,
+  };
+}
+
 /// 测速源（与 iOS / macOS 同一组）。Google、Microsoft 只有下载（都是一个大文件按 Range 分段下）。
 enum SpeedTestSource {
   google('Google'),
@@ -219,6 +245,10 @@ class SpeedTestController extends ChangeNotifier {
   /// 这次测速的本机网络（Wi-Fi / 5G …，见 speed_test_network.dart）：点开始那一刻取，取不到 null；记进这次的记录
   String? network;
 
+  /// 这次测速节点的协议显示名（[speedTestProtocolTitle]，页面按选的出站在当前配置的 proxies 里查到 type 后传给 [start]）；
+  /// 直连 / 查不到 null；记进这次的记录
+  String? protocol;
+
   /// 没能开始的原因（未连接、核心太旧…）
   String? message;
   bool _starting = false;
@@ -277,7 +307,8 @@ class SpeedTestController extends ChangeNotifier {
     setSource(record.source);
   }
 
-  Future<void> start(String via) async {
+  /// [protocol] 是选的节点的协议显示名（[speedTestProtocolTitle]），直连 / 查不到不传
+  Future<void> start(String via, {String? protocol}) async {
     if (isRunning) return;
     MeowHaptics.tap();
     final generation = ++_generation;
@@ -289,6 +320,7 @@ class SpeedTestController extends ChangeNotifier {
     _starting = true;
     progress = SpeedTestProgress(phase: 'preparing', source: source, via: via, exitPending: true);
     network = null;
+    this.protocol = via == kSpeedTestDirect ? null : protocol;
     notifyListeners();
     // 本机网络不等：和开测并行取（几毫秒），取到了「已用」那一行前面出现、测完记进记录
     unawaited((networkProbe ?? currentSpeedTestNetwork)().then((value) {
@@ -337,6 +369,7 @@ class SpeedTestController extends ChangeNotifier {
               connections: connections,
               outbound: via,
               network: network,
+              protocol: this.protocol,
             );
             if (record != null) {
               _lastRecordId = record.id; // 先记上再加：页面听 history 的通知时就取得到
@@ -382,6 +415,7 @@ class SpeedTestRecord {
     this.error,
     this.exit,
     this.network,
+    this.protocol,
   });
 
   final String id;
@@ -410,6 +444,9 @@ class SpeedTestRecord {
   /// 本机网络「Wi-Fi」「5G」「移动数据」「有线网络」…（点开始那一刻的）；旧记录与没取到的是 null
   final String? network;
 
+  /// 节点协议的显示名「VLESS」「Shadowsocks」…（[speedTestProtocolTitle]，只到顶层）；直连、旧记录与查不到的是 null
+  final String? protocol;
+
   bool get isDirect => outbound == kSpeedTestDirect;
   bool get failed => error != null;
 
@@ -428,6 +465,7 @@ class SpeedTestRecord {
     required int connections,
     required String outbound,
     String? network,
+    String? protocol,
     DateTime? date,
   }) {
     if (p.phase != 'done' && p.phase != 'failed') return null;
@@ -450,6 +488,7 @@ class SpeedTestRecord {
       error: p.phase == 'failed' ? (p.error ?? '未知原因') : null,
       exit: p.exit,
       network: network,
+      protocol: protocol,
     );
   }
 
@@ -472,6 +511,7 @@ class SpeedTestRecord {
     'error': ?error,
     'exit': ?exit?.toJson(),
     'network': ?network,
+    'protocol': ?protocol,
   };
 
   /// 字段不全（id / 时间 / 出站缺了）返回 null，读盘时跳过
@@ -497,6 +537,7 @@ class SpeedTestRecord {
       error: j['error'] as String?,
       exit: SpeedTestExit.fromJson(j['exit']),
       network: j['network'] as String?,
+      protocol: j['protocol'] as String?,
     );
   }
 

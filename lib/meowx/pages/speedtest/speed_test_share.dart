@@ -9,26 +9,31 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart' show BrandHead, meowRounded;
 import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 
-/// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1080 × 1350 像素的 4:5 竖图，从记录详情页生成 PNG：
-/// 安卓「分享」经 share_plus 弹系统分享面板（同 iOS），Windows「保存分享图」经 `picker.saveFile` 另存新档。
+/// 测速记录的分享图（工单 #1270，与 iOS / macOS 同一份需求）：1920 × 1080 像素的 16:9 横图（2026-10-29 用户从六版里选的
+/// 「宽版三栏（D）」，设计稿 `Design/ui-redesign/speedtest-share-options.html` 的 `.sc.d`；以前是 1080 × 1350 的竖图），
+/// 从记录详情页 / 测速页页头生成 PNG：安卓「分享」经 share_plus 弹系统分享面板（同 iOS），Windows「保存分享图」经
+/// `picker.saveFile` 另存新档。
 ///
 /// 配色跟着分享时 App 实际生效的外观（主题色 + 深浅，同 iOS / macOS），但**磨砂强度固定按缺省 0.5**（[tokensFor]）：
 /// 液态玻璃浅色下卡片与页面底本来就只差一点，磨砂调到 0 时按当前那份画，卡片在图上完全看不出来。
 /// 页面底：经典 = 平涂 [MeowTokens.bg]；液态玻璃 = 底色渐层（[MeowTokens.bgGradient]，方向照 [MeowTokens.bgDiagonal]），
 /// 不画光斑与插画（自选的照片不能跟着分享出去）。卡片是不透明的 [MeowTokens.elevSolid]（经典 = 卡片色；液态玻璃 = 玻璃卡片叠在
 /// 页面底上的实色），不画玻璃效果。字、强调色、下载紫、分隔线都取同一份 token；页头 App 图标按深浅取浅 / 深两张（同 [BrandHead]）。
-/// 自上而下：页头（App 图标 + MeowX + 网络测速、右边日期时间）→ 下载主卡（大数字 + 峰值）→ 上传 / 延迟两张小卡 →
-/// 速率曲线（同详情页的画法）→ 测速源 · 线程、网络（记了才有）、出站、出口（查到才有）→ 页脚。出口只写 ASN / 运营商，**不写 IP**
-/// （直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。
 ///
-/// 按 450 宽的版式画、整张放大 2.4 倍（1080 / 450），字号层级同测速记录详情页；曲线卡占上下排完之后剩下的高度。
-/// 信息卡最多四行（多了「网络」那一行），主卡大数字 48、卡片上下留白与信息卡行距都收紧过，四行时曲线卡仍有原来三行时的高度。
+/// 版式（自上而下）：页头一行（App 图标 + MeowX + 网络测速，右边日期时间）→ 中间三栏（列宽 1.3 : 0.9 : 1.15，占剩下全部高度）：
+/// 下载大卡（标签、大数字 + Mbps、峰值，内容垂直居中；四位数放不下先缩数字、不截断）、上传 / 延迟上下两格（只测下载的源上传
+/// 画「—」+「此测速源只测下载」）、参数表（测速源 · 线程、网络、协议——后两样记了才有——出站、出口，行均匀分布填满高度，
+/// 最后一行允许折成两行）→ 底部速率曲线卡（标题 + 右边图例，曲线横贯整宽，同详情页的画法）。出口只写 ASN / 运营商，
+/// **不写 IP**（直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。设计稿里下载卡的「超越了 82%」现在不画（上传 /
+/// 统计还没做）。
+///
+/// 按 800 × 450 的逻辑尺寸排（1cqw = 卡片宽度的 1% = 8 逻辑像素，字号、间距都照设计稿的 cqw 换算）、整张放大 2.4 倍。
 class SpeedTestShareImage {
   SpeedTestShareImage._();
 
-  static const width = 1080;
-  static const height = 1350;
-  static const _scale = width / 450;
+  static const width = 1920;
+  static const height = 1080;
+  static const _scale = width / 800;
 
   /// 页头的 App 图标：浅色白发、深色黑发（同 [BrandHead]）
   static String iconAsset(Brightness brightness) =>
@@ -101,6 +106,7 @@ class SpeedTestShareContent {
     this.latency,
     required this.sourceLine,
     this.network,
+    this.protocol,
     required this.outbound,
     this.exit,
   });
@@ -124,6 +130,9 @@ class SpeedTestShareContent {
 
   /// 本机网络「Wi-Fi」「5G」…；旧记录与没取到的 null
   final String? network;
+
+  /// 节点协议「VLESS」「Shadowsocks」…（只到顶层）；直连、旧记录与查不到的 null
+  final String? protocol;
 
   /// 节点名；直连「直连 · 本机网络」
   final String outbound;
@@ -151,13 +160,57 @@ class SpeedTestShareContent {
       latency: r.latencyMs?.toString(),
       sourceLine: '${r.source.title} · ${r.threadsTitle}',
       network: r.network,
+      protocol: r.isDirect ? null : r.protocol,
       outbound: r.isDirect ? '直连 · 本机网络' : r.outbound,
       exit: exit.isEmpty ? null : exit,
     );
   }
 }
 
-/// 在 1080 × 1350 的画布上画（坐标按 450 宽的版式，画之前整体放大 [SpeedTestShareImage._scale]）。
+/// 分享图的版式（逻辑坐标，800 × 450，1cqw = 8；单测按它算取点位置）。
+abstract final class SpeedTestShareLayout {
+  static const w = 800.0, h = 450.0;
+
+  /// 1cqw：设计稿里所有尺寸的单位（卡片宽度的 1%）
+  static const cqw = 8.0;
+
+  /// 页面四边留白、块之间的间距、卡片圆角
+  static const padH = 4.2 * cqw, padV = 3.6 * cqw, gap = 2 * cqw, radius = 2.6 * cqw;
+
+  /// 卡片内边距（上下 / 左右）
+  static const cardPadV = 2.2 * cqw, cardPadH = 2.6 * cqw;
+
+  /// 页头（App 图标那一行）的高度；底部速率曲线卡的高度
+  static const headerHeight = 4.4 * cqw, chartHeight = 10.5 * cqw;
+
+  /// 三栏的列宽比
+  static const columnWeights = [1.3, 0.9, 1.15];
+
+  static const inner = w - padH * 2;
+
+  /// 中间三栏那一块（页头与曲线卡之间）
+  static const mainTop = padV + headerHeight + gap;
+  static const mainBottom = h - padV - chartHeight - gap;
+
+  /// 底部速率曲线卡
+  static const chart = Rect.fromLTWH(padH, h - padV - chartHeight, inner, chartHeight);
+
+  /// 三栏各自的框（下载 / 上传 · 延迟 / 参数）
+  static List<Rect> get columns {
+    final total = columnWeights.fold(0.0, (a, b) => a + b);
+    final avail = inner - gap * (columnWeights.length - 1);
+    final out = <Rect>[];
+    var x = padH;
+    for (final weight in columnWeights) {
+      final width = avail * weight / total;
+      out.add(Rect.fromLTWH(x, mainTop, width, mainBottom - mainTop));
+      x += width + gap;
+    }
+    return out;
+  }
+}
+
+/// 在 1920 × 1080 的画布上画（坐标按 [SpeedTestShareLayout] 的 800 × 450 版式，画之前整体放大 [SpeedTestShareImage._scale]）。
 class _SharePainter {
   _SharePainter(this.record, this.content, this.mm, this.base, this.icon);
   final SpeedTestRecord record;
@@ -166,9 +219,10 @@ class _SharePainter {
   final TextStyle base;
   final ui.Image? icon;
 
-  static const w = 450.0, h = 1350 / SpeedTestShareImage._scale;
-  static const side = 24.0;
-  static const inner = w - side * 2;
+  static const w = SpeedTestShareLayout.w, h = SpeedTestShareLayout.h, cqw = SpeedTestShareLayout.cqw;
+  static const padH = SpeedTestShareLayout.padH, padV = SpeedTestShareLayout.padV;
+  static const radius = SpeedTestShareLayout.radius;
+  static const cardPadV = SpeedTestShareLayout.cardPadV, cardPadH = SpeedTestShareLayout.cardPadH;
 
   final _painters = <TextPainter>[];
 
@@ -176,29 +230,31 @@ class _SharePainter {
     fontSize: size,
     fontWeight: weight,
     color: color,
-    height: 1.2,
+    height: 1.3,
     fontFamilyFallback: rounded ? meowRounded : null,
     fontFeatures: const [FontFeature.tabularFigures()],
   );
 
-  /// 大数字：圆体、等宽数字（同测速记录详情页）
+  /// 大数字：圆体、最粗、等宽数字、行高收紧（设计稿 `.num`）
   TextStyle _num(double size, Color color) =>
-      _style(size, color, weight: FontWeight.w800, rounded: true).copyWith(height: 1.05);
+      _style(size, color, weight: FontWeight.w900, rounded: true).copyWith(height: 1.05);
 
-  TextPainter _text(String text, TextStyle style, {double maxWidth = inner}) {
+  TextPainter _text(String text, TextStyle style, {double maxWidth = double.infinity, int maxLines = 1}) {
     final p = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
-      maxLines: 1,
+      maxLines: maxLines,
       ellipsis: '…',
     )..layout(maxWidth: maxWidth);
     _painters.add(p);
     return p;
   }
 
+  double _baseline(TextPainter p) => p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+
   /// 卡片：不透明的实色（液态玻璃下 [MeowTokens.elev] 是半透明的，用叠好的 [MeowTokens.elevSolid]）
-  void _card(Canvas canvas, Rect rect, double radius) =>
-      canvas.drawRRect(RRect.fromRectAndRadius(rect, Radius.circular(radius)), Paint()..color = mm.elevSolid);
+  void _card(Canvas canvas, Rect rect) =>
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(radius)), Paint()..color = mm.elevSolid);
 
   /// 页面底：平涂 [MeowTokens.bg]；液态玻璃是底色渐层，按整张图铺（斜向 = 左上 → 右下，否则自上而下，同 App 里按整屏铺）
   Paint _page() {
@@ -207,29 +263,48 @@ class _SharePainter {
     return Paint()..shader = ui.Gradient.linear(Offset.zero, mm.bgDiagonal ? const Offset(w, h) : const Offset(0, h), g);
   }
 
-  /// 圆点 + 标题（同详情页的图例）；返回占的高度
-  double _legend(Canvas canvas, Offset at, String title, Color? dot) {
-    final label = _text(title, _style(13, mm.t2, weight: FontWeight.w700));
+  Paint get _line => Paint()
+    ..color = mm.line
+    ..strokeWidth = 1;
+
+  /// 「● 标签」（圆点 .9em、与字隔 .4em，同设计稿 `.dot`）；[dot] 为 null 不画圆点。返回占的高度
+  double _label(Canvas canvas, Offset at, String title, Color? dot) {
+    const size = 2 * cqw;
+    final label = _text(title, _style(size, mm.t2, weight: FontWeight.w700));
     var x = at.dx;
     if (dot != null) {
-      canvas.drawCircle(Offset(x + 4, at.dy + label.height / 2), 4, Paint()..color = dot);
-      x += 13;
+      const d = size * 0.9;
+      canvas.drawCircle(Offset(x + d / 2, at.dy + label.height / 2), d / 2, Paint()..color = dot);
+      x += d + size * 0.4;
     }
     label.paint(canvas, Offset(x, at.dy));
     return label.height;
   }
 
-  /// 数字 + 单位（按基线对齐，单位紧跟数字），放在 [maxWidth] 宽里；返回占的高度
-  double _value(Canvas canvas, Offset at, String value, TextStyle style, String? unit, double unitSize, double maxWidth) {
-    final u = unit == null ? null : _text(unit, _style(unitSize, mm.t2, weight: FontWeight.w600));
-    final number = _text(value, style, maxWidth: maxWidth - (u == null ? 0 : u.width + 4));
+  /// 数字 + 单位（单位按基线紧跟数字，隔 [unitGap]）；[number] / [unit] 已排好
+  void _paintValue(Canvas canvas, Offset at, TextPainter number, TextPainter? unit, double unitGap) {
     number.paint(canvas, at);
-    if (u != null) {
-      final baseline = number.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-      final unitBaseline = u.computeDistanceToActualBaseline(TextBaseline.alphabetic);
-      u.paint(canvas, Offset(at.dx + number.width + 4, at.dy + baseline - unitBaseline));
+    if (unit != null) {
+      unit.paint(canvas, Offset(at.dx + number.width + unitGap, at.dy + _baseline(number) - _baseline(unit)));
     }
-    return number.height;
+  }
+
+  /// 排一个数字 + 单位：数字从 [size] 起，加上单位放不进 [maxWidth] 就把数字缩小到放得下（单位不缩、不截断）
+  (TextPainter, TextPainter) _fitValue(String value, Color color, double size, String unit, double unitSize, double unitGap,
+      double maxWidth) {
+    final u = _text(unit, _style(unitSize, mm.t2, weight: FontWeight.w700));
+    final room = maxWidth - unitGap - u.width;
+    var s = size;
+    var n = _text(value, _num(s, color));
+    if (n.width > room && n.width > 0) {
+      s = (size * room / n.width).floorToDouble();
+      n = _text(value, _num(s, color));
+      while (n.width > room && s > 8) {
+        s -= 1;
+        n = _text(value, _num(s, color));
+      }
+    }
+    return (n, u);
   }
 
   void paint(Canvas canvas) {
@@ -238,15 +313,12 @@ class _SharePainter {
       ..scale(SpeedTestShareImage._scale)
       ..drawRect(const Rect.fromLTWH(0, 0, w, h), _page());
     try {
-      var y = _header(canvas, 24);
-      y = _mainCard(canvas, y + 14);
-      y = _smallCards(canvas, y + 10);
-      // 底部从下往上排：页脚、信息卡；中间剩下的给曲线卡
-      final footer = _text('MeowX 网络测速', _style(12, mm.t2));
-      final footerTop = h - 18 - footer.height;
-      footer.paint(canvas, Offset((w - footer.width) / 2, footerTop));
-      final infoTop = _infoCard(canvas, footerTop - 10);
-      _chartCard(canvas, Rect.fromLTRB(side, y + 10, w - side, infoTop - 10));
+      _header(canvas, padV);
+      final [download, two, params] = SpeedTestShareLayout.columns;
+      _downloadCard(canvas, download);
+      _uploadLatencyCard(canvas, two);
+      _paramsCard(canvas, params);
+      _chartCard(canvas, SpeedTestShareLayout.chart);
     } finally {
       canvas.restore();
       for (final p in _painters) {
@@ -255,15 +327,15 @@ class _SharePainter {
     }
   }
 
-  /// 页头：圆角 App 图标 + 「MeowX」/「网络测速」，右边日期时间。返回底边
-  double _header(Canvas canvas, double top) {
-    const size = 40.0;
+  /// 页头：圆角 App 图标 + 「MeowX」「网络测速」（同一基线），右边日期时间；都按图标的中线对齐
+  void _header(Canvas canvas, double top) {
+    const size = SpeedTestShareLayout.headerHeight;
     final img = icon;
-    final iconRect = Rect.fromLTWH(side, top, size, size);
+    final iconRect = Rect.fromLTWH(padH, top, size, size);
     if (img != null) {
       canvas
         ..save()
-        ..clipRRect(RRect.fromRectAndRadius(iconRect, const Radius.circular(size * 0.31)))
+        ..clipRRect(RRect.fromRectAndRadius(iconRect, const Radius.circular(size * 0.3)))
         ..drawImageRect(
           img,
           Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
@@ -272,78 +344,138 @@ class _SharePainter {
         )
         ..restore();
     }
-    final x = side + size + 10;
-    final date = _text(content.dateTime, _style(13, mm.t2));
-    final titleWidth = w - side - date.width - 12 - x;
-    final title = _text('MeowX', _style(18, mm.t1, weight: FontWeight.w800, rounded: true), maxWidth: titleWidth);
-    final sub = _text('网络测速', _style(12, mm.t2), maxWidth: titleWidth);
-    final textTop = top + (size - title.height - sub.height) / 2;
-    title.paint(canvas, Offset(x, textTop));
-    sub.paint(canvas, Offset(x, textTop + title.height));
-    date.paint(canvas, Offset(w - side - date.width, top + (size - date.height) / 2));
-    return top + size;
+    final centerY = top + size / 2;
+    final date = _text(content.dateTime, _style(1.9 * cqw, mm.t2));
+    date.paint(canvas, Offset(w - padH - date.width, centerY - date.height / 2));
+    final x = padH + size + 1.6 * cqw;
+    final brand = _text('MeowX', _style(3.2 * cqw, mm.t1, weight: FontWeight.w900, rounded: true));
+    final brandTop = centerY - brand.height / 2;
+    brand.paint(canvas, Offset(x, brandTop));
+    final subLeft = x + brand.width + 1.2 * cqw;
+    final sub = _text('网络测速', _style(2 * cqw, mm.t2, weight: FontWeight.w600), maxWidth: w - padH - date.width - 2 * cqw - subLeft);
+    sub.paint(canvas, Offset(subLeft, brandTop + _baseline(brand) - _baseline(sub)));
   }
 
-  /// 下载主卡：「下载」、大数字 + Mbps、峰值。返回底边
-  double _mainCard(Canvas canvas, double top) {
-    const padH = 20.0, padV = 12.0;
-    final numberStyle = _num(48, mm.down);
-    final legendHeight = _text(' ', _style(13, mm.t2, weight: FontWeight.w700)).height;
-    final numberHeight = _text('0', numberStyle).height;
-    final peak = _text(content.downloadPeak ?? ' ', _style(13, mm.t2));
-    final height = padV + legendHeight + 2 + numberHeight + 2 + peak.height + padV;
-    _card(canvas, Rect.fromLTWH(side, top, inner, height), 24);
-    var y = top + padV;
-    y += _legend(canvas, Offset(side + padH, y), '下载', mm.down) + 2;
-    y += _value(canvas, Offset(side + padH, y), content.download, numberStyle, 'Mbps', 18, inner - padH * 2) + 2;
-    peak.paint(canvas, Offset(side + padH, y));
-    return top + height;
+  /// 下载大卡：「● 下载」、大数字 + Mbps、峰值；内容垂直居中
+  void _downloadCard(Canvas canvas, Rect r) {
+    _card(canvas, r);
+    final left = r.left + cardPadH, maxWidth = r.width - cardPadH * 2;
+    final labelHeight = _text(' ', _style(2 * cqw, mm.t2, weight: FontWeight.w700)).height;
+    final (number, unit) = _fitValue(content.download, mm.down, 12 * cqw, 'Mbps', 2.8 * cqw, 0.8 * cqw, maxWidth);
+    final peak = content.downloadPeak == null ? null : _text(content.downloadPeak!, _style(2 * cqw, mm.t2), maxWidth: maxWidth);
+    final total = labelHeight + 0.6 * cqw + number.height + (peak == null ? 0 : 0.6 * cqw + peak.height);
+    var y = r.top + (r.height - total) / 2;
+    y += _label(canvas, Offset(left, y), '下载', mm.down) + 0.6 * cqw;
+    _paintValue(canvas, Offset(left, y), number, unit, 0.8 * cqw);
+    y += number.height;
+    if (peak != null) peak.paint(canvas, Offset(left, y + 0.6 * cqw));
   }
 
-  /// 上传 / 延迟两张小卡。返回底边
-  double _smallCards(Canvas canvas, double top) {
-    const padH = 16.0, padV = 10.0, gap = 10.0;
-    final cardWidth = (inner - gap) / 2;
-    final valueHeight = _text('0', _num(30, mm.t1)).height;
-    final noteHeight = _text(' ', _style(12, mm.t2)).height;
-    final legendHeight = _text(' ', _style(13, mm.t2, weight: FontWeight.w700)).height;
-    final height = padV + legendHeight + 2 + valueHeight + 2 + noteHeight + padV;
-    final maxText = cardWidth - padH * 2;
-    // 没有值（只测下载的源的上传、没测到的延迟）：次级色的「—」，不带单位
-    void card(double left, String title, Color? dot, String? value, Color tint, String unit, String? sub) {
-      _card(canvas, Rect.fromLTWH(left, top, cardWidth, height), 18);
-      var y = top + padV;
-      y += _legend(canvas, Offset(left + padH, y), title, dot) + 2;
-      y += _value(canvas, Offset(left + padH, y), value ?? '—', _num(30, value == null ? mm.t2 : tint),
-              value == null ? null : unit, 14, maxText) +
-          2;
-      if (sub != null) _text(sub, _style(12, mm.t2), maxWidth: maxText).paint(canvas, Offset(left + padH, y));
+  /// 上传 / 延迟卡：上下两格各占一半（格间 1.6cqw），下面那格顶上一条细线、再空 1.6cqw；
+  /// 每格「标签」+ 数字 + 单位；没有值（只测下载的源的上传、没测到的延迟）画次级色的「—」，上传再加一行小字说明
+  void _uploadLatencyCard(Canvas canvas, Rect r) {
+    _card(canvas, r);
+    final left = r.left + cardPadH, right = r.right - cardPadH, maxWidth = right - left;
+    final top = r.top + cardPadV, bottom = r.bottom - cardPadV;
+    const rowGap = 1.6 * cqw;
+    final cell = (bottom - top - rowGap) / 2;
+
+    void metric(double y, String title, Color? dot, String? value, Color tint, String unit, String? note) {
+      y += _label(canvas, Offset(left, y), title, dot) + 0.5 * cqw;
+      if (value == null) {
+        final dash = _text('—', _num(6 * cqw, mm.t2));
+        dash.paint(canvas, Offset(left, y));
+        y += dash.height;
+      } else {
+        final (number, u) = _fitValue(value, tint, 6 * cqw, unit, 1.8 * cqw, 0.5 * cqw, maxWidth);
+        _paintValue(canvas, Offset(left, y), number, u, 0.5 * cqw);
+        y += number.height;
+      }
+      if (note != null) _text(note, _style(1.6 * cqw, mm.t2), maxWidth: maxWidth).paint(canvas, Offset(left, y + 0.3 * cqw));
     }
 
-    card(side, '上传', mm.accent, content.upload, mm.accent, 'Mbps', content.uploadNote);
-    card(side + cardWidth + gap, '延迟', null, content.latency, mm.t1, 'ms', null);
-    return top + height;
+    metric(top, '上传', mm.accent, content.upload, mm.accent, 'Mbps', content.upload == null ? content.uploadNote : null);
+    final lineY = top + cell + rowGap;
+    canvas.drawLine(Offset(left, lineY), Offset(right, lineY), _line);
+    metric(lineY + 1.6 * cqw, '延迟', null, content.latency, mm.t1, 'ms', null);
   }
 
-  /// 速率曲线卡（下载 + 上传两条，同详情页的画法）：标题行右边是图例
+  /// 参数卡：「键 … 值」按行、行间细线、行均匀分布填满高度；值右对齐、加粗，放不下截尾；
+  /// 最后一行（通常是出口）允许折成两行，连两行都放不下（行太多）再退回一行截尾
+  void _paramsCard(Canvas canvas, Rect r) {
+    _card(canvas, r);
+    final rows = [
+      ('测速源', content.sourceLine),
+      if (content.network != null) ('网络', content.network!),
+      if (content.protocol != null) ('协议', content.protocol!),
+      ('出站', content.outbound),
+      if (content.exit != null) ('出口', content.exit!),
+    ];
+    final left = r.left + cardPadH, right = r.right - cardPadH;
+    final top = r.top + cardPadV, bottom = r.bottom - cardPadV;
+    const rowPad = 0.4 * cqw, keyGap = 1.5 * cqw;
+    final keyStyle = _style(1.9 * cqw, mm.t2);
+    final valueStyle = _style(2.1 * cqw, mm.t1, weight: FontWeight.w600);
+    final keys = [for (final (k, _) in rows) _text(k, keyStyle)];
+    List<TextPainter> layoutValues(int lastLines) => [
+      for (final (i, (_, v)) in rows.indexed)
+        _text(
+          v,
+          i == rows.length - 1 ? valueStyle.copyWith(height: 1.25) : valueStyle,
+          maxWidth: right - left - keys[i].width - keyGap,
+          maxLines: i == rows.length - 1 ? lastLines : 1,
+        ),
+    ];
+    var values = layoutValues(2);
+    List<double> heights() => [
+      for (var i = 0; i < rows.length; i++) (keys[i].height > values[i].height ? keys[i].height : values[i].height) + rowPad * 2,
+    ];
+    var rowHeights = heights();
+    var extra = (bottom - top - rowHeights.fold(0.0, (a, b) => a + b)) / rows.length;
+    if (extra < 0) {
+      values = layoutValues(1);
+      rowHeights = heights();
+      extra = ((bottom - top - rowHeights.fold(0.0, (a, b) => a + b)) / rows.length).clamp(0, double.infinity);
+    }
+    var y = top;
+    for (var i = 0; i < rows.length; i++) {
+      final rowHeight = rowHeights[i] + extra;
+      final k = keys[i], v = values[i];
+      // 值靠行的中线放，键与值的第一行同一基线
+      final valueTop = y + (rowHeight - v.height) / 2;
+      v.paint(canvas, Offset(right - v.width, valueTop));
+      k.paint(canvas, Offset(left, valueTop + _baseline(v) - _baseline(k)));
+      y += rowHeight;
+      if (i < rows.length - 1) canvas.drawLine(Offset(left, y), Offset(right, y), _line);
+    }
+  }
+
+  /// 速率曲线卡（下载 + 上传两条，同详情页的画法）：标题行右边是图例，曲线横贯卡片内宽
   void _chartCard(Canvas canvas, Rect rect) {
-    const padH = 18.0, padV = 14.0;
-    _card(canvas, rect, 24);
-    final title = _text('速率曲线', _style(12, mm.t2, weight: FontWeight.w600));
-    title.paint(canvas, Offset(rect.left + padH, rect.top + padV));
+    const padTop = 1.6 * cqw, padSide = 2.6 * cqw, padBottom = 1.8 * cqw;
+    _card(canvas, rect);
+    final style = _style(1.9 * cqw, mm.t2, weight: FontWeight.w700);
+    final title = _text('速率曲线', style);
+    title.paint(canvas, Offset(rect.left + padSide, rect.top + padTop));
     // 图例从右往左排：只测下载的没有上传那条
     final legends = [('下载', mm.down), if (record.uploadSamples.length > 1) ('上传', mm.accent)];
-    final centerY = rect.top + padV + title.height / 2;
-    var right = rect.right - padH;
+    final centerY = rect.top + padTop + title.height / 2;
+    const dot = 1.9 * cqw * 0.9;
+    var right = rect.right - padSide;
     for (final (label, color) in legends.reversed) {
-      final t = _text(label, _style(12, mm.t2));
+      final t = _text(label, style);
       final textLeft = right - t.width;
       t.paint(canvas, Offset(textLeft, centerY - t.height / 2));
-      final dot = textLeft - 5 - 4;
-      canvas.drawCircle(Offset(dot, centerY), 4, Paint()..color = color);
-      right = dot - 4 - 14;
+      final dotLeft = textLeft - 1.9 * cqw * 0.4 - dot;
+      canvas.drawCircle(Offset(dotLeft + dot / 2, centerY), dot / 2, Paint()..color = color);
+      right = dotLeft - 1.9 * cqw * 0.8;
     }
-    final chart = Rect.fromLTRB(rect.left + padH, rect.top + padV + title.height + 8, rect.right - padH, rect.bottom - padV);
+    final chart = Rect.fromLTRB(
+      rect.left + padSide,
+      rect.top + padTop + title.height + 0.6 * cqw,
+      rect.right - padSide,
+      rect.bottom - padBottom,
+    );
     if (chart.height <= 10) return;
     canvas
       ..save()
@@ -351,36 +483,5 @@ class _SharePainter {
     SpeedTestRecordChartPainter(record.downloadSamples, record.uploadSamples, mm.down, mm.accent, mm.line)
         .paint(canvas, chart.size);
     canvas.restore();
-  }
-
-  /// 信息卡：测速源 · 线程、网络、出站、出口（只有 ASN / 运营商）。[bottom] 是底边，返回顶边
-  double _infoCard(Canvas canvas, double bottom) {
-    const padH = 18.0, padV = 3.0, rowPad = 5.0;
-    final rows = [
-      ('测速源', content.sourceLine),
-      if (content.network != null) ('网络', content.network!),
-      ('出站', content.outbound),
-      if (content.exit != null) ('出口', content.exit!),
-    ];
-    final keyStyle = _style(13, mm.t2), valueStyle = _style(13, mm.t1);
-    final rowHeight = _text(' ', valueStyle).height + rowPad * 2;
-    final height = padV * 2 + rowHeight * rows.length;
-    final top = bottom - height;
-    _card(canvas, Rect.fromLTWH(side, top, inner, height), 18);
-    final line = Paint()
-      ..color = mm.line
-      ..strokeWidth = 1;
-    for (final (i, (key, value)) in rows.indexed) {
-      final rowTop = top + padV + rowHeight * i;
-      final k = _text(key, keyStyle);
-      k.paint(canvas, Offset(side + padH, rowTop + rowPad));
-      final maxValue = inner - padH * 2 - k.width - 16;
-      final v = _text(value, valueStyle, maxWidth: maxValue);
-      v.paint(canvas, Offset(side + inner - padH - v.width, rowTop + rowPad));
-      if (i < rows.length - 1) {
-        canvas.drawLine(Offset(side + padH, rowTop + rowHeight), Offset(side + inner - padH, rowTop + rowHeight), line);
-      }
-    }
-    return top;
   }
 }

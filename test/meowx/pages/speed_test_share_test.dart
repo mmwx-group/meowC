@@ -37,6 +37,9 @@ SpeedTestRecord _record({
   String? error,
   SpeedTestExit? exit = _kddi,
   String? network = '5G',
+  String? protocol = 'VLESS',
+  double download = 486.4,
+  double peak = 532.9,
 }) {
   final hasUpload = source.hasUpload;
   return SpeedTestRecord(
@@ -47,8 +50,8 @@ SpeedTestRecord _record({
     outbound: outbound,
     server: 'speed.example',
     latencyMs: error == null ? 38 : null,
-    downloadMbps: error == null ? 486.4 : null,
-    downloadPeakMbps: error == null ? 532.9 : null,
+    downloadMbps: error == null ? download : null,
+    downloadPeakMbps: error == null ? peak : null,
     uploadMbps: error == null && hasUpload ? 92.7 : null,
     uploadPeakMbps: error == null && hasUpload ? 101.2 : null,
     downloadSamples: error == null ? const [0, 120, 310, 420, 470, 500, 488, 520, 470, 495, 510, 480, 505, 490, 498] : const [],
@@ -57,6 +60,7 @@ SpeedTestRecord _record({
     error: error,
     exit: exit,
     network: network,
+    protocol: protocol,
   );
 }
 
@@ -197,6 +201,14 @@ void main() {
       expect(SpeedTestShareContent.of(_record(network: 'Wi-Fi'))!.network, 'Wi-Fi');
       expect(SpeedTestShareContent.of(_record(network: null))!.network, isNull);
     });
+
+    test('协议：记了就有这一行（原样的文字），直连 / 旧记录没有', () {
+      expect(SpeedTestShareContent.of(_record())!.protocol, 'VLESS');
+      expect(SpeedTestShareContent.of(_record(protocol: 'Hysteria2'))!.protocol, 'Hysteria2');
+      expect(SpeedTestShareContent.of(_record(protocol: null))!.protocol, isNull);
+      // 直连没有协议（哪怕记录里带着）
+      expect(SpeedTestShareContent.of(_record(outbound: kSpeedTestDirect))!.protocol, isNull);
+    });
   });
 
   group('生成的图：跟着当前外观（主题色 + 深浅）', () {
@@ -220,7 +232,7 @@ void main() {
           textStyle: textStyle,
         ))!;
         final image = await _decode(png);
-        expect((image.width, image.height), (1080, 1350));
+        expect((image.width, image.height), (1920, 1080));
         final colors = [for (final (x, y) in points) await _pixel(image, x, y)];
         image.dispose();
         if (preview != null) _preview(preview, png);
@@ -229,14 +241,15 @@ void main() {
       return out!;
     }
 
-    // 页面底露出来的地方（左上 / 右下角、左右两边的边距）与主卡里没有字的一块（版式 24 / 78 起、放大 2.4 倍）
-    const topLeft = (4, 4), bottomRight = (1075, 1345), card = (80, 230);
-    const margins = [(20, 400), (20, 900), (1060, 300), (1060, 1000), (540, 4)];
+    // 页面底露出来的地方（左上 / 右下角、左右两边的边距）与下载卡左侧内边距里没有字的一块
+    // （版式 x = 33.6 起、卡片内边距 20.8，取 x = 41.7 / y = 110，放大 2.4 倍）
+    const topLeft = (4, 4), bottomRight = (1915, 1075), card = (100, 264);
+    const margins = [(20, 400), (20, 900), (1900, 300), (1900, 1000), (960, 4)];
 
     /// 页面底的渐层在 (x, y) 处应有的颜色（斜向 = 左上 → 右下，否则自上而下，铺满整张图）
     Color gradientAt(MeowTokens t, int x, int y) {
       final g = t.bgGradient!;
-      const w = 1080.0, h = 1350.0;
+      const w = 1920.0, h = 1080.0;
       final px = x + 0.5, py = y + 0.5;
       final k = t.bgDiagonal ? (px * w + py * h) / (w * w + h * h) : py / h;
       return Color.lerp(g.first, g.last, k)!;
@@ -296,8 +309,8 @@ void main() {
       final t = MeowTokens.resolve(Brightness.light, look);
       expect(t.elevSolid, isNot(MeowTokens.light.elev));
       expect(t.accent, isNot(MeowTokens.light.accent));
-      // 上传卡的图例圆点在版式 x = 44（放大后 105.6），沿这一列往下找
-      final column = await sample(tester, look, Brightness.light, [card, for (var y = 300; y < 700; y++) (105, y)]);
+      // 上传卡（中间那栏）的图例圆点中心在版式 x = 321.5 + 20.8 + 7.2（放大后约 839），沿这一列扫整个三栏区
+      final column = await sample(tester, look, Brightness.light, [card, for (var y = 192; y < 771; y++) (839, y)]);
       expect(column.first, t.elevSolid);
       expect(column.skip(1), contains(t.accent));
       expect(column.skip(1), isNot(contains(MeowTokens.light.accent)));
@@ -320,7 +333,7 @@ void main() {
           tester,
           look,
           brightness,
-          [...points, for (var y = 180; y < 320; y++) (115, y)],
+          [...points, for (var y = 192; y < 771; y++) (148, y)],
           preview: 'meowc-share-glass-gradient-${brightness.name}.png',
         );
         expect(corner, near(t.bgGradient!.first, tolerance: 4));
@@ -331,7 +344,7 @@ void main() {
         }
         // 实色（不透明）；elevSolid 是没取整的浮点色，PNG 里差不到 1 级
         expect(inCard, near(t.elevSolid, tolerance: 1));
-        // 下载那条的图例圆点（版式 x = 48）是这份 token 的下载紫
+        // 下载卡的图例圆点（中心在版式 x = 33.6 + 20.8 + 7.2，放大后约 148）是这份 token 的下载紫
         expect(rest.skip(margins.length), contains(t.down));
       });
     }
@@ -374,34 +387,126 @@ void main() {
       });
     }
 
-    testWidgets('信息卡：有网络多一行「网络」（测速源之后、出站之前），曲线卡让出这一行的高度；版面不挤', (tester) async {
-      // 沿左边距里侧（版式 x = 30，卡片里、字的左边）往上数卡片的上下边：卡片色与页面底交替
-      Future<List<int>> cardEdges(SpeedTestRecord record, String? preview) async {
-        // 从页头下面开始（页头的 App 图标里有白色，会被当成卡片）
-        final ys = [for (var y = 170; y < 1350; y++) y];
-        final colors = await sample(tester, MeowLook.classic, Brightness.light, [for (final y in ys) (72, y)],
-            record: record, preview: preview);
-        final edges = <int>[];
+    // 版式坐标（800 × 450）→ 像素
+    int px(double v) => (v * 2.4).round();
+    final cols = SpeedTestShareLayout.columns;
+    const chart = SpeedTestShareLayout.chart;
+    const cardPadH = SpeedTestShareLayout.cardPadH;
+
+    testWidgets('宽版三栏：页头下三张卡并排（列宽 1.3 : 0.9 : 1.15）、栏间与三栏下方露出页面底，底部曲线卡横贯整宽', (tester) async {
+      // 列宽比
+      expect(cols.length, 3);
+      expect(cols[0].width / cols[1].width, closeTo(1.3 / 0.9, 0.001));
+      expect(cols[2].width / cols[1].width, closeTo(1.15 / 0.9, 0.001));
+      expect(cols.every((c) => c.top == cols[0].top && c.bottom == cols[0].bottom), isTrue);
+      expect(cols.last.right, closeTo(chart.right, 0.001));
+      // 三张卡左侧内边距里（没有字）各取一点是卡片色；两条栏间、三栏与曲线卡之间是页面底；曲线卡左侧内边距里是卡片色
+      final points = [
+        (px(cols[0].left + 10), px(cols[0].top + 30)),
+        (px(cols[1].left + 10), px(cols[1].center.dy)),
+        (px(cols[2].left + 10), px(cols[2].center.dy)),
+        (px((cols[0].right + cols[1].left) / 2), px(cols[0].center.dy)),
+        (px((cols[1].right + cols[2].left) / 2), px(cols[1].center.dy)),
+        (px(SpeedTestShareLayout.w / 2), px((cols[0].bottom + chart.top) / 2)),
+        (px(chart.left + 10), px(chart.center.dy)),
+      ];
+      final [left, middle, right, gap1, gap2, belowMain, inChart] = await sample(
+        tester,
+        MeowLook.classic,
+        Brightness.light,
+        points,
+        preview: 'meowc-share-wide.png',
+      );
+      final bg = MeowTokens.light.bg, cardColor = MeowTokens.light.elev;
+      expect([left, middle, right, inChart], everyElement(cardColor));
+      expect([gap1, gap2, belowMain], everyElement(bg));
+    });
+
+    testWidgets('参数卡：有协议多一行「协议」（行间细线多一条）；没有就没有', (tester) async {
+      // 沿参数卡里键的右边、值的左边那一列（版式 x = 卡左 + 内边距 + 70：键最宽「测速源」约 46，短出站名的值离右边排不到这里）
+      // 数细线：卡片色 → 分隔线色的次数。出站名用短的，长名字的值会排到这一列上
+      Future<int> dividers(String? protocol) async {
+        final ys = [for (var y = px(cols[2].top + 5); y < px(cols[2].bottom - 5); y++) y];
+        final colors = await sample(
+          tester,
+          MeowLook.classic,
+          Brightness.light,
+          [for (final y in ys) (px(cols[2].left + cardPadH + 70), y)],
+          record: _record(outbound: '香港 01', protocol: protocol),
+          preview: protocol == null ? 'meowc-share-no-protocol.png' : null,
+        );
+        // 线色带透明度、叠在卡片上才是画出来的颜色；边缘抗锯齿还会再淡一些，所以按「不是卡片色的一段」数
+        final cardColor = MeowTokens.light.elev, lineColor = Color.alphaBlend(MeowTokens.light.line, cardColor);
+        var runs = 0;
         for (var i = 1; i < colors.length; i++) {
-          final card = colors[i] == MeowTokens.light.elev, before = colors[i - 1] == MeowTokens.light.elev;
-          if (card != before) edges.add(ys[i]);
+          if (colors[i] != cardColor && colors[i - 1] == cardColor) runs++;
         }
-        return edges;
+        // 这一列不该碰到字：每个像素都在卡片色与线色之间（线的抗锯齿边缘是两者的混色；字是深色，混出来也在这个范围外）
+        bool between(double v, double a, double b) => v >= (a < b ? a : b) - 1 / 255 && v <= (a > b ? a : b) + 1 / 255;
+        for (final c in colors.toSet()) {
+          expect(
+            between(c.r, cardColor.r, lineColor.r) && between(c.g, cardColor.g, lineColor.g) && between(c.b, cardColor.b, lineColor.b),
+            isTrue,
+            reason: '$c 不在卡片色与线色之间',
+          );
+        }
+        return runs;
       }
 
-      final withNet = await cardEdges(_record(), null);
-      final without = await cardEdges(_record(network: null), null);
-      // 五张卡（主卡、上传 / 延迟、曲线、信息）各一对上下边：左边距这一列只穿过主卡、上传、曲线、信息四张
-      expect(withNet.length, 8);
-      expect(without.length, 8);
-      // 主卡、上传卡不动；曲线卡底边上移、信息卡顶边上移一行（版式 13 × 1.2 + 10 = 25.6，放大 2.4 倍约 61 像素），底边不动
-      expect(withNet.sublist(0, 5), without.sublist(0, 5));
-      expect(without[5] - withNet[5], inInclusiveRange(58, 65));
-      expect(without[6] - withNet[6], inInclusiveRange(58, 65));
-      expect(withNet[7], without[7]);
-      // 曲线卡不挤：多了这一行之后在这一列量到的高度（两头各被 24 的圆角削掉约 19 像素）≥ 210，
-      // 与收紧版式之前三行信息卡时（约 219）差不多（以前直接多一行只剩约 150，曲线压成一条扁带）
-      expect(withNet[5] - withNet[4], greaterThanOrEqualTo(210));
+      // 测速源、网络、协议、出站、出口五行 → 四条线；没有协议四行 → 三条
+      expect(await dividers('VLESS'), 4);
+      expect(await dividers(null), 3);
+    });
+
+    testWidgets('只测下载的源：上传格是「—」+「此测速源只测下载」，曲线图例只有下载（出图不出错）', (tester) async {
+      final record = _record(source: SpeedTestSource.microsoft);
+      expect(record.uploadSamples, isEmpty);
+      final c = SpeedTestShareContent.of(record)!;
+      expect((c.upload, c.uploadNote), (null, '此测速源只测下载'));
+      // 曲线卡图例：只有下载那个圆点（下载紫），没有上传的玫红
+      final legendY = px(chart.top + 1.6 * SpeedTestShareLayout.cqw + 1.9 * SpeedTestShareLayout.cqw * 1.3 / 2);
+      final colors = await sample(
+        tester,
+        MeowLook.classic,
+        Brightness.light,
+        [for (var x = px(chart.left + chart.width / 2); x < px(chart.right); x++) (x, legendY)],
+        record: record,
+        preview: 'meowc-share-download-only.png',
+      );
+      expect(colors, contains(MeowTokens.light.down));
+      expect(colors, isNot(contains(MeowTokens.light.accent)));
+      // 对照：Apple 两条都有
+      final both = await sample(
+        tester,
+        MeowLook.classic,
+        Brightness.light,
+        [for (var x = px(chart.left + chart.width / 2); x < px(chart.right); x++) (x, legendY)],
+      );
+      expect(both, contains(MeowTokens.light.down));
+      expect(both, contains(MeowTokens.light.accent));
+    });
+
+    testWidgets('四位数的下载：数字缩小到放得下，不越过下载卡的右内边距、不截断', (tester) async {
+      // 下载卡右内边距里的一列（版式 x = 卡右 − 内边距 + 6）：整列都是卡片色，没有紫色数字
+      Future<List<Color>> rightPad(double download) => sample(
+        tester,
+        MeowLook.classic,
+        Brightness.light,
+        [for (var y = px(cols[0].top + 25); y < px(cols[0].bottom - 25); y++) (px(cols[0].right - cardPadH + 6), y)],
+        record: _record(download: download, peak: download * 1.1),
+        preview: download >= 1000 ? 'meowc-share-four-digits.png' : null,
+      );
+      expect(await rightPad(1024.6), everyElement(MeowTokens.light.elev));
+      expect(await rightPad(486.4), everyElement(MeowTokens.light.elev));
+      // 数字确实画了（下载卡里有紫色）
+      final inside = await sample(
+        tester,
+        MeowLook.classic,
+        Brightness.light,
+        [for (var x = px(cols[0].left + cardPadH); x < px(cols[0].right - cardPadH); x++) (x, px(cols[0].center.dy))],
+        record: _record(download: 1024.6, peak: 1100),
+      );
+      expect(inside, contains(MeowTokens.light.down));
     });
 
     test('配色：液态玻璃不论磨砂调到多少都按缺省 0.5 推；经典就是 App 当前那一份', () {
@@ -525,7 +630,7 @@ void main() {
     }
 
     /// 真的去画图要在真实的事件循环里跑：直接调按钮的回调，等 [done] 拿到交出去的文件名与 PNG，回（文件名, 宽, 高, 左上角像素）；
-    /// [card] 给了时把主卡里 (80, 230) 那一点存进去
+    /// [card] 给了时把下载卡左侧内边距里 (100, 264) 那一点存进去
     Future<(String, int, int, Color)?> tapAndDecode(
         WidgetTester tester, String label, Completer<(String, Uint8List)> Function() done, {List<Color>? card}) {
       final ink = tester.widget<InkWell>(find.ancestor(of: find.text(label), matching: find.byType(InkWell)));
@@ -535,7 +640,7 @@ void main() {
         final (name, bytes) = await completer.future.timeout(const Duration(seconds: 20));
         final image = await _decode(bytes);
         final info = (name, image.width, image.height, await _pixel(image, 4, 4));
-        card?.add(await _pixel(image, 80, 230));
+        card?.add(await _pixel(image, 100, 264));
         image.dispose();
         return info;
       });
@@ -572,7 +677,7 @@ void main() {
 
         final out = await tapAndDecode(tester, '保存分享图', () => saved = Completer());
         final bg = brightness == Brightness.dark ? MeowTokens.dark.bg : MeowTokens.light.bg;
-        expect(out, ('MeowX-speedtest-20261029-1432.png', 1080, 1350, bg));
+        expect(out, ('MeowX-speedtest-20261029-1432.png', 1920, 1080, bg));
         expect(shareCalls, 0);
         await tester.pumpAndSettle();
       });
@@ -630,7 +735,7 @@ void main() {
       _preview('meowc-record-android.png', page!);
 
       final out = await tapAndDecode(tester, '分享', () => shared = Completer());
-      expect(out, ('MeowX-speedtest-20261029-1432.png', 1080, 1350, MeowTokens.light.bg));
+      expect(out, ('MeowX-speedtest-20261029-1432.png', 1920, 1080, MeowTokens.light.bg));
       expect(saveCalls, 0);
       await tester.pumpAndSettle();
     });
@@ -699,7 +804,7 @@ void main() {
     InkWell inkOf(WidgetTester tester, Finder button) =>
         tester.widget<InkWell>(find.descendant(of: button, matching: find.byType(InkWell)));
 
-    testWidgets('安卓：测完出现「分享」、在「测速记录」左边；点了把 1080 × 1350 的 PNG 交给系统分享，分享中再点不响应',
+    testWidgets('安卓：测完出现「分享」、在「测速记录」左边；点了把 1920 × 1080 的 PNG 交给系统分享，分享中再点不响应',
         (tester) async {
       var shareCalls = 0, saveCalls = 0;
       late Completer<(String, Uint8List)> shared;
@@ -749,7 +854,7 @@ void main() {
         image.dispose();
         return info;
       });
-      expect(out, (SpeedTestShareImage.fileName(record), 1080, 1350, MeowTokens.light.bg));
+      expect(out, (SpeedTestShareImage.fileName(record), 1920, 1080, MeowTokens.light.bg));
       expect(out!.$1, matches(RegExp(r'^MeowX-speedtest-\d{8}-\d{4}\.png$')));
 
       // 分享面板还开着：按钮转圈、不响应
@@ -799,7 +904,7 @@ void main() {
         await Future<void>.delayed(Duration.zero);
         return info;
       });
-      expect(out, (SpeedTestShareImage.fileName(record), 1080, 1350));
+      expect(out, (SpeedTestShareImage.fileName(record), 1920, 1080));
       expect(shareCalls, 0);
       await tester.pump();
       await tester.pump(const Duration(seconds: 1));

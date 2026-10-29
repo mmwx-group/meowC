@@ -195,7 +195,7 @@ class SpeedTestShareAction {
   }
 }
 
-/// 一条记录的详情：曲线、参数；只有测完的记录有分享图（1080 × 1350）：安卓「分享」弹系统分享面板，Windows「保存分享图」存文件；
+/// 一条记录的详情：曲线、参数；只有测完的记录有分享图（1920 × 1080）：安卓「分享」弹系统分享面板，Windows「保存分享图」存文件；
 /// 「用同样设置再测一次」预填后回测速页（pop 时带 true）。
 class SpeedTestRecordPage extends StatelessWidget {
   const SpeedTestRecordPage({
@@ -815,6 +815,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
             children: [
               _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms'),
               _kv(mm, '经由', r.isDirect ? '直连（DIRECT）' : (r.via ?? r.outbound)),
+              if (r.protocol != null) _kv(mm, '协议', r.protocol!),
               _kv(mm, '测速服务器', r.server ?? '–'),
               _kv(mm, '测速源 · 线程', '${r.source.title} · ${r.threadsTitle}'),
               if (r.network != null) _kv(mm, '网络', r.network!),
