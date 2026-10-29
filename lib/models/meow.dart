@@ -25,7 +25,7 @@ enum LatencyMode {
   /// HTTPS 延迟（去掉握手的 unified 口径，阈值 100 / 200）
   url,
 
-  /// 真连接延迟（含 TCP + TLS 握手的完整往返，阈值 300 / 600）
+  /// 真连接延迟（含 TCP + TLS 握手的完整往返，阈值 500 / 1000：2026-10-29 从 300 / 600 放宽，工单 #1429，同 iOS）
   urlFull,
 
   /// TCPing（只连节点入口端口，阈值 100 / 200）
@@ -40,7 +40,7 @@ enum LatencyMode {
   /// （良好上限, 一般上限）
   (int, int) get thresholds => switch (this) {
     LatencyMode.url => (100, 200),
-    LatencyMode.urlFull => (300, 600),
+    LatencyMode.urlFull => (500, 1000),
     LatencyMode.tcping => (100, 200),
   };
 

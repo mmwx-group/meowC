@@ -12,10 +12,11 @@ void main() {
     expect(latencyColor(201, LatencyMode.tcping, mm), mm.slow);
   });
 
-  test('真连接阈值 300 / 600', () {
-    expect(latencyColor(300, LatencyMode.urlFull, mm), mm.good);
-    expect(latencyColor(600, LatencyMode.urlFull, mm), mm.mid);
-    expect(latencyColor(601, LatencyMode.urlFull, mm), mm.slow);
+  test('真连接阈值 500 / 1000（2026-10-29 从 300 / 600 放宽）', () {
+    expect(latencyColor(500, LatencyMode.urlFull, mm), mm.good);
+    expect(latencyColor(501, LatencyMode.urlFull, mm), mm.mid);
+    expect(latencyColor(1000, LatencyMode.urlFull, mm), mm.mid);
+    expect(latencyColor(1001, LatencyMode.urlFull, mm), mm.slow);
   });
 
   test('延迟值语义', () {
