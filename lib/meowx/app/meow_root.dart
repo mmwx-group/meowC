@@ -22,6 +22,7 @@ import '../panel/po0.dart';
 import '../panel/realtime.dart';
 import '../state/battery_prompt.dart';
 import '../state/connection.dart';
+import '../state/ggy_reporter.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
@@ -51,6 +52,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<bool> _initSub;
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
+  late final ProviderSubscription<(bool, String, bool)> _ggySub;
   late final ProviderSubscription<bool> _batterySub;
   final List<ProviderSubscription<Object?>> _wifiSubs = [];
   RealtimeClient? _realtime;
@@ -96,6 +98,23 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         } else {
           unawaited(reporter.refresh(force: prev != null && (!prev.$2 || prev.$1 != token || prev.$3 != custom)));
         }
+      },
+      fireImmediately: true,
+    );
+    // GGY 加白：以设置开关为准，不跟账号走（退出登录不清，没登录也报）。开着且有 token 时，启动（核心 init 完）、
+    // 开关刚打开、新增 token 时立刻报一次；只删了 token 不报；关掉或 token 删光就停
+    _ggySub = ref.listenManual(
+      Provider<(bool, String, bool)>((r) {
+        // token 列表拼成字符串比较：freezed 列表的 == 只认同一个实例
+        final s = r.watch(meowSettingProvider.select((s) => (s.ggyEnabled, s.ggyTokens.join('\n'))));
+        return (s.$1, s.$2, r.watch(initProvider));
+      }),
+      (prev, next) {
+        final (enabled, tokens, inited) = next;
+        if (!inited) return;
+        final added =
+            prev == null || !prev.$3 || (enabled && !prev.$1) || tokens.split('\n').any((t) => !prev.$2.split('\n').contains(t));
+        unawaited(ref.read(ggyReporterProvider).sync(reportNow: added));
       },
       fireImmediately: true,
     );
@@ -204,6 +223,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _initSub.close();
     _realtimeSub.close();
     _po0Sub.close();
+    _ggySub.close();
     _batterySub.close();
     for (final sub in _wifiSubs) {
       sub.close();

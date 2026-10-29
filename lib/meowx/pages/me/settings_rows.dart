@@ -10,12 +10,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../config/meow_patch.dart';
+import '../../panel/ggy.dart';
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
 import '../../update/update_state.dart';
 import '../settings/custom_rules_page.dart';
+import '../settings/ggy_tokens_page.dart';
 import '../settings/overrides_pages.dart';
 import '../settings/po0_servers_page.dart';
 import '../settings/proxy_apps_page.dart';
@@ -243,7 +245,7 @@ class LocalProxyRows extends ConsumerWidget {
   }
 }
 
-/// 订阅同步：同步间隔 / po0 加白 / 自定义 po0 服务器。
+/// 订阅同步：同步间隔 / po0 加白 / 自定义 po0 服务器 / GGY 加白 / GGY token。
 class SyncRows extends ConsumerWidget {
   const SyncRows({super.key});
 
@@ -252,6 +254,8 @@ class SyncRows extends ConsumerWidget {
     final hours = ref.watch(meowSettingProvider.select((s) => s.syncIntervalHours));
     final po0 = ref.watch(meowSettingProvider.select((s) => s.po0Enabled));
     final po0Custom = ref.watch(meowSettingProvider.select((s) => s.po0Custom.length));
+    final ggy = ref.watch(meowSettingProvider.select((s) => s.ggyEnabled));
+    final ggyTokens = ref.watch(meowSettingProvider.select((s) => s.ggyTokens.length));
     return MeRows(
       footer: '到期后下次进入 App 自动重拉当前订阅。',
       children: [
@@ -283,6 +287,21 @@ class SyncRows extends ConsumerWidget {
           value: po0Custom == 0 ? null : '$po0Custom 条',
           chevron: true,
           onTap: () => mePush(context, const Po0ServersPage()),
+        ),
+        // 同上：打开 / 新增 token 立刻报，关闭或删光停表（MeowRoot 统一处理）；不跟账号走
+        MeSwitchRow(
+          label: 'GGY 加白',
+          subtitle: ggyDescription,
+          // 三端同一句说明，整句显示、不截断
+          subtitleMaxLines: null,
+          value: ggy,
+          onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(ggyEnabled: v)),
+        ),
+        MeRow(
+          label: 'GGY token',
+          value: ggyTokens == 0 ? null : '$ggyTokens 个',
+          chevron: true,
+          onTap: () => mePush(context, const GgyTokensPage()),
         ),
       ],
     );

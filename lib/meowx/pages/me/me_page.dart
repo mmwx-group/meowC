@@ -308,7 +308,7 @@ class _EntryList extends ConsumerWidget {
         entry(
           _Glyph.sync,
           '订阅同步',
-          '${syncIntervalLabels[meow.syncIntervalHours] ?? syncIntervalLabels[24]}${meow.po0Enabled ? ' · po0 加白' : ''}',
+          '${syncIntervalLabels[meow.syncIntervalHours] ?? syncIntervalLabels[24]}${meow.po0Enabled ? ' · po0 加白' : ''}${meow.ggyEnabled ? ' · GGY 加白' : ''}',
           page('订阅同步', const SyncRows()),
         ),
         // 只有一个开关，直接放在列表里，不进二级页

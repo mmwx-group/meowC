@@ -323,6 +323,7 @@ class MeRow extends StatelessWidget {
     required this.label,
     this.subtitle,
     this.subtitleColor,
+    this.subtitleMaxLines = 3,
     this.leading,
     this.value,
     this.mono = false,
@@ -334,6 +335,9 @@ class MeRow extends StatelessWidget {
   final String label;
   final String? subtitle;
   final Color? subtitleColor;
+
+  /// 副标题最多几行（null = 不限，整句说明要完整显示时用）
+  final int? subtitleMaxLines;
   final Widget? leading;
   final String? value;
   final bool mono;
@@ -371,8 +375,9 @@ class MeRow extends StatelessWidget {
                   if (subtitle != null)
                     Text(
                       subtitle!,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
+                      maxLines: subtitleMaxLines,
+                      // 不限行数时别设省略号：maxLines 为 null 时省略号会把整段截成一行
+                      overflow: subtitleMaxLines == null ? null : TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: dense ? MeowFont.caption2 : MeowFont.caption,
                         color: subtitleColor ?? mm.t2,
@@ -436,6 +441,7 @@ class MeSwitchRow extends StatelessWidget {
     required this.label,
     this.subtitle,
     this.subtitleColor,
+    this.subtitleMaxLines = 3,
     required this.value,
     required this.onChanged,
   });
@@ -444,6 +450,7 @@ class MeSwitchRow extends StatelessWidget {
   final String label;
   final String? subtitle;
   final Color? subtitleColor;
+  final int? subtitleMaxLines;
   final bool value;
   final ValueChanged<bool>? onChanged;
 
@@ -455,6 +462,7 @@ class MeSwitchRow extends StatelessWidget {
       label: label,
       subtitle: subtitle,
       subtitleColor: subtitleColor,
+      subtitleMaxLines: subtitleMaxLines,
       // 紧凑行里把开关缩到设计稿的 42×26
       trailing: MeDense.of(context) ? SizedBox(height: 26, child: FittedBox(child: sw)) : sw,
       onTap: onChanged == null ? null : () => onChanged!(!value),

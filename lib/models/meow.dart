@@ -313,6 +313,13 @@ abstract class MeowSettings with _$MeowSettings {
     /// 以前只存 IP、键名是 po0DirectIps：沿用这个键，旧数据原样读成主机
     @JsonKey(name: 'po0DirectIps') @Default([]) List<String> po0DirectHosts,
 
+    /// GGY（咕咕云）客户端 IP 加白：打开后定时 / 网络变化时直连打开 [ggyTokens] 各自的白名单分享链接。
+    /// 本机偏好，退出登录不清，没登录也报
+    @Default(false) bool ggyEnabled,
+
+    /// GGY 白名单分享链接里的 token（规范化后的原文，去重，最多 20 个）；界面 / 日志里一律用 `maskGgyToken` 的脱敏写法
+    @Default([]) List<String> ggyTokens,
+
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,
 

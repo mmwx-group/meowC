@@ -27,6 +27,8 @@ import (
 
 type Po0ReportParams struct {
 	Urls []string `json:"urls"`
+	// 缺省 = po0；"ggy" = GGY 加白（GET、校验证书，见 meow_ggy.go）
+	Kind string `json:"kind,omitempty"`
 }
 
 type Po0ReportResult struct {
@@ -98,7 +100,7 @@ func meowPo0Redact(s string) string {
 	})
 }
 
-// handleMeowPo0Report 并发向每个 url 发一次空 body 的 POST，逐个返回状态码与响应体 / 错误。
+// handleMeowPo0Report 并发向每个 url 发一次空 body 的 POST（kind=ggy 时是 GET），逐个返回状态码与响应体 / 错误。
 func handleMeowPo0Report(paramsString string, fn func(string)) {
 	go func() {
 		var params Po0ReportParams
@@ -107,16 +109,19 @@ func handleMeowPo0Report(paramsString string, fn func(string)) {
 			return
 		}
 		results := make([]Po0ReportResult, len(params.Urls))
-		client := meowPo0Client()
+		label, client, reportOne, redact := "po0", meowPo0Client(), meowPo0ReportOne, meowPo0Redact
+		if params.Kind == meowReportKindGgy {
+			label, client, reportOne, redact = "ggy", meowGgyClient(meowGgyRoots()), meowGgyReportOne, meowGgyRedact
+		}
 		var wg sync.WaitGroup
 		for i, u := range params.Urls {
 			wg.Add(1)
 			go func(i int, u string) {
 				defer wg.Done()
-				results[i] = meowPo0ReportOne(client, u)
+				results[i] = reportOne(client, u)
 				if results[i].Error != "" {
-					// url 与错误（url.Error 带着整个 url）里都有 po0 token，进日志前脱敏
-					log.Warnln("[MeowX] po0 report %s: %s", meowPo0Redact(u), meowPo0Redact(results[i].Error))
+					// url 与错误（url.Error 带着整个 url）里都有 token，进日志前脱敏
+					log.Warnln("[MeowX] %s report %s: %s", label, redact(u), redact(results[i].Error))
 				}
 			}(i, u)
 		}

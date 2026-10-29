@@ -6,11 +6,14 @@ import 'package:bett_box/meowx/pages/me/me_sheet.dart';
 import 'package:bett_box/meowx/pages/me/platform_rows.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
 import 'package:bett_box/meowx/pages/settings/overrides_pages.dart';
+import 'package:bett_box/meowx/pages/settings/ggy_tokens_page.dart';
 import 'package:bett_box/meowx/pages/settings/po0_servers_page.dart';
+import 'package:bett_box/meowx/panel/ggy.dart';
 import 'package:bett_box/meowx/panel/po0.dart';
 import 'package:bett_box/meowx/pages/settings/sys_proxy_bypass_page.dart';
 import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/connection.dart';
+import 'package:bett_box/meowx/state/ggy_reporter.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
@@ -19,6 +22,7 @@ import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -719,5 +723,71 @@ void main() {
     await tester.tap(find.byTooltip('删除').first);
     await tester.pump();
     expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.map((c) => c.address), ['[2001:db8::1]']);
+  });
+
+  testWidgets('GGY 加白：开关在 po0 后面、带说明；token 页只出现脱敏写法与上次结果；添加时解析整条链接、校验、去重；点 × 删除', (tester) async {
+    // 只用假 token
+    const a = 'ctecsfw_TESTtoken0000000000AAAA';
+    const b = 'ctecsfw_TESTtoken0000000000BBBB';
+    const meow = MeowSettings(ggyTokens: [a]);
+    await _pump(
+      tester,
+      const SingleChildScrollView(child: SyncRows()),
+      size: const Size(320, 1400),
+      overrides: [
+        ..._overrides(meow: meow),
+        ggyResultsProvider.overrideWith(
+          (ref) => {a: GgyResult(kind: GgyResultKind.tokenInvalid, reason: '白名单分享链接无效或已失效', at: DateTime(2026))},
+        ),
+      ],
+    );
+    expect(find.text(ggyDescription), findsOneWidget);
+    // 说明整句显示：不像 po0 那行那样截到 3 行
+    final desc = tester.renderObject<RenderParagraph>(find.text(ggyDescription));
+    expect(desc.didExceedMaxLines, isFalse);
+    expect(desc.size.height, greaterThan(tester.renderObject<RenderParagraph>(find.textContaining('上报到 po0')).size.height));
+    expect(tester.getTopLeft(find.text('GGY 加白')).dy, greaterThan(tester.getTopLeft(find.text('自定义 po0 服务器')).dy));
+    expect(find.text('1 个'), findsOneWidget);
+    await tester.tap(find.text('GGY 加白'));
+    await tester.pump();
+    expect(_container(tester, SyncRows).read(meowSettingProvider).ggyEnabled, isTrue);
+
+    await tester.tap(find.text('GGY token'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GgyTokensPage), findsOneWidget);
+    expect(find.text('ctecsfw_••••AAAA'), findsOneWidget);
+    expect(find.text('token 无效或已失效'), findsOneWidget);
+    expect(find.textContaining('重新生成分享链接'), findsOneWidget);
+    expect(find.textContaining('TESTtoken'), findsNothing);
+
+    // 添加：不合法 → 提示「token 格式不对」，不保存；输入框是密码样式
+    await tester.tap(find.byTooltip('添加'));
+    await tester.pumpAndSettle();
+    final field = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    expect(tester.widget<TextField>(field).obscureText, isTrue);
+    await tester.enterText(field, 'abc');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pump();
+    expect(find.text(ggyTokenInvalidMessage), findsOneWidget);
+
+    // 同一个 token 的整条链接 → 已添加过
+    await tester.enterText(field, ' ${ggyReportUrl(a)} ');
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pump();
+    expect(find.text(ggyTokenDuplicateMessage), findsOneWidget);
+
+    // 合法的整条链接：存取出来的 token，列表里脱敏、还没报过
+    await tester.enterText(field, ggyReportUrl(b));
+    await tester.tap(find.widgetWithText(FilledButton, '添加'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [a, b]);
+    expect(find.text('ctecsfw_••••BBBB'), findsOneWidget);
+    expect(find.text('还没报过'), findsOneWidget);
+    expect(find.textContaining('TESTtoken'), findsNothing);
+
+    await tester.tap(find.byTooltip('删除').first);
+    await tester.pump();
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [b]);
   });
 }
