@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -64,30 +65,43 @@ void main() {
       expect(MeowScrimMap.scrimAt(Colors.white, fillAlpha: 0.1, dark: true, texts: const [(Colors.white, 21.0)]), 0.85);
     });
 
-    test('网格：每格按自己的背景算，再取 3×3 邻格最大；遮罩是黑色 + 不透明度', () {
-      const w = 5, h = 4;
+    test('网格：暗处足额；往外扩 3 格再抹开，相邻格之间平缓（不沿轮廓描出一格一格的亮边）；远处不垫；遮罩是黑色 + 不透明度', () {
+      const w = 25, h = 21;
+      bool isRock(int x, int y) => (x - 12).abs() <= 1 && (y - 10).abs() <= 1; // 正中间 3×3 格是山
       final rgba = Uint8List(w * h * 4);
-      for (var i = 0; i < w * h; i++) {
-        final c = i == 2 * w + 2 ? rock : sky; // 正中间一格是山
-        rgba
-          ..[i * 4] = (c.r * 255).round()
-          ..[i * 4 + 1] = (c.g * 255).round()
-          ..[i * 4 + 2] = (c.b * 255).round()
-          ..[i * 4 + 3] = 255;
+      for (var y = 0; y < h; y++) {
+        for (var x = 0; x < w; x++) {
+          final c = isRock(x, y) ? rock : sky, i = y * w + x;
+          rgba
+            ..[i * 4] = (c.r * 255).round()
+            ..[i * 4 + 1] = (c.g * 255).round()
+            ..[i * 4 + 2] = (c.b * 255).round()
+            ..[i * 4 + 3] = 255;
+        }
       }
       final want = texts(tokens(Brightness.light, 0), 0);
       final grid = MeowScrimMap.build(rgba, w, h, fillAlpha: 0.02, dark: false, texts: want);
       final need = MeowScrimMap.scrimAt(rock, fillAlpha: 0.02, dark: false, texts: want);
+      expect(need, greaterThan(0.3));
+      // 抹开之后离暗处 3 格以内多数地方仍接近足额，再远逐渐淡掉；扩 + 抹的半径之外是 0
+      final reach = MeowScrimMap.spread + (3 * MeowScrimMap.soften).ceil();
       for (var y = 0; y < h; y++) {
         for (var x = 0; x < w; x++) {
-          final near = (x - 2).abs() <= 1 && (y - 2).abs() <= 1;
-          expect(grid[y * w + x], closeTo(near ? need : 0, 1e-6), reason: '($x, $y)');
+          final v = grid[y * w + x];
+          final d = math.max((x - 12).abs(), (y - 10).abs()) - 1; // 到山那一块的格数（0 = 在山里）
+          if (isRock(x, y)) expect(v, closeTo(need, 1e-6), reason: '($x, $y) 山里足额');
+          if (d > reach) expect(v, 0, reason: '($x, $y) 远处不垫');
+          if (x + 1 < w) expect((v - grid[y * w + x + 1]).abs(), lessThan(0.3 * need), reason: '($x, $y) 横向平缓');
+          if (y + 1 < h) expect((v - grid[(y + 1) * w + x]).abs(), lessThan(0.3 * need), reason: '($x, $y) 纵向平缓');
         }
       }
+      expect(grid[10 * w + 12 + 2], greaterThan(0.9 * need)); // 紧挨着山的那一格：字压到边上也够
+      expect(grid[10 * w + 12 + 3], greaterThan(0.75 * need)); // 再往外一格：雾慢慢淡下去
       final mask = MeowScrimMap.mask(grid);
+      final c = (10 * w + 12) * 4;
       expect(mask.length, w * h * 4);
-      expect([mask[(2 * w + 2) * 4], mask[(2 * w + 2) * 4 + 1], mask[(2 * w + 2) * 4 + 2]], [0, 0, 0]);
-      expect(mask[(2 * w + 2) * 4 + 3], (need * 255).round());
+      expect([mask[c], mask[c + 1], mask[c + 2]], [0, 0, 0]);
+      expect(mask[c + 3], (need * 255).round());
       expect(mask[3], 0);
     });
   });

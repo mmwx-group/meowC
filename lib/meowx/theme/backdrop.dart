@@ -433,8 +433,14 @@ abstract final class MeowScrimMap {
     return hi;
   }
 
-  /// 每格一个像素的背景（RGBA，宽 [w] 高 [h]）→ 每格的垫层不透明度。每格再取周围 3×3 格里最大的：
-  /// 一行字跨在两格之间、或贴着亮暗交界时也够（双线性放大会把格子之间抹平，这样不会抹到要求以下）
+  /// 往外扩几格、再按多大的 σ（格）抹开：只扩一格、不抹的话，卡片里会沿着暗处的轮廓描出一圈一格一格的亮边
+  /// （模拟器上看到的：山的轮廓在卡片里成了锯齿状的白边）。扩 3 格再抹 1.5 格，暗处附近是一片往外淡下去的雾。
+  static const spread = 3;
+  static const soften = 1.5;
+
+  /// 每格一个像素的背景（RGBA，宽 [w] 高 [h]）→ 每格的垫层不透明度：先按每格自己的背景算，取周围 [spread] 格里最大的，
+  /// 再按 [soften] 高斯抹开，最后不低于这一格自己的要求。暗处里面（离边 [spread] 格以上）抹开后仍有要求的 97% 以上，
+  /// 再取一次自己的要求就是足额；一行字跨在两格之间、贴着亮暗交界时也够
   static Float32List build(
     Uint8List rgba,
     int w,
@@ -456,21 +462,72 @@ abstract final class MeowScrimMap {
         cap: cap,
       );
     }
-    final out = Float32List(w * h);
+    final spreadOut = _separable(raw, w, h, (line) => _maxLine(line, spread));
+    final kernel = _gaussKernel(soften);
+    final soft = _separable(spreadOut, w, h, (line) => _convolveLine(line, kernel));
+    for (var i = 0; i < soft.length; i++) {
+      soft[i] = math.max(soft[i], raw[i]);
+    }
+    return soft;
+  }
+
+  /// 先对每一行、再对每一列做 [op]（方窗取大与高斯都可分离）
+  static Float32List _separable(Float32List src, int w, int h, Float32List Function(Float32List) op) {
+    final rows = Float32List(w * h);
     for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        var m = 0.0;
-        for (var dy = -1; dy <= 1; dy++) {
-          final yy = y + dy;
-          if (yy < 0 || yy >= h) continue;
-          for (var dx = -1; dx <= 1; dx++) {
-            final xx = x + dx;
-            if (xx < 0 || xx >= w) continue;
-            m = math.max(m, raw[yy * w + xx]);
-          }
-        }
-        out[y * w + x] = m;
+      rows.setRange(y * w, y * w + w, op(Float32List.sublistView(src, y * w, y * w + w)));
+    }
+    final out = Float32List(w * h);
+    final col = Float32List(h);
+    for (var x = 0; x < w; x++) {
+      for (var y = 0; y < h; y++) {
+        col[y] = rows[y * w + x];
       }
+      final done = op(col);
+      for (var y = 0; y < h; y++) {
+        out[y * w + x] = done[y];
+      }
+    }
+    return out;
+  }
+
+  static Float32List _maxLine(Float32List line, int r) {
+    final out = Float32List(line.length);
+    for (var i = 0; i < line.length; i++) {
+      var m = 0.0;
+      for (var j = math.max(0, i - r); j <= math.min(line.length - 1, i + r); j++) {
+        m = math.max(m, line[j]);
+      }
+      out[i] = m;
+    }
+    return out;
+  }
+
+  static Float32List _gaussKernel(double sigma) {
+    final r = (3 * sigma).ceil();
+    final k = Float32List(2 * r + 1);
+    var sum = 0.0;
+    for (var i = -r; i <= r; i++) {
+      final v = math.exp(-(i * i) / (2 * sigma * sigma));
+      k[i + r] = v;
+      sum += v;
+    }
+    for (var i = 0; i < k.length; i++) {
+      k[i] /= sum;
+    }
+    return k;
+  }
+
+  /// 一维卷积，越界按边上的值延伸（屏幕边上不往下掉）
+  static Float32List _convolveLine(Float32List line, Float32List kernel) {
+    final r = kernel.length ~/ 2, n = line.length;
+    final out = Float32List(n);
+    for (var i = 0; i < n; i++) {
+      var s = 0.0;
+      for (var j = -r; j <= r; j++) {
+        s += kernel[j + r] * line[(i + j).clamp(0, n - 1)];
+      }
+      out[i] = s;
     }
     return out;
   }
