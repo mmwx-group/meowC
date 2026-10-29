@@ -10,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/direct_profile.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
-import '../state/status.dart';
 import 'client.dart';
 import 'models.dart';
 import 'node_match.dart';
@@ -133,12 +132,6 @@ class AccountActions {
 
   Future<void> _store(String base, LoginSuccess ok) async {
     _update((a) => a.copyWith(host: base, token: ok.token, nickname: ok.nickname, avatarUrl: ok.avatarUrl));
-    _reapplyRules();
-  }
-
-  /// 主控直连规则跟着登录状态走（见 `panelDirectRules`）：连着时重新套用一次配置，登录后紧接着的账户请求就能直连主控。
-  void _reapplyRules() {
-    if (ref.read(isRunningProvider)) globalState.appController.applyProfileDebounce(silence: true);
   }
 
   /// 登出：先删掉从这个主控导入的订阅档（用户的配置不该留在设备上），再清 token / 昵称 / 头像（保留主控地址）与跟账号走的数据。
@@ -172,9 +165,8 @@ class AccountActions {
     _clearAccountData();
   }
 
-  /// 退出 / 过期共用：token 已清之后，撤掉主控直连规则并清空跟账号走的内存数据。
+  /// 退出 / 过期共用：token 已清之后，清空跟账号走的内存数据。
   void _clearAccountData() {
-    _reapplyRules();
     ref.read(remoteSubsProvider.notifier).state = const AsyncValue.data([]);
     _setMedals(const []);
     _setUnlocks(const []);

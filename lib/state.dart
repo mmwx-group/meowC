@@ -1064,14 +1064,13 @@ class GlobalState {
     }
 
     rawConfig.remove('rule');
-    // MeowX：阻止 QUIC → po0 直连 / 绕过代理 / 推送直连 / 自定义规则 / 主控直连放最前（先于订阅规则）；主控直连要看各订阅档的地址
-    // （订阅域名），自定义规则的「代理」要看代理组与订阅规则（推断主代理组），界面显示的组名也从这份记下
+    // MeowX：阻止 QUIC → po0 直连 / 绕过代理 / 推送直连 / 自定义规则放最前（先于订阅规则）；
+    // 自定义规则的「代理」要看代理组与订阅规则（推断主代理组），界面显示的组名也从这份记下
     if (profileId == config.currentProfile?.id) captureMainProxyGroup(profileId, rawConfig['proxy-groups'], rules);
     rawConfig['rules'] = meowRuleTable(
       config.meow,
       quicRules: quicRules,
       rules: rules,
-      subscriptionUrls: config.profiles.map((p) => p.url),
       proxyGroups: rawConfig['proxy-groups'],
     );
     return rawConfig;

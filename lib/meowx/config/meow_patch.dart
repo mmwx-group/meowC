@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:bett_box/models/meow.dart';
 
 import '../panel/po0.dart';
@@ -76,18 +74,16 @@ void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {
   rawConfig['hosts'] = hosts;
 }
 
-/// 返回要前置到规则表最前的规则（po0 直连 → 绕过代理 → 推送直连 → 自定义规则 → 主控直连）。
+/// 返回要前置到规则表最前的规则（po0 直连 → 绕过代理 → 推送直连 → 自定义规则）。
 /// 自定义规则排在绕过代理 / 推送直连之后（同 iOS：绕过表与推送直连先于全部规则判断，用户开着的这两项不被自定义规则盖掉），
-/// 仍在全部订阅规则之前。主控直连排在自定义规则之后：直连连不上主控的网络（域名被封 / 污染）里，用户把主控域名指给代理组
-/// 才登得上（用户实报：主控域名选了代理组还是 DIRECT）；同 iOS / macOS。「阻止 QUIC」的规则排在这些之前（见 [meowRuleTable]）。
+/// 仍在全部订阅规则之前。「阻止 QUIC」的规则排在这些之前（见 [meowRuleTable]）。
+/// 以前最后还有一组主控直连（登录的主控 + 订阅域名），2026-10-29 用户要求去掉：主控按订阅规则走，同 iOS / macOS。
 /// po0 直连只在「po0 加白」开关打开（或 debug 注入 [debugPo0Urls]）时生效，主机（IP 或域名）来自最近一次的上报目标
 /// （主控列表 + 自己添加的）。
-/// [subscriptionUrls]：本机各订阅档的地址，主控样式的那些（订阅域名）也直连，见 [panelDirectRules]。
 /// [proxyGroups] / [rules]：要交给内核的那份配置的代理组与订阅规则，自定义规则的「代理」据此推断主代理组
 /// （[resolveMainProxyGroup]）。
 List<String> meowPrependRules(
   MeowSettings meow, {
-  Iterable<String> subscriptionUrls = const [],
   bool? debugPo0,
   Object? proxyGroups,
   Object? rules,
@@ -96,54 +92,23 @@ List<String> meowPrependRules(
   ...bypassRules(meow.bypassDomains, meow.bypassCidrs),
   if (meow.pushDirect) ...pushDirectRules,
   if (meow.customRules.isNotEmpty) ...customRuleLines(meow.customRules, resolveMainProxyGroup(proxyGroups, rules)),
-  ...panelDirectRules(meow.account, subscriptionUrls),
 ];
 
 /// 写回 `rawConfig['rules']` 的整张规则表：阻止 QUIC → MeowX 前置规则（[meowPrependRules]）→ 订阅规则（Bettbox 处理过的）。
 /// 阻止 QUIC 排在全部 MeowX 前置规则之前，自定义规则命中的域名也照样丢 UDP 443（同 iOS：QUIC 在收包处就丢、先于一切规则）；
-/// 副作用是绕过代理 / 推送直连 / 主控直连 / po0 直连的 UDP 443 也被丢（主控与 po0 的上报走 TCP，不受影响）。
+/// 副作用是绕过代理 / 推送直连 / po0 直连的 UDP 443 也被丢（po0 的上报走 TCP，不受影响）。
 /// [rules] 也用来推断自定义规则「代理」的主代理组（不含阻止 QUIC 的规则）。在 Bettbox 的 `patchRawConfig` 末尾调用。
 List<dynamic> meowRuleTable(
   MeowSettings meow, {
   List<String> quicRules = const [],
   required List<dynamic> rules,
-  Iterable<String> subscriptionUrls = const [],
   Object? proxyGroups,
   bool? debugPo0,
 }) => [
   ...quicRules,
-  ...meowPrependRules(meow, subscriptionUrls: subscriptionUrls, debugPo0: debugPo0, proxyGroups: proxyGroups, rules: rules),
+  ...meowPrependRules(meow, debugPo0: debugPo0, proxyGroups: proxyGroups, rules: rules),
   ...rules,
 ];
-
-/// 主控直连（与 iOS / macOS 的 `PanelDirect` 同一规则）：登录了的主控，加上本机订阅里形如主控订阅地址的那些主机
-/// （主控的「订阅域名」只放行 `/x/…`、`/api/clash/subscribe`、`/api/user/package-subscribe`、`/api/subscribe`，口径同主控）。
-/// 开着代理时，客户端访问主控（账户订阅列表、奖牌 / 解锁、白名单 token…）会按订阅规则分流、多半被分到节点上，
-/// 有的节点连不上主控（用户实报：开了代理拉账户订阅一直超时，关代理正常）。主控生成的订阅里不带这条规则，由客户端补。
-/// 别家机场的订阅不算：有的订阅源在本地网络上本来就要经代理才拉得到。只在规则模式下生效（全局模式不看规则）。
-List<String> panelDirectRules(MeowAccount account, Iterable<String> subscriptionUrls) {
-  final hosts = <String>[];
-  void add(String? host) {
-    final h = (host ?? '').toLowerCase().replaceAll('[', '').replaceAll(']', '');
-    if (h.isNotEmpty && !hosts.contains(h)) hosts.add(h);
-  }
-
-  if (account.token.isNotEmpty) add(Uri.tryParse(account.host)?.host);
-  for (final raw in subscriptionUrls) {
-    final uri = Uri.tryParse(raw);
-    if (uri != null && isPanelSubscriptionPath(uri.path)) add(uri.host);
-  }
-  return [
-    for (final h in hosts)
-      if (InternetAddress.tryParse(h) case final ip?)
-        ip.type == InternetAddressType.IPv6 ? 'IP-CIDR6,$h/128,DIRECT,no-resolve' : 'IP-CIDR,$h/32,DIRECT,no-resolve'
-      else
-        'DOMAIN,$h,DIRECT',
-  ];
-}
-
-bool isPanelSubscriptionPath(String path) =>
-    path.startsWith('/x/') || const {'/api/clash/subscribe', '/api/user/package-subscribe', '/api/subscribe'}.contains(path);
 
 void applyMeowAuthentication(Map<String, dynamic> rawConfig, MeowSettings meow) {
   final u = meow.localProxy.username.trim();

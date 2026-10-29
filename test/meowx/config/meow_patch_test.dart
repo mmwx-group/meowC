@@ -33,30 +33,6 @@ void main() {
       ]);
       expect(meowPrependRules(const MeowSettings()), isEmpty);
     });
-    test('主控直连：登录的主控 + 主控样式的订阅地址（订阅域名），排在绕过代理之后；别家订阅、没登录不算', () {
-      const account = MeowAccount(host: 'https://Panel.Example.com:8443', token: 't');
-      final urls = [
-        'https://sub.example.com/x/abc',
-        'https://SUB.example.com/api/clash/subscribe?token=t',
-        'https://cdn.example.net/api/user/package-subscribe?token=t',
-        'https://airport.example.org/link/xyz',
-        '',
-      ];
-      expect(meowPrependRules(const MeowSettings(account: account, bypassDomains: ['x.com']), subscriptionUrls: urls), [
-        'DOMAIN,x.com,DIRECT',
-        'DOMAIN,panel.example.com,DIRECT',
-        'DOMAIN,sub.example.com,DIRECT',
-        'DOMAIN,cdn.example.net,DIRECT',
-      ]);
-      // 没登录：只看订阅地址
-      expect(panelDirectRules(const MeowAccount(host: 'https://panel.example.com'), urls.take(1)), ['DOMAIN,sub.example.com,DIRECT']);
-      // 主控是 IP
-      expect(panelDirectRules(const MeowAccount(host: 'https://203.0.113.9:8443', token: 't'), const []),
-          ['IP-CIDR,203.0.113.9/32,DIRECT,no-resolve']);
-      expect(panelDirectRules(const MeowAccount(host: 'https://[2001:db8::9]', token: 't'), const []),
-          ['IP-CIDR6,2001:db8::9/128,DIRECT,no-resolve']);
-      expect(panelDirectRules(const MeowAccount(), const ['https://airport.example.org/sub']), isEmpty);
-    });
     test('po0 直连：开关关着不加；开着按缓存主机生成 v4 / v6 / 域名规则且排在最前', () {
       const hosts = ['209.248.57.93', '2001:db8::1', 'fw.example.com'];
       // 关着：有缓存也不加
