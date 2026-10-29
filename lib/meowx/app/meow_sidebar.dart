@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/connection.dart';
 import '../state/format.dart';
 import '../state/node_count.dart';
+import '../theme/button_fill.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 import 'meow_tab.dart';
@@ -182,6 +183,7 @@ class _CompactPower extends ConsumerWidget {
 }
 
 /// 侧栏底部的常驻连接控制：任何页面都能开关，并看得到当前节点和接管方式。
+/// 已连接 = 樱粉底；液态玻璃主题下不换底色（同 iOS：全部卡片一致），连没连上都是侧栏玻璃卡片里的次级块，状态看圆点与电源键。
 class _ConnectionCard extends ConsumerWidget {
   const _ConnectionCard({required this.onOpenNodes});
   final VoidCallback onOpenNodes;
@@ -214,7 +216,7 @@ class _ConnectionCard extends ConsumerWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: on ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(color: on && !mm.glass ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -311,8 +313,8 @@ class _TakeoverToggles extends ConsumerWidget {
           label: label,
           excludeSemantics: true,
           child: Material(
-            color: value ? mm.t1 : mm.elev,
-            borderRadius: BorderRadius.circular(10),
+            color: mm.buttonFill(value ? MeowButtonFill.selected : MeowButtonFill.plain),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: mm.buttonSide),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
               onTap: onTap,
@@ -323,13 +325,13 @@ class _TakeoverToggles extends ConsumerWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (warn) ...[Icon(Icons.error_outline_rounded, size: 13, color: value ? mm.bg : mm.mid), const SizedBox(width: 3)],
+                    if (warn) ...[Icon(Icons.error_outline_rounded, size: 13, color: value ? mm.onSelected : mm.mid), const SizedBox(width: 3)],
                     Flexible(
                       child: Text(
                         label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: value ? mm.bg : mm.t2),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: value ? mm.onSelected : mm.t2),
                       ),
                     ),
                   ],

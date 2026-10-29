@@ -15,6 +15,7 @@ import '../../state/format.dart';
 import '../../state/speed_test.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -244,8 +245,8 @@ class _StartButton extends StatelessWidget {
       duration: const Duration(milliseconds: 150),
       opacity: enabled ? 1 : 0.45,
       child: Material(
-        color: running ? mm.elev : mm.t1,
-        shape: const StadiumBorder(),
+        color: mm.buttonFill(running ? MeowButtonFill.plain : MeowButtonFill.prominent),
+        shape: StadiumBorder(side: mm.buttonSide),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: enabled ? onTap : null,
@@ -255,7 +256,7 @@ class _StartButton extends StatelessWidget {
             child: Center(
               child: Text(
                 running ? '停止' : '开始测速',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: running ? mm.t1 : mm.bg),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: running ? mm.t1 : mm.onProminent),
               ),
             ),
           ),

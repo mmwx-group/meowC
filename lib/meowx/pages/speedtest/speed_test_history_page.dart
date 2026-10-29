@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../state/format.dart';
 import '../../state/speed_test.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -153,9 +154,10 @@ class SpeedTestRecordPage extends StatelessWidget {
                           duration: const Duration(milliseconds: 150),
                           opacity: running ? 0.45 : 1,
                           child: _pillButton(
-                            color: mm.t1,
+                            mm,
+                            fill: MeowButtonFill.prominent,
                             label: '用同样设置再测一次',
-                            textColor: mm.bg,
+                            textColor: mm.onProminent,
                             onTap: running
                                 ? null
                                 : () {
@@ -169,7 +171,8 @@ class SpeedTestRecordPage extends StatelessWidget {
                       SizedBox(
                         width: 96,
                         child: _pillButton(
-                          color: mm.elev,
+                          mm,
+                          fill: MeowButtonFill.plain,
                           label: '删除',
                           textColor: mm.slow,
                           onTap: () {
@@ -186,29 +189,34 @@ class SpeedTestRecordPage extends StatelessWidget {
     );
   }
 
-  Widget _pillButton({required Color color, required String label, required Color textColor, VoidCallback? onTap}) =>
-      Material(
-        color: color,
-        shape: const StadiumBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: SizedBox(
-            height: 46,
-            child: Center(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
-              ),
-            ),
+  Widget _pillButton(
+    MeowTokens mm, {
+    required MeowButtonFill fill,
+    required String label,
+    required Color textColor,
+    VoidCallback? onTap,
+  }) => Material(
+    color: mm.buttonFill(fill),
+    shape: StadiumBorder(side: mm.buttonSide),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 46,
+        child: Center(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
           ),
         ),
-      );
+      ),
+    ),
+  );
 }
 
-/// 汇总卡（樱粉底）：最近 30 天次数、三项最好成绩（各带节点名）、下载速率走势。
+/// 汇总卡（樱粉底；液态玻璃主题下和其它卡片一样是磨砂玻璃卡片）：最近 30 天次数、三项最好成绩（各带节点名）、下载速率走势。
 class SpeedTestSummaryCard extends StatelessWidget {
   const SpeedTestSummaryCard({super.key, required this.records, this.filter});
   final List<SpeedTestRecord> records;
@@ -223,9 +231,10 @@ class SpeedTestSummaryCard extends StatelessWidget {
     final head = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t1.withValues(alpha: 0.75));
     final foot = TextStyle(fontSize: 11, color: mm.t2);
     final trend = s.trend;
-    return Container(
+    return MeowCard(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-      decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(24)),
+      radius: BorderRadius.circular(24),
+      color: mm.glass ? null : mm.hero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -283,7 +292,11 @@ class SpeedTestSummaryCard extends StatelessWidget {
       Expanded(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          decoration: BoxDecoration(color: mm.elev.withValues(alpha: 0.78), borderRadius: BorderRadius.circular(14)),
+          // 液态玻璃：卡片底是半透明的，小格用卡片里的次级块（elev 换透明度会变成一块不透明的白）
+          decoration: BoxDecoration(
+            color: mm.glass ? mm.card2 : mm.elev.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(14),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -326,7 +339,7 @@ TextStyle _numStyle(double size, Color color) => TextStyle(
   fontFeatures: const [FontFeature.tabularFigures()],
 );
 
-/// 筛选胶囊：全部 / 直连 / 各节点（横向滚动）；选中 = 墨色实底 + 奶白字。
+/// 筛选胶囊：全部 / 直连 / 各节点（横向滚动）；选中 = 墨色实底 + 奶白字（液态玻璃主题下是选中态那档静态半透明 + 强调色的字）。
 class _FilterChips extends StatelessWidget {
   const _FilterChips({required this.options, required this.selection, required this.onChanged});
   final List<String> options;
@@ -352,11 +365,14 @@ class _FilterChips extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-        decoration: ShapeDecoration(color: on ? mm.t1 : mm.elev, shape: const StadiumBorder()),
+        decoration: ShapeDecoration(
+          color: mm.buttonFill(on ? MeowButtonFill.selected : MeowButtonFill.plain),
+          shape: StadiumBorder(side: mm.buttonSide),
+        ),
         child: Text(
           title,
           maxLines: 1,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? mm.bg : mm.t2),
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? mm.onSelected : mm.t2),
         ),
       ),
     );

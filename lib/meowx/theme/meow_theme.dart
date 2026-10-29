@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'button_fill.dart';
 import 'tokens.dart';
 
 /// MeowX 主题：Material 3 骨架 + MM token（奶白 / 樱粉 / 墨色，与 iOS 改版一致），不用动态取色。
@@ -73,11 +74,13 @@ ThemeData meowThemeData({
         (states) => states.contains(WidgetState.selected) ? Colors.transparent : tokens.line,
       ),
     ),
-    // 实心主按钮：墨色底配页面底色的字（强调色只用于选中态的字和描边）
+    // 实心主按钮：墨色底配页面底色的字（强调色只用于选中态的字和描边）；
+    // 液态玻璃主题下是按钮那档静态半透明 + 细亮边、墨色字（见 button_fill.dart）
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: tokens.t1,
-        foregroundColor: tokens.bg,
+        backgroundColor: tokens.buttonFill(MeowButtonFill.prominent),
+        foregroundColor: tokens.onProminent,
+        side: tokens.glass ? tokens.buttonSide : null,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
         minimumSize: const Size(44, 44),
       ),

@@ -20,8 +20,9 @@ import '../../theme/widgets.dart';
 
 /// 连接主卡：状态（提示 / 大字 / 已运行）+ 电源键；「当前节点」行；「规则 | 全局 | 直连」分段。
 /// 已连接 = 樱粉底，其余 = 次级底。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
-/// 液态玻璃主题：已连接时是一道很淡的斜向渐变、圆角加大到与屏幕圆角同心；节点行与分段的槽是半透明白；
-/// 电源键与分段的滑块是控件，换成玻璃（见 [MeowPowerButton] / [MeowSegment]）。卡片本身仍是实色内容。
+/// 液态玻璃主题：连没连上都是和其它卡片一样的磨砂玻璃卡片（用户 2026-10-28：「玻璃主题下去掉这些特殊的底色吧，全部卡片一致」，
+/// 以前连上换成启动卡片颜色的斜向渐变），连接状态看状态字与电源键；圆角加大到与屏幕圆角同心；节点行与分段的槽是半透明白；
+/// 电源键与分段的滑块是控件，换成玻璃（见 [MeowPowerButton] / [MeowSegment]）。
 class HomeHeroCard extends ConsumerWidget {
   const HomeHeroCard({super.key, this.dense = false});
   final bool dense;
@@ -43,22 +44,17 @@ class HomeHeroCard extends ConsumerWidget {
     final gap = dense ? 10.0 : 12.0;
 
     final on = phase == ConnPhase.on;
-    final gradient = on ? mm.heroGradient : null;
     final radius = mm.glass
         ? (dense ? MeowGlassMetrics.heroRadiusDense : MeowGlassMetrics.heroRadius)
         : (dense ? 24.0 : 28.0);
-    // 液态玻璃：没连上时是一张磨砂玻璃卡片，连上换成主卡的斜向渐变实色（玻璃卡片那层一直在，连上时不画，开关不重建子树）
+    // 液态玻璃：一直是一张磨砂玻璃卡片（底由外面的 MeowFrostBox 画，这里不填色）
     final glass = mm.backdrop != null;
     final card = AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: EdgeInsets.all(dense ? 16 : 18),
-      decoration: glass && !on
+      decoration: glass
           ? BoxDecoration(borderRadius: BorderRadius.circular(radius))
-          : BoxDecoration(
-              color: gradient != null ? null : (on ? mm.hero : mm.card2),
-              gradient: gradient,
-              borderRadius: BorderRadius.circular(radius),
-            ),
+          : BoxDecoration(color: on ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(radius)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
@@ -129,7 +125,7 @@ class HomeHeroCard extends ConsumerWidget {
       ),
     );
     if (!glass) return card;
-    return MeowFrostBox(radius: BorderRadius.circular(radius), enabled: !on, child: card);
+    return MeowFrostBox(radius: BorderRadius.circular(radius), child: card);
   }
 }
 

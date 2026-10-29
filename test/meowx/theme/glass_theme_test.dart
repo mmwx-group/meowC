@@ -787,7 +787,7 @@ void main() {
   });
 
   group('控件：液态玻璃 / 经典', () {
-    testWidgets('右上角圆钮与胶囊：玻璃下换成玻璃，实底主操作不变；经典下仍是实色、不多玻璃', (tester) async {
+    testWidgets('右上角圆钮与胶囊：玻璃下换成玻璃，实底主操作不是逐颗的玻璃（静态半透明，见 button_fill_test）；经典下仍是实色、不多玻璃', (tester) async {
       Widget row() => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -806,7 +806,7 @@ void main() {
       expect(
         find.ancestor(of: find.byIcon(Icons.bolt), matching: find.byType(MeowGlassButton)),
         findsNothing,
-        reason: '实底的主操作仍是墨色实心块',
+        reason: '实底的主操作是静态半透明，不挂玻璃',
       );
       expect(find.byType(LiquidGlass), findsNWidgets(2));
     });
@@ -838,7 +838,7 @@ void main() {
       expect(find.byType(MeowGlassBox), findsNothing);
     });
 
-    testWidgets('电源键：玻璃下盖一块玻璃（圆角方块，不是正圆），经典下没有', (tester) async {
+    testWidgets('电源键：玻璃下盖一块玻璃（圆角方块，不是正圆），经典下没有（底与液面见 button_fill_test）', (tester) async {
       Widget power() => MeowPowerButton(on: true, onTap: () {});
       await tester.pumpWidget(_app(power()));
       expect(find.byType(MeowGlassBox), findsNothing);
@@ -846,7 +846,7 @@ void main() {
       await tester.pumpAndSettle();
       final box = tester.widget<MeowGlassBox>(find.byType(MeowGlassBox));
       expect(box.radius, BorderRadius.circular(80 * 0.325));
-      expect(box.style.tint.a, lessThan(0.2), reason: '几乎不着色：颜色来自背后的墨色底与液面');
+      expect(box.style.tint.a, lessThan(0.2), reason: '几乎不着色：颜色来自背后的卡片与液面');
     });
 
     testWidgets('弹出菜单：玻璃下面板是一块玻璃（菜单那一档），经典下是实色', (tester) async {

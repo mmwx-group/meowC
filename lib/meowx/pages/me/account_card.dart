@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../panel/account.dart';
 import '../../panel/client.dart';
 import '../../state/meow_settings.dart';
+import '../../theme/button_fill.dart';
+import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import 'me_kit.dart';
@@ -14,7 +16,8 @@ import 'me_kit.dart';
 /// 账户头像（网络图）的解码宽度上限，见 [AccountCard] 里的用处。
 const _avatarCacheWidth = 720;
 
-/// 账户卡（樱粉主卡）：头像 + 昵称 + 同步状态 +「退出」；未登录时下面是「扫码登录」/「账号登录」和说明。
+/// 账户卡（樱粉主卡；液态玻璃主题下和其它卡片一样是磨砂玻璃卡片）：头像 + 昵称 + 同步状态 +「退出」；
+/// 未登录时下面是「扫码登录」/「账号登录」和说明。
 /// [compact] = 宽屏第 1 列里的小一号。
 class AccountCard extends ConsumerWidget {
   const AccountCard({super.key, required this.onError, this.compact = false});
@@ -33,8 +36,9 @@ class AccountCard extends ConsumerWidget {
     final avatarUrl = absoluteAvatarUrl(account.avatarUrl, account.host);
     final avatarSize = compact ? 52.0 : 60.0;
     final fallback = BrandHead(size: avatarSize);
-    return Container(
-      decoration: BoxDecoration(color: mm.hero, borderRadius: BorderRadius.circular(compact ? 22 : 28)),
+    return MeowCard(
+      radius: BorderRadius.circular(compact ? 22 : 28),
+      color: mm.glass ? null : mm.hero,
       padding: EdgeInsets.all(compact ? 12 : 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -136,7 +140,7 @@ class AccountCard extends ConsumerWidget {
                   child: FilledButton.icon(
                     // 有扫码时账号登录是次要钮：卡片底配墨色字
                     style: system.isAndroid
-                        ? FilledButton.styleFrom(backgroundColor: mm.elev, foregroundColor: mm.t1)
+                        ? FilledButton.styleFrom(backgroundColor: mm.buttonFill(MeowButtonFill.plain), foregroundColor: mm.t1)
                         : null,
                     onPressed: () => showLoginSheet(context, ref, onError: onError),
                     icon: const Icon(Icons.person_rounded, size: 18),

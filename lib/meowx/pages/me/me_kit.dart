@@ -2,6 +2,7 @@ import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/page_route.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
 import '../../theme/morph_menu.dart';
@@ -494,7 +495,8 @@ class MePickerRow<T> extends StatelessWidget {
   }
 }
 
-/// 胶囊钮：卡片底（[selected] = 墨色实底），用在主卡 / 页面底上。液态玻璃下非实底的换成玻璃胶囊（如标题行的「高级设置」）。
+/// 胶囊钮：卡片底（[selected] = 墨色实底），用在主卡 / 页面底上。液态玻璃下非实底的换成玻璃胶囊（如标题行的「高级设置」），
+/// 选中的不再是墨色实心块，是选中态那档静态半透明 + 强调色的字（低端机画不了玻璃时没选中的也是静态半透明，见 button_fill.dart）。
 class MePill extends StatelessWidget {
   const MePill({super.key, required this.label, required this.onTap, this.selected = false, this.height = 44});
 
@@ -519,8 +521,8 @@ class MePill extends StatelessWidget {
       );
     }
     return Material(
-      color: selected ? mm.t1 : mm.elev,
-      shape: const StadiumBorder(),
+      color: mm.buttonFill(selected ? MeowButtonFill.selected : MeowButtonFill.plain),
+      shape: StadiumBorder(side: mm.buttonSide),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -543,7 +545,7 @@ class MePill extends StatelessWidget {
     style: TextStyle(
       fontSize: MeowFont.footnote,
       fontWeight: FontWeight.w600,
-      color: selected ? mm.bg : mm.t1,
+      color: selected ? mm.onSelected : mm.t1,
     ),
   );
 }

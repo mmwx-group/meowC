@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../panel/account.dart';
 import '../../state/latency.dart';
 import '../../theme/badges.dart';
+import '../../theme/button_fill.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 
@@ -95,7 +96,8 @@ class GroupTypeTag extends StatelessWidget {
   }
 }
 
-/// 胶囊按钮（图标 + 文字）：卡片底配墨色字、玫红图标；[filled] = 墨色实底（本页主操作）。[busy] 时图标位转圈、不可点。
+/// 胶囊按钮（图标 + 文字）：卡片底配墨色字、玫红图标；[filled] = 墨色实底（本页主操作；液态玻璃主题下是按钮那档静态半透明、墨色字）。
+/// [busy] 时图标位转圈、不可点。
 class PillButton extends StatelessWidget {
   const PillButton({
     super.key,
@@ -116,10 +118,10 @@ class PillButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    final tint = filled ? mm.bg : mm.accent;
+    final tint = filled ? mm.onProminent : mm.accent;
     return Material(
-      color: filled ? mm.t1 : mm.elev,
-      shape: const StadiumBorder(),
+      color: mm.buttonFill(filled ? MeowButtonFill.prominent : MeowButtonFill.plain),
+      shape: StadiumBorder(side: mm.buttonSide),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: busy ? null : onTap,
@@ -141,7 +143,7 @@ class PillButton extends StatelessWidget {
                 label,
                 maxLines: 1,
                 softWrap: false,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: filled ? mm.bg : mm.t1),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: filled ? mm.onProminent : mm.t1),
               ),
             ],
           ),
