@@ -45,12 +45,13 @@ class SpeedBoardConsentSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final mm = context.mm;
     final body = TextStyle(fontSize: 13, height: 1.45, color: mm.t2);
-    Widget item(String mark, Color color, String text) => Padding(
+    // 勾 / 叉用图标画（✓ ✕ 这两个字符在部分安卓 / Windows 字体里没有）
+    Widget item(IconData icon, Color color, String text) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 18, child: Text(mark, style: TextStyle(fontSize: 13, height: 1.45, fontWeight: FontWeight.w900, color: color))),
+          Padding(padding: const EdgeInsets.only(top: 2, right: 6), child: Icon(icon, size: 15, color: color)),
           Expanded(child: Text(text, style: body.copyWith(color: mm.t1))),
         ],
       ),
@@ -75,8 +76,8 @@ class SpeedBoardConsentSheet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final t in yes) item('✓', mm.good, t),
-                for (final t in no) item('✕', mm.accent, t),
+                for (final t in yes) item(Icons.check_rounded, mm.good, t),
+                for (final t in no) item(Icons.close_rounded, mm.accent, t),
               ],
             ),
           ),
