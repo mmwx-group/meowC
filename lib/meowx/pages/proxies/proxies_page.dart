@@ -82,6 +82,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
 
   /// 点组卡：展开 / 收起，并只在这一下播动画（滚动回来、重建都不重播）。
   void _toggleGroup(Group g) {
+    MeowHaptics.tap();
     final set = {...ref.read(expandedGroupsProvider)};
     final opening = !set.remove(g.name);
     if (opening) set.add(g.name);
@@ -303,7 +304,10 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
                       itemBuilder: (_, i) => GroupCard(
                         group: groups[i],
                         selected: groups[i].name == selected.name,
-                        onTap: () => ref.read(selectedGroupProvider.notifier).state = groups[i].name,
+                        onTap: () {
+                          if (groups[i].name != selected.name) MeowHaptics.select();
+                          ref.read(selectedGroupProvider.notifier).state = groups[i].name;
+                        },
                       ),
                     ),
                   ),
@@ -408,6 +412,7 @@ class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerPro
       wide: ref.read(isWideLayoutProvider),
     );
     if (!mounted || name == null || name == current.name) return;
+    MeowHaptics.select();
     ref.read(rememberGroupProvider)(name);
     if (_scroll.hasClients) _scroll.jumpTo(0);   // 换了组从头看
     if (!MeowMotion.reduced(context)) _fade.forward(from: 0);

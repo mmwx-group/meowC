@@ -177,7 +177,10 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
               selected: i == index,
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: () => widget.onChanged(it.$1),
+                onTap: () {
+                  if (i != index) MeowHaptics.select();   // 换段才震（所有分段同一处，含出站模式）
+                  widget.onChanged(it.$1);
+                },
                 child: Container(
                   constraints: BoxConstraints(minHeight: height - _segGap * 2),
                   alignment: Alignment.center,

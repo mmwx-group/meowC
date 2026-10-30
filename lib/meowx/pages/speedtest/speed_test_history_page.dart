@@ -12,6 +12,7 @@ import '../../state/meow_settings.dart';
 import '../../state/speed_test.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
+import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -623,7 +624,10 @@ class _FilterChips extends StatelessWidget {
     final mm = context.mm;
     final on = selection == value;
     return GestureDetector(
-      onTap: () => onChanged(value),
+      onTap: () {
+        if (!on) MeowHaptics.select();
+        onChanged(value);
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),

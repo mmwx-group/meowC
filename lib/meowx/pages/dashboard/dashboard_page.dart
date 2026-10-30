@@ -173,13 +173,13 @@ class DashboardPage extends ConsumerWidget {
                       dense: true,
                       title: Text(c.label, style: TextStyle(fontSize: MeowFont.body, color: mm.t1)),
                       value: !hidden.contains(c.name),
-                      onChanged: (on) => ref.read(meowSettingProvider.notifier).updateState(
+                      onChanged: MeowHaptics.onSwitch((on) => ref.read(meowSettingProvider.notifier).updateState(
                         (s) => s.copyWith(
                           homeHiddenCards: on
                               ? s.homeHiddenCards.where((n) => n != c.name).toList()
                               : [...s.homeHiddenCards, c.name],
                         ),
-                      ),
+                      )),
                     ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),

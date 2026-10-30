@@ -7,6 +7,7 @@ import '../../state/speed_board.dart';
 import '../../state/speed_test.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
+import '../../theme/haptics.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 
@@ -202,7 +203,7 @@ class SpeedBoardSettingRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        Switch(value: value, onChanged: MeowHaptics.onSwitch(onChanged), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
       ],
     );
   }

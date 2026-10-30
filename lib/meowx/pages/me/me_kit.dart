@@ -5,6 +5,7 @@ import '../../app/page_route.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/glass.dart';
+import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/page_background.dart';
 import '../../theme/page_title.dart';
@@ -456,7 +457,7 @@ class MeSwitchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sw = Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap);
+    final sw = Switch(value: value, onChanged: MeowHaptics.onSwitch(onChanged), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap);
     return MeRow(
       leading: leading,
       label: label,

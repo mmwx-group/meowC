@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/connection.dart';
 import '../../theme/glass_card.dart';
+import '../../theme/haptics.dart';
 import '../../theme/tokens.dart';
 
 /// Windows 专属：接管方式。电源键只拉起核心，流量怎么进来由这两个开关决定——
@@ -45,7 +46,7 @@ class HomeTakeoverCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Switch(value: value, onChanged: onChanged, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          Switch(value: value, onChanged: MeowHaptics.onSwitch(onChanged), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
         ],
       ),
     );

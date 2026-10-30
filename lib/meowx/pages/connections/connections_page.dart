@@ -20,6 +20,7 @@ import '../../state/format.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
 import '../../theme/button_fill.dart';
+import '../../theme/haptics.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
@@ -883,7 +884,10 @@ class _KindFilter extends StatelessWidget {
               shape: StadiumBorder(side: mm.buttonSide),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                onTap: () => onChanged(k),
+                onTap: () {
+                  if (k != value) MeowHaptics.select();
+                  onChanged(k);
+                },
                 child: Container(
                   constraints: BoxConstraints(minHeight: compact ? 32 : 40),
                   padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16),

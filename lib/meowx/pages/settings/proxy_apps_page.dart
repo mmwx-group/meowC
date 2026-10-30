@@ -10,6 +10,7 @@ import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../theme/haptics.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -171,7 +172,7 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
                   ),
                 ),
                 const SizedBox(width: 10),
-                Switch(value: access.enable, onChanged: _setEnabled),
+                Switch(value: access.enable, onChanged: MeowHaptics.onSwitch(_setEnabled)),
               ],
             ),
           ),

@@ -264,7 +264,7 @@ class AutoSelectToggle extends ConsumerWidget {
     );
     final sw = Switch(
       value: auto,
-      onChanged: (_) => toggle(),
+      onChanged: MeowHaptics.onSwitch((_) => toggle()),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
     final body = MeowCardMaterial(
