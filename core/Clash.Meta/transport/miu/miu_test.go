@@ -392,7 +392,7 @@ func TestPSK(t *testing.T) {
 
 // token(32) | padlen(u16) | padding, then the Settings frame, all in one write
 func TestHello(t *testing.T) {
-	c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK})
+	c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK, PaddingScheme: string(padding.DefaultPaddingScheme)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -559,7 +559,7 @@ func TestRecScan(t *testing.T) {
 // 400 bytes, packet 2 is cut into several, each within its range. Without the
 // PAD frames the frames are the original ones. A packet past stop goes out whole.
 func TestWritePacketShaping(t *testing.T) {
-	c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK})
+	c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK, PaddingScheme: string(padding.DefaultPaddingScheme)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1585,7 +1585,8 @@ func TestRawSegments(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer ln.Close()
-			c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK})
+			// the default scheme: the hello below is read with its 30 byte padding
+			c, err := NewClient(context.Background(), ClientConfig{PSK: testPSK, PaddingScheme: string(padding.DefaultPaddingScheme)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1640,7 +1641,7 @@ func TestRawSegments(t *testing.T) {
 			}
 			defer wire.Close()
 			// a client of its own, for the padding scheme a lane looks up there
-			sc, err := NewClient(context.Background(), ClientConfig{PSK: testPSK})
+			sc, err := NewClient(context.Background(), ClientConfig{PSK: testPSK, PaddingScheme: string(padding.DefaultPaddingScheme)})
 			if err != nil {
 				t.Fatal(err)
 			}

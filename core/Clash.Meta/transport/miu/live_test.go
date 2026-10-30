@@ -27,6 +27,7 @@ import (
 	"time"
 
 	tlsC "github.com/metacubex/mihomo/component/tls"
+	"github.com/metacubex/mihomo/transport/anytls/padding"
 	"github.com/metacubex/mihomo/transport/vmess"
 
 	M "github.com/metacubex/sing/common/metadata"
@@ -467,6 +468,25 @@ func TestLive(t *testing.T) {
 		}
 		wg.Wait()
 	}
+
+	// The server derives the scheme from the user's PSK the same way: a client on
+	// the derived scheme is left alone, one announcing another scheme is handed
+	// the derived one (UpdatePaddingScheme) and keeps it for its later lanes.
+	t.Run("derived padding", func(t *testing.T) {
+		derived, err := derivedScheme(authToken(testPSK))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, initial := range map[string]string{"derived": "", "other": string(padding.DefaultPaddingScheme)} {
+			c, _ := newClient(t, tlsPort, vmess.TLSConfig{SkipCertVerify: true}, ClientConfig{PaddingScheme: initial})
+			if _, err := livePlain(c, echoNDst, []byte("hello miu")); err != nil {
+				t.Fatal(err)
+			}
+			if got := c.padding.Load(); string(got.RawScheme) != derived {
+				t.Fatalf("%s: scheme after a stream %q, want the derived one", name, got.RawScheme)
+			}
+		}
+	})
 
 	outers := []struct {
 		name      string

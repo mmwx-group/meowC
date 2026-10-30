@@ -3,6 +3,7 @@ package miu
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"strings"
 	"sync"
@@ -19,6 +20,9 @@ import (
 
 type ClientConfig struct {
 	PSK string
+	// PaddingScheme overrides the initial scheme, empty = derived from the PSK
+	// (what the server uses for this user unless it is configured with its own)
+	PaddingScheme string
 	// how long an idle lane is kept (the few put back last stay longer), and how
 	// many idle lanes are prewarmed while streams keep coming, 0 = default
 	IdleSessionTimeout time.Duration
@@ -83,8 +87,22 @@ func NewClient(ctx context.Context, config ClientConfig) (*Client, error) {
 	if config.MinIdleSession > 0 {
 		c.minIdle = config.MinIdleSession
 	}
-	// Initialize the padding state of this client
-	padding.UpdatePaddingScheme(padding.DefaultPaddingScheme, &c.padding)
+	// The initial padding state of this client: the configured scheme, or the
+	// one derived from the PSK. An UpdatePaddingScheme from the server replaces it
+	// for all later lanes.
+	scheme := config.PaddingScheme
+	if scheme == "" {
+		derived, err := derivedScheme(c.token)
+		if err != nil {
+			c.cancel()
+			return nil, err
+		}
+		scheme = derived
+	}
+	if !padding.UpdatePaddingScheme([]byte(scheme), &c.padding) {
+		c.cancel()
+		return nil, errors.New("miu: bad padding scheme")
+	}
 	c.unregisterReset = netreset.Register(c.closeIdle)
 	return c, nil
 }
