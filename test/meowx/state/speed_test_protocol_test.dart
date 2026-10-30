@@ -18,7 +18,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 测速记录里的「协议」（节点协议只到顶层，与 iOS / macOS 同一张表）：type → 显示名、记录读写、控制器在开始时记、
 /// 详情页与测速页的显示。
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // 测速榜问过了、选的「不上传」：不弹同意卡片，测速页与以前一样
+  setUp(() => SharedPreferences.setMockInitialValues({'meowx.speedTest.upload': false}));
 
   group('显示名', () {
     test('配置里的小写 type 与核心 proxies 里的写法都认，映射成固定的显示名', () {

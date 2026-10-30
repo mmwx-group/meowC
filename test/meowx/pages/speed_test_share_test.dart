@@ -8,6 +8,7 @@ import 'package:bett_box/meowx/pages/speedtest/speed_test_page.dart';
 import 'package:bett_box/meowx/pages/speedtest/speed_test_share.dart';
 import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
+import 'package:bett_box/meowx/state/speed_board.dart';
 import 'package:bett_box/meowx/state/speed_test.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
@@ -40,6 +41,7 @@ SpeedTestRecord _record({
   String? protocol = 'VLESS',
   double download = 486.4,
   double peak = 532.9,
+  SpeedBoardEntry? board,
 }) {
   final hasUpload = source.hasUpload;
   return SpeedTestRecord(
@@ -61,8 +63,18 @@ SpeedTestRecord _record({
     exit: exit,
     network: network,
     protocol: protocol,
+    board: board,
   );
 }
+
+/// 测速榜上传过的状态（有超越比例 / 样本不够时没有）
+SpeedBoardEntry _uploaded({int? percent = 82}) => SpeedBoardEntry(
+  status: SpeedBoardStatus.uploaded,
+  id: '7Kq2Xp',
+  url: 'https://speed.meowx.net/r/7Kq2Xp',
+  deleteToken: 'tok',
+  percentile: percent == null ? null : SpeedBoardPercentile(value: percent, scope: '近 30 天 · 经节点 · 多线程', samples: 2431),
+);
 
 String? _previewDir = Platform.environment['MEOWX_SHARE_PREVIEW_DIR'];
 
@@ -150,7 +162,8 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     await _loadFonts();
   });
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // 测速榜问过了、选的「不上传」：不弹同意卡片，测速页与以前一样
+  setUp(() => SharedPreferences.setMockInitialValues({'meowx.speedTest.upload': false}));
 
   group('分享图的内容', () {
     test('失败的记录不给分享', () {
@@ -507,6 +520,70 @@ void main() {
         record: _record(download: 1024.6, peak: 1100),
       );
       expect(inside, contains(MeowTokens.light.down));
+    });
+
+    group('测速榜（设计稿 D）：下载卡底部的超越比例、页头的结果链接', () {
+      test('内容：上传了才有链接（去掉协议头）与超越比例；样本不够只有链接；上传中 / 失败的都没有', () {
+        final up = SpeedTestShareContent.of(_record(board: _uploaded()))!;
+        expect(up.link, 'speed.meowx.net/r/7Kq2Xp');
+        expect(up.percentile!.value, 82);
+        final few = SpeedTestShareContent.of(_record(board: _uploaded(percent: null)))!;
+        expect((few.link, few.percentile), ('speed.meowx.net/r/7Kq2Xp', null));
+        for (final board in [null, SpeedBoardEntry.uploading, SpeedBoardEntry.failure('x')]) {
+          final c = SpeedTestShareContent.of(_record(board: board))!;
+          expect((c.link, c.percentile), (null, null));
+        }
+      });
+
+      // 进度条：卡片底边往上 内边距 + 条高（0.9cqw），横跨卡片内宽
+      final card = cols[0];
+      const barH = 0.9 * SpeedTestShareLayout.cqw;
+      final barMid = card.bottom - SpeedTestShareLayout.cardPadV - barH / 2;
+      final inner = card.width - cardPadH * 2;
+
+      testWidgets('有超越比例：进度条前 82% 是玫红、后面是浅玫红；没上传的图那里是卡片色', (tester) async {
+        final t = MeowTokens.light;
+        final points = [(px(card.left + cardPadH + inner * 0.3), px(barMid)), (px(card.left + cardPadH + inner * 0.95), px(barMid))];
+        final [filled, rest] = await sample(tester, MeowLook.classic, Brightness.light, points,
+            record: _record(board: _uploaded()), preview: 'meowc-share-board.png');
+        expect(filled, near(t.accent));
+        expect(rest, near(Color.alphaBlend(t.accent.withValues(alpha: 0.15), t.elev)));
+        final plain = await sample(tester, MeowLook.classic, Brightness.light, points, record: _record());
+        expect(plain, everyElement(t.elev));
+        final few = await sample(tester, MeowLook.classic, Brightness.light, points, record: _record(board: _uploaded(percent: null)));
+        expect(few, everyElement(t.elev));
+      });
+
+      testWidgets('四位数 + 超越比例：数字缩小，不越过右内边距，也不压到下面的超越比例（那一块里没有紫色）', (tester) async {
+        final t = MeowTokens.light;
+        final record = _record(download: 1024.6, peak: 1100, board: _uploaded(percent: 97));
+        final right = await sample(tester, MeowLook.classic, Brightness.light,
+            [for (var y = px(card.top + 25); y < px(card.bottom - 25); y++) (px(card.right - cardPadH + 6), y)],
+            record: record, preview: 'meowc-share-board-four-digits.png');
+        expect(right, everyElement(t.elev));
+        // 超越比例那一块（进度条往上约 6.5cqw：两行字 + 间距）整块没有紫色
+        final beat = await sample(tester, MeowLook.classic, Brightness.light, [
+          for (var y = px(barMid - 6.5 * SpeedTestShareLayout.cqw); y < px(card.bottom - 4); y += 2)
+            for (var x = px(card.left + cardPadH); x < px(card.right - cardPadH); x += 6) (x, y),
+        ], record: record);
+        expect(beat, isNot(contains(t.down)));
+        // 数字确实画了
+        final middle = await sample(tester, MeowLook.classic, Brightness.light,
+            [for (var x = px(card.left + cardPadH); x < px(card.right - cardPadH); x++) (x, px(card.top + card.height * 0.38))],
+            record: record);
+        expect(middle, contains(t.down));
+      });
+
+      testWidgets('页头：日期下面一行结果链接（右对齐）；没上传那里是页面底', (tester) async {
+        final t = MeowTokens.light;
+        // 页头下半截靠右的一行（日期在上半截）：有链接时有字（不全是页面底色）
+        const y = SpeedTestShareLayout.padV + SpeedTestShareLayout.headerHeight * 0.78;
+        final row = [for (var x = px(SpeedTestShareLayout.w - SpeedTestShareLayout.padH - 120); x < px(SpeedTestShareLayout.w - SpeedTestShareLayout.padH); x++) (x, px(y))];
+        final withLink = await sample(tester, MeowLook.classic, Brightness.light, row, record: _record(board: _uploaded()));
+        expect(withLink.any((c) => c != t.bg), isTrue);
+        final without = await sample(tester, MeowLook.classic, Brightness.light, row, record: _record());
+        expect(without, everyElement(t.bg));
+      });
     });
 
     test('配色：液态玻璃不论磨砂调到多少都按缺省 0.5 推；经典就是 App 当前那一份', () {

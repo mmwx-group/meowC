@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/enum/enum.dart';
+import 'package:bett_box/state.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme/haptics.dart';
+import 'speed_board.dart';
 import 'speed_test_network.dart';
 
 /// 测速出站「直连」：mihomo 的内置出站 DIRECT（不是代理组），经本机网络直接测。
@@ -146,6 +149,7 @@ class SpeedTestProgress {
     this.error,
     this.exit,
     this.exitPending = false,
+    this.durationMs,
   });
 
   final int runID;
@@ -163,6 +167,9 @@ class SpeedTestProgress {
   /// 出口（查到才有）；[exitPending] = 还在查
   final SpeedTestExit? exit;
   final bool exitPending;
+
+  /// 测完时核心给的时长（从测延迟开始到测完，毫秒）；旧核心没有
+  final int? durationMs;
 
   bool get isRunning => const {'preparing', 'latency', 'download', 'upload'}.contains(phase);
 
@@ -188,6 +195,7 @@ class SpeedTestProgress {
     error: (j['error'] as String?)?.isEmpty == true ? null : j['error'] as String?,
     exit: SpeedTestExit.fromJson(j['exit']),
     exitPending: j['exitPending'] == true,
+    durationMs: (j['durationMs'] as num?)?.toInt(),
   );
 
   SpeedTestProgress copyWith({String? phase, double? currentMbps}) => SpeedTestProgress(
@@ -209,19 +217,38 @@ class SpeedTestProgress {
     error: error,
     exit: exit,
     exitPending: exitPending,
+    durationMs: durationMs,
   );
 }
 
 /// 测速页的状态：测在 Go 核心里跑（meowSpeedTestStart / Status / Stop），这里发开始 / 停止、测的时候每 300ms 拉一次进度。
 /// 测速源与单 / 多线程记在本机偏好里。
+///
+/// 测速榜（speed_board.dart）：同意与否（[boardConsent]）与本机随机 ID 也记在本机偏好里（退出登录不清）；同意时测完自动上传，
+/// 记录详情里可重试、上传单条、从测速榜删除。上传的凭证由页面注入（[SpeedBoardUploader.grant]，要读账户与主控）。
 class SpeedTestController extends ChangeNotifier {
-  SpeedTestController({this.call, this.networkProbe});
+  SpeedTestController({this.call, this.networkProbe, this.clientInfo, SpeedBoardEndpoint? boardEndpoint, DateTime Function()? now})
+    : _boardEndpoint = boardEndpoint,
+      _now = now;
 
   /// 调核心（测试里换成假的）；缺省走 clashCore
   final Future<String?> Function(ActionMethod method, String data)? call;
 
   /// 取本机网络（测试里换成假的）；缺省 [currentSpeedTestNetwork]
   final Future<String?> Function()? networkProbe;
+
+  /// 上传正文里的平台 / 版本（测试里换成假的）；缺省按本机平台与 App 版本
+  final SpeedBoardClientInfo Function()? clientInfo;
+
+  final SpeedBoardEndpoint? _boardEndpoint;
+  final DateTime Function()? _now;
+
+  /// 测速榜的上传 / 删除（经核心 meowSpeedTestBoard；核心整次 10 秒超时，桥层多留几秒）
+  late final SpeedBoardUploader board = SpeedBoardUploader(
+    send: (data) => _invoke(ActionMethod.meowSpeedTestBoard, data, const Duration(seconds: 15)),
+    endpoint: _boardEndpoint,
+    now: _now,
+  );
 
   static const multiConnections = 8;
 
@@ -230,6 +257,8 @@ class SpeedTestController extends ChangeNotifier {
 
   static const _kSource = 'meowx.speedTest.source';
   static const _kMulti = 'meowx.speedTest.multi';
+  static const _kBoardUpload = 'meowx.speedTest.upload';
+  static const _kBoardInstallId = 'meowx.speedTest.installId';
 
   SpeedTestSource source = SpeedTestSource.google;
   bool multiThread = false;
@@ -249,11 +278,24 @@ class SpeedTestController extends ChangeNotifier {
   /// 直连 / 查不到 null；记进这次的记录
   String? protocol;
 
+  /// 同上，规格码（[speedBoardProtocolCode]，测速榜上传用）
+  String? protocolCode;
+
+  /// 上传到测速榜：null = 还没问过（进测速页弹一次同意卡片）/ true / false
+  bool? boardConsent;
+
+  /// 本机偏好读完了（读完才知道要不要弹同意卡片）
+  bool prefsLoaded = false;
+
+  String? _installId;
+
+  /// 正在上传 / 删除的记录
+  final Set<String> _boardBusy = {};
+
   /// 没能开始的原因（未连接、核心太旧…）
   String? message;
   bool _starting = false;
   int _generation = 0;
-  bool _loaded = false;
 
   /// 本次 App 运行里最后一次测完（测完 / 失败）记下的那条记录的 id；开测时清掉
   String? _lastRecordId;
@@ -268,14 +310,100 @@ class SpeedTestController extends ChangeNotifier {
     return history.byId(id);
   }
 
-  Future<void> load() async {
-    if (_loaded) return;
-    _loaded = true;
+  /// 读本机偏好与测速记录；同时几处调用等的是同一次（页面读完才知道要不要弹测速榜的同意卡片）
+  Future<void> load() => _loading ??= _load();
+  Future<void>? _loading;
+
+  Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     source = SpeedTestSource.values.where((s) => s.name == prefs.getString(_kSource)).firstOrNull ?? source;
     multiThread = prefs.getBool(_kMulti) ?? multiThread;
+    boardConsent = prefs.getBool(_kBoardUpload);
+    _installId = prefs.getString(_kBoardInstallId);
+    prefsLoaded = true;
     notifyListeners();
     await history.load();
+  }
+
+  /// 同意 / 不同意上传到测速榜（第一次进测速页的卡片、测速页的开关）。只管之后测完的，以前的记录不补传。
+  void setBoardConsent(bool value) {
+    boardConsent = value;
+    notifyListeners();
+    SharedPreferences.getInstance().then((p) => p.setBool(_kBoardUpload, value));
+  }
+
+  /// 「重置测速榜身份」：换一个本机随机 ID（已上传的结果不受影响，本机记录里的删除凭据照样能用）
+  Future<void> resetBoardIdentity() async {
+    _installId = newSpeedBoardInstallId();
+    notifyListeners();
+    await (await SharedPreferences.getInstance()).setString(_kBoardInstallId, _installId!);
+  }
+
+  Future<String> _boardInstallId() async {
+    final existing = _installId;
+    if (existing != null && existing.isNotEmpty) return existing;
+    final id = newSpeedBoardInstallId();
+    _installId = id;
+    try {
+      await (await SharedPreferences.getInstance()).setString(_kBoardInstallId, id);
+    } catch (_) {}
+    return id;
+  }
+
+  SpeedBoardClientInfo _client() {
+    final custom = clientInfo;
+    if (custom != null) return custom();
+    var version = '';
+    try {
+      version = globalState.packageInfo.version;
+    } catch (_) {}
+    return SpeedBoardClientInfo(platform: Platform.isAndroid ? 'android' : 'windows', version: version);
+  }
+
+  /// 这条记录正在上传或删除
+  bool boardBusy(String id) => _boardBusy.contains(id);
+
+  /// 上传一条记录到测速榜（测完自动、重试、记录详情的「上传这条」都走这里）：先标「上传中」，传完换成结果。
+  /// 失败的测速、没有节点协议的记录不传；同一条在传的时候不重复传。
+  Future<void> uploadToBoard(String id) async {
+    final record = history.byId(id);
+    if (record == null || _boardBusy.contains(id) || speedBoardBlocker(record) != null) return;
+    _boardBusy.add(id);
+    history.replace(record.withBoard(SpeedBoardEntry.uploading));
+    SpeedBoardEntry entry;
+    try {
+      entry = await board.upload(record, installId: await _boardInstallId(), client: _client());
+    } catch (e) {
+      entry = SpeedBoardEntry.failure('上传失败：$e');
+    } finally {
+      _boardBusy.remove(id);
+    }
+    final latest = history.byId(id);
+    if (latest != null) history.replace(latest.withBoard(entry));
+  }
+
+  /// 从测速榜删除（凭上传时拿到的删除凭据，只删服务端那份，本机记录还在）。删掉了回 null，否则是原因。
+  Future<String?> deleteFromBoard(String id) async {
+    final record = history.byId(id);
+    if (record == null || record.board?.isUploaded != true || _boardBusy.contains(id)) return null;
+    _boardBusy.add(id);
+    notifyListeners();
+    try {
+      final result = await board.delete(record);
+      switch (result) {
+        case SpeedBoardDeleted():
+          final latest = history.byId(id);
+          if (latest != null) history.replace(latest.withBoard(null));
+          return null;
+        case SpeedBoardDeleteFailed(:final message):
+          return message;
+      }
+    } catch (e) {
+      return '删除失败：$e';
+    } finally {
+      _boardBusy.remove(id);
+      notifyListeners();
+    }
   }
 
   void setSource(SpeedTestSource value) {
@@ -295,9 +423,9 @@ class SpeedTestController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> _invoke(ActionMethod method, [String data = '']) {
+  Future<String?> _invoke(ActionMethod method, [String data = '', Duration timeout = const Duration(seconds: 10)]) {
     if (call != null) return call!(method, data);
-    return clashCore.clashInterface.invoke<String?>(method: method, data: data, timeout: const Duration(seconds: 10));
+    return clashCore.clashInterface.invoke<String?>(method: method, data: data, timeout: timeout);
   }
 
   /// 「用同样设置再测一次」：测速源、线程、节点照这条记录填好（回到测速页由用户点开始）
@@ -307,8 +435,9 @@ class SpeedTestController extends ChangeNotifier {
     setSource(record.source);
   }
 
-  /// [protocol] 是选的节点的协议显示名（[speedTestProtocolTitle]），直连 / 查不到不传
-  Future<void> start(String via, {String? protocol}) async {
+  /// [protocol] 是选的节点的协议显示名（[speedTestProtocolTitle]），[protocolCode] 是规格码（[speedBoardProtocolCode]），
+  /// 直连 / 查不到不传
+  Future<void> start(String via, {String? protocol, String? protocolCode}) async {
     if (isRunning) return;
     MeowHaptics.tap();
     final generation = ++_generation;
@@ -321,6 +450,7 @@ class SpeedTestController extends ChangeNotifier {
     progress = SpeedTestProgress(phase: 'preparing', source: source, via: via, exitPending: true);
     network = null;
     this.protocol = via == kSpeedTestDirect ? null : protocol;
+    this.protocolCode = via == kSpeedTestDirect ? null : protocolCode;
     notifyListeners();
     // 本机网络不等：和开测并行取（几毫秒），取到了「已用」那一行前面出现、测完记进记录
     unawaited((networkProbe ?? currentSpeedTestNetwork)().then((value) {
@@ -370,10 +500,13 @@ class SpeedTestController extends ChangeNotifier {
               outbound: via,
               network: network,
               protocol: this.protocol,
+              protocolCode: this.protocolCode,
             );
             if (record != null) {
               _lastRecordId = record.id; // 先记上再加：页面听 history 的通知时就取得到
               history.add(record);
+              // 同意了才传，只传测完的（失败的不传）
+              if (!record.failed && boardConsent == true) unawaited(uploadToBoard(record.id));
             }
             return;
           }
@@ -416,6 +549,9 @@ class SpeedTestRecord {
     this.exit,
     this.network,
     this.protocol,
+    this.protocolCode,
+    this.durationMs,
+    this.board,
   });
 
   final String id;
@@ -447,6 +583,18 @@ class SpeedTestRecord {
   /// 节点协议的显示名「VLESS」「Shadowsocks」…（[speedTestProtocolTitle]，只到顶层）；直连、旧记录与查不到的是 null
   final String? protocol;
 
+  /// 节点协议的规格码「vless」「ss」…（[speedBoardProtocolCode]，测速榜上传用）；直连、旧记录与查不到的是 null
+  final String? protocolCode;
+
+  /// 从测延迟开始到测完的毫秒数（核心测完时给）；旧记录、旧核心没有
+  final int? durationMs;
+
+  /// 测速榜上的状态（上传中 / 已上传 / 失败）；没传过、从测速榜删掉了是 null
+  final SpeedBoardEntry? board;
+
+  /// 上传测速榜用的协议码：新记录记着码；旧记录只有显示名，按显示名换回码（「VLESS」→ vless、「Shadowsocks」→ ss）
+  String? get boardProtocol => isDirect ? null : (protocolCode ?? speedBoardProtocolCode(protocol));
+
   bool get isDirect => outbound == kSpeedTestDirect;
   bool get failed => error != null;
 
@@ -466,6 +614,7 @@ class SpeedTestRecord {
     required String outbound,
     String? network,
     String? protocol,
+    String? protocolCode,
     DateTime? date,
   }) {
     if (p.phase != 'done' && p.phase != 'failed') return null;
@@ -489,8 +638,36 @@ class SpeedTestRecord {
       exit: p.exit,
       network: network,
       protocol: protocol,
+      protocolCode: protocolCode,
+      durationMs: p.phase == 'done' ? p.durationMs : null,
     );
   }
+
+  /// 换掉测速榜状态（null = 清掉远端字段，本机记录保留）
+  SpeedTestRecord withBoard(SpeedBoardEntry? board) => SpeedTestRecord(
+    id: id,
+    date: date,
+    source: source,
+    connections: connections,
+    outbound: outbound,
+    via: via,
+    server: server,
+    latencyMs: latencyMs,
+    downloadMbps: downloadMbps,
+    uploadMbps: uploadMbps,
+    downloadPeakMbps: downloadPeakMbps,
+    uploadPeakMbps: uploadPeakMbps,
+    downloadSamples: downloadSamples,
+    uploadSamples: uploadSamples,
+    bytesUsed: bytesUsed,
+    error: error,
+    exit: exit,
+    network: network,
+    protocol: protocol,
+    protocolCode: protocolCode,
+    durationMs: durationMs,
+    board: board,
+  );
 
   Map<String, Object?> toJson() => {
     'id': id,
@@ -512,6 +689,9 @@ class SpeedTestRecord {
     'exit': ?exit?.toJson(),
     'network': ?network,
     'protocol': ?protocol,
+    'protocolCode': ?protocolCode,
+    'durationMs': ?durationMs,
+    'board': ?board?.toJson(),
   };
 
   /// 字段不全（id / 时间 / 出站缺了）返回 null，读盘时跳过
@@ -538,6 +718,9 @@ class SpeedTestRecord {
       exit: SpeedTestExit.fromJson(j['exit']),
       network: j['network'] as String?,
       protocol: j['protocol'] as String?,
+      protocolCode: j['protocolCode'] as String?,
+      durationMs: (j['durationMs'] as num?)?.toInt(),
+      board: SpeedBoardEntry.fromJson(j['board']),
     );
   }
 
@@ -623,6 +806,13 @@ class SpeedTestHistory extends ChangeNotifier {
 
   void delete(String id) {
     _records = [for (final r in _records) if (r.id != id) r];
+    _changed();
+  }
+
+  /// 按 id 换掉一条（测速榜状态变了）；这条已经被删了就什么也不做
+  void replace(SpeedTestRecord record) {
+    if (byId(record.id) == null) return;
+    _records = [for (final r in _records) r.id == record.id ? record : r];
     _changed();
   }
 

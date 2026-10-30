@@ -1,10 +1,9 @@
-import 'dart:typed_data';
-
 import 'package:bett_box/common/navigator.dart';
 import 'package:bett_box/common/picker.dart';
 import 'package:bett_box/common/system.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -13,9 +12,11 @@ import '../../state/meow_settings.dart';
 import '../../state/speed_test.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
+import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
+import 'speed_board_views.dart';
 import 'speed_test_share.dart';
 
 /// 测速记录（测速页右上角「记录」进来；与 iOS 的 SpeedTestHistoryView 同一套）：樱粉汇总卡 + 按节点筛选 + 按日列表，
@@ -109,6 +110,7 @@ class _SpeedTestHistoryPageState extends State<SpeedTestHistoryPage> {
                             key: ValueKey(r.id),
                             direction: DismissDirection.endToStart,
                             background: _deleteBackground(mm),
+                            confirmDismiss: (_) => confirmDeleteUploadedRecord(context, r),
                             onDismissed: (_) => history.delete(r.id),
                             child: SpeedTestRecordRow(record: r, isFastest: r.id == fastest, onTap: () => _open(r)),
                           ),
@@ -136,6 +138,24 @@ class _SpeedTestHistoryPageState extends State<SpeedTestHistoryPage> {
   );
 }
 
+/// 删本机记录前：已上传到测速榜的先问一句（删了本机记录，删除凭据也跟着没了，就不能再从测速榜删那条）；没上传的直接删
+Future<bool> confirmDeleteUploadedRecord(BuildContext context, SpeedTestRecord record) async {
+  if (record.board?.isUploaded != true) return true;
+  final mm = context.mm;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('删除这条记录？'),
+      content: const Text('它已上传到测速榜。本机记录删掉后删除凭据也跟着没了，就不能再从测速榜删除这条结果（网页卡片链接仍然有效）。'),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
+        TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text('删除', style: TextStyle(color: mm.slow))),
+      ],
+    ),
+  );
+  return ok == true;
+}
+
 /// 存文件（Windows）：缺省走 `picker.saveFile`（另存新档），回存到的路径；用户取消回 null
 typedef SpeedTestSaveFile = Future<String?> Function(String fileName, Uint8List bytes);
 
@@ -150,17 +170,39 @@ Future<void> _systemShare(String fileName, Uint8List bytes) => SharePlus.instanc
   ShareParams(files: [XFile.fromData(bytes, mimeType: 'image/png', name: fileName)], fileNameOverrides: [fileName]),
 );
 
+/// 系统分享一段文字（安卓「分享链接」）：缺省走 share_plus
+typedef SpeedTestShareText = Future<void> Function(String text);
+
+Future<void> _systemShareText(String text) => SharePlus.instance.share(ShareParams(text: text));
+
+/// 复制到剪贴板：缺省走系统剪贴板
+typedef SpeedTestCopyText = Future<void> Function(String text);
+
+Future<void> _clipboardCopy(String text) => Clipboard.setData(ClipboardData(text: text));
+
+enum _ShareChoice { link, image, copy }
+
 /// 分享一条测速记录（记录详情页底部的按钮、测速页页头的按钮共用）：按 App 正文的字体、App 当前的外观（磨砂强度固定缺省 0.5，
 /// 不用 `context.mm`）与实际深浅色画分享图（见 [SpeedTestShareImage]），安卓「分享」交给系统分享面板（分完 / 取消都不提示），其余「保存分享图」存成 PNG
 /// （存好提示「分享图已保存」）；出错提示「分享失败：…」/「保存分享图失败：…」。两处按钮的图标、文字也取这里的。
-/// 分享 / 存的函数可注入（测试用），缺省走平台。
+/// 已上传到测速榜（有结果链接）时按钮弹菜单（[present]）：安卓「分享链接 / 分享图片 / 复制链接」，Windows「保存分享图 / 复制链接」。
+/// 分享 / 存 / 复制的函数可注入（测试用），缺省走平台。
 class SpeedTestShareAction {
-  SpeedTestShareAction({SpeedTestSaveFile? saveFile, SpeedTestShareFile? shareFile, this.systemShare})
-    : saveFile = saveFile ?? _pickerSave,
-      shareFile = shareFile ?? _systemShare;
+  SpeedTestShareAction({
+    SpeedTestSaveFile? saveFile,
+    SpeedTestShareFile? shareFile,
+    this.systemShare,
+    SpeedTestShareText? shareText,
+    SpeedTestCopyText? copyText,
+  }) : saveFile = saveFile ?? _pickerSave,
+       shareFile = shareFile ?? _systemShare,
+       shareText = shareText ?? _systemShareText,
+       copyText = copyText ?? _clipboardCopy;
 
   final SpeedTestSaveFile saveFile;
   final SpeedTestShareFile shareFile;
+  final SpeedTestShareText shareText;
+  final SpeedTestCopyText copyText;
 
   /// 走系统分享还是存文件；null = 按平台（安卓分享、其余存文件），测试里指定
   final bool? systemShare;
@@ -168,6 +210,54 @@ class SpeedTestShareAction {
   bool get sharing => systemShare ?? system.isAndroid;
   IconData get icon => sharing ? Icons.share_outlined : Icons.image_outlined;
   String get label => sharing ? '分享' : '保存分享图';
+
+  /// 这条记录的测速榜结果链接（已上传才有）
+  static String? linkOf(SpeedTestRecord record) => record.board?.isUploaded == true ? record.board!.url : null;
+
+  /// 有链接时按钮是菜单：图标都是「分享」，Windows 的字也改叫「分享」
+  IconData iconFor(SpeedTestRecord record) => linkOf(record) == null ? icon : Icons.share_outlined;
+  String labelFor(SpeedTestRecord record) => linkOf(record) == null ? label : '分享';
+
+  /// 复制结果链接，提示「链接已复制」
+  Future<void> copyLink(String url) async {
+    try {
+      await copyText(url);
+      globalState.showNotifier('链接已复制');
+    } catch (e) {
+      globalState.showNotifier('复制失败：$e');
+    }
+  }
+
+  /// 点分享按钮：没上传 = 直接出图（[image]，缺省 [run]）；上传了 = 在按钮（[context] 是按钮自己的 context，菜单从它长出来）上弹菜单。
+  /// 按钮的「生成中」状态由 [image] 自己管（菜单开着的时候不算在忙）
+  Future<void> present(BuildContext context, SpeedTestRecord record, {Future<void> Function()? image}) async {
+    final link = linkOf(record);
+    final makeImage = image ?? () => run(context, record);
+    if (link == null) return makeImage();
+    final choice = await showMeowMenu<_ShareChoice>(
+      context,
+      width: 200,
+      alignEnd: true,
+      entries: [
+        if (sharing) const MeowMenuItem(_ShareChoice.link, '分享链接'),
+        MeowMenuItem(_ShareChoice.image, sharing ? '分享图片' : '保存分享图'),
+        const MeowMenuItem(_ShareChoice.copy, '复制链接'),
+      ],
+    );
+    if (choice == null || !context.mounted) return;
+    switch (choice) {
+      case _ShareChoice.link:
+        try {
+          await shareText(link);
+        } catch (e) {
+          globalState.showNotifier('分享失败：$e');
+        }
+      case _ShareChoice.image:
+        await makeImage();
+      case _ShareChoice.copy:
+        await copyLink(link);
+    }
+  }
 
   /// 画图并交出去；出不了图（失败的记录）什么也不做。防连点由按钮自己管（等这个 Future 完成之前不响应）
   Future<void> run(BuildContext context, SpeedTestRecord record) async {
@@ -204,6 +294,9 @@ class SpeedTestRecordPage extends StatelessWidget {
     required this.id,
     this.saveFile = _pickerSave,
     this.shareFile = _systemShare,
+    this.shareText = _systemShareText,
+    this.copyText = _clipboardCopy,
+    this.openUrl,
     this.systemShare,
   });
   final SpeedTestController controller;
@@ -212,6 +305,11 @@ class SpeedTestRecordPage extends StatelessWidget {
   /// 测试里换成假的
   final SpeedTestSaveFile saveFile;
   final SpeedTestShareFile shareFile;
+  final SpeedTestShareText shareText;
+  final SpeedTestCopyText copyText;
+
+  /// 打开网页（测速榜、结果链接）；缺省用浏览器
+  final ValueChanged<String>? openUrl;
 
   /// 走系统分享还是存文件；null = 按平台（安卓分享、其余存文件），测试里指定
   final bool? systemShare;
@@ -224,17 +322,34 @@ class SpeedTestRecordPage extends StatelessWidget {
       builder: (context, _) {
         final record = controller.history.byId(id);
         final running = controller.isRunning;
+        final action = SpeedTestShareAction(
+          saveFile: saveFile,
+          shareFile: shareFile,
+          systemShare: systemShare,
+          shareText: shareText,
+          copyText: copyText,
+        );
+        final open = openUrl ?? globalState.openUrl;
         return MeSubPage.list(
           title: '记录详情',
           children: record == null
               ? const []
               : [
                   SpeedTestRecordDetail(record: record),
-                  if (SpeedTestShareImage.canShare(record))
-                    _ShareButton(
-                      record: record,
-                      action: SpeedTestShareAction(saveFile: saveFile, shareFile: shareFile, systemShare: systemShare),
-                    ),
+                  SpeedBoardRecordSection(
+                    record: record,
+                    boardPage: controller.board.endpoint.boardPage,
+                    consent: controller.boardConsent == true,
+                    busy: controller.boardBusy(record.id),
+                    onOpenUrl: open,
+                    onCopy: action.copyLink,
+                    onUpload: () => controller.uploadToBoard(record.id),
+                    onDelete: () async {
+                      final error = await controller.deleteFromBoard(record.id);
+                      globalState.showNotifier(error == null ? '已从测速榜删除' : '删除失败：$error');
+                    },
+                  ),
+                  if (SpeedTestShareImage.canShare(record)) _ShareButton(record: record, action: action),
                   Row(
                     children: [
                       Expanded(
@@ -263,7 +378,8 @@ class SpeedTestRecordPage extends StatelessWidget {
                           fill: MeowButtonFill.plain,
                           label: '删除',
                           textColor: mm.slow,
-                          onTap: () {
+                          onTap: () async {
+                            if (!await confirmDeleteUploadedRecord(context, record) || !context.mounted) return;
                             Navigator.of(context).pop();
                             controller.history.delete(record.id);
                           },
@@ -317,7 +433,7 @@ class _ShareButton extends StatefulWidget {
 class _ShareButtonState extends State<_ShareButton> {
   bool _busy = false;
 
-  Future<void> _save() async {
+  Future<void> _image() async {
     if (_busy) return;
     setState(() => _busy = true);
     try {
@@ -326,6 +442,8 @@ class _ShareButtonState extends State<_ShareButton> {
       if (mounted) setState(() => _busy = false);
     }
   }
+
+  Future<void> _save() => widget.action.present(context, widget.record, image: _image);
 
   @override
   Widget build(BuildContext context) {
@@ -345,10 +463,10 @@ class _ShareButtonState extends State<_ShareButton> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(action.icon, size: 18, color: mm.accent),
+                Icon(action.iconFor(widget.record), size: 18, color: mm.accent),
                 const SizedBox(width: 6),
                 Text(
-                  action.label,
+                  action.labelFor(widget.record),
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: mm.accent),
                 ),
               ],

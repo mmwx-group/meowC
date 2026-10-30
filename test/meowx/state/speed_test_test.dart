@@ -17,7 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../support/haptics.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // 测速榜问过了、选的「不上传」：不弹同意卡片，测速页与以前一样
+  setUp(() => SharedPreferences.setMockInitialValues({'meowx.speedTest.upload': false}));
 
   test('进度 JSON：核心回的字段都认得，缺的给缺省值', () {
     final p = SpeedTestProgress.fromJson(json.decode('''

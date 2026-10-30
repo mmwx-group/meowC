@@ -21,7 +21,8 @@ import 'package:wifi_ssid/wifi_ssid.dart';
 /// 测速记录里的「网络」（Wi-Fi / 5G / 4G / 3G / 2G / 移动数据 / 有线网络，与 iOS / macOS 同一组文字）：
 /// 制式码 → 代、connectivity 结果 → 物理网络、记录读写、控制器在开始时取、详情页与测速页的显示。
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // 测速榜问过了、选的「不上传」：不弹同意卡片，测速页与以前一样
+  setUp(() => SharedPreferences.setMockInitialValues({'meowx.speedTest.upload': false}));
 
   group('取值', () {
     test('制式码（TelephonyManager.NETWORK_TYPE_*）→ 代：NR = 5G、LTE / LTE_CA = 4G、HSPA 一族 = 3G、EDGE 一族 = 2G，其余 null', () {

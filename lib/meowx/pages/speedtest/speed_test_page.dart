@@ -10,8 +10,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../panel/account.dart';
 import '../../state/connection.dart';
 import '../../state/format.dart';
+import '../../state/meow_settings.dart';
+import '../../state/speed_board.dart';
 import '../../state/speed_test.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
@@ -22,14 +25,28 @@ import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
 import '../proxies/proxies_page.dart' show allLeafProxies;
+import 'speed_board_views.dart';
 import 'speed_test_history_page.dart';
 import 'speed_test_share.dart';
 
 /// 网络测速（点首页网速卡打开；与 iOS / macOS 同一套）：选测速源、单 / 多线程、测速节点（节点或直连，不能选代理组），
 /// 测延迟 → 下载 → 上传。测完 / 失败记一条测速记录（右上角「记录」）。测在 Go 核心里跑、经所选节点直连测速服务器（不经分流规则），见 core/meow_speedtest.go。
 /// 测完之后「记录」左边多一个按钮直接分享这次的结果（同记录详情页的「分享」/「保存分享图」）。离开页面即停止。
+///
+/// 测速榜（speed_board.dart）：第一次进来弹一次同意卡片；设置卡片里一行「上传到测速榜」开关（点字看完整说明、重置身份）；
+/// 同意时测完自动上传，码表下面一条「超越了 x% 的测速」（上传中 / 失败重试 / 样本还少）；上传了的分享按钮变成菜单（多分享 / 复制链接）。
 class SpeedTestPage extends ConsumerStatefulWidget {
-  const SpeedTestPage({super.key, this.controller, this.saveFile, this.shareFile, this.systemShare});
+  const SpeedTestPage({
+    super.key,
+    this.controller,
+    this.saveFile,
+    this.shareFile,
+    this.shareText,
+    this.copyText,
+    this.systemShare,
+    this.boardGrant,
+    this.openUrl,
+  });
 
   /// 测试里换成假的；缺省用全局那一份
   final SpeedTestController? controller;
@@ -37,7 +54,15 @@ class SpeedTestPage extends ConsumerStatefulWidget {
   /// 分享这次结果：测试里换成假的，缺省走平台（见 [SpeedTestShareAction]）
   final SpeedTestSaveFile? saveFile;
   final SpeedTestShareFile? shareFile;
+  final SpeedTestShareText? shareText;
+  final SpeedTestCopyText? copyText;
   final bool? systemShare;
+
+  /// 申请测速榜上传凭证：测试里换成假的；缺省已登录主控时经加密 RPC 要（[PanelClient.speedTestGrant]）
+  final SpeedBoardGrant? boardGrant;
+
+  /// 打开网页（测速榜）；缺省用浏览器
+  final ValueChanged<String>? openUrl;
 
   @override
   ConsumerState<SpeedTestPage> createState() => _SpeedTestPageState();
@@ -49,25 +74,55 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     saveFile: widget.saveFile,
     shareFile: widget.shareFile,
     systemShare: widget.systemShare,
+    shareText: widget.shareText,
+    copyText: widget.copyText,
   );
 
   /// 正在生成 / 分享：页头按钮转圈、不响应
   bool _sharing = false;
 
-  Future<void> _share(SpeedTestRecord record) async {
+  /// [button] 是分享按钮自己的 context：上传过的记录从按钮上弹菜单（菜单开着时按钮不转圈，选了出图才转）
+  Future<void> _share(BuildContext button, SpeedTestRecord record) async {
     if (_sharing) return;
-    setState(() => _sharing = true);
-    try {
-      await share.run(context, record);
-    } finally {
-      if (mounted) setState(() => _sharing = false);
-    }
+    await share.present(button, record, image: () async {
+      if (_sharing) return;
+      setState(() => _sharing = true);
+      try {
+        await share.run(context, record);
+      } finally {
+        if (mounted) setState(() => _sharing = false);
+      }
+    });
   }
+
+  void _open(String url) => (widget.openUrl ?? globalState.openUrl)(url);
 
   @override
   void initState() {
     super.initState();
-    c.load();
+    // 上传凭证要读账户与主控：每次进页面换成这一页的（全局只有一个容器，换了也是同一个）
+    final container = ProviderScope.containerOf(context, listen: false);
+    c.board.grant = widget.boardGrant ??
+        (hash) async {
+          final token = container.read(meowSettingProvider).account.token;
+          final client = container.read(panelClientProvider);
+          if (token.isEmpty || client == null) return null;
+          return client.speedTestGrant(token, hash);
+        };
+    c.load().then((_) {
+      // 第一次进测速页问一次（选完不再问；划掉了下次再问）
+      if (mounted && c.boardConsent == null) _askBoardConsent();
+    });
+  }
+
+  Future<void> _askBoardConsent({bool fromSettings = false}) async {
+    final choice = await showSpeedBoardSheet(
+      context,
+      fromSettings: fromSettings,
+      current: c.boardConsent,
+      onResetIdentity: fromSettings ? c.resetBoardIdentity : null,
+    );
+    if (choice != null) c.setBoardConsent(choice);
   }
 
   @override
@@ -105,11 +160,13 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
           title: '网络测速',
           actions: [
             if (shareable != null && SpeedTestShareImage.canShare(shareable))
-              RoundGlassButton(
-                icon: share.icon,
-                tooltip: share.label,
-                busy: _sharing,
-                onTap: () => _share(shareable),
+              Builder(
+                builder: (button) => RoundGlassButton(
+                  icon: share.iconFor(shareable),
+                  tooltip: share.labelFor(shareable),
+                  busy: _sharing,
+                  onTap: () => _share(button, shareable),
+                ),
               ),
             RoundGlassButton(
               icon: Icons.history_rounded,
@@ -138,6 +195,13 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                 ],
               ),
             ),
+            // 测完、上传了（或在传 / 传失败）才有这一条
+            if (!running && shareable?.board != null)
+              SpeedBoardStrip(
+                entry: shareable!.board,
+                onOpenBoard: () => _open(c.board.endpoint.boardPage),
+                onRetry: () => c.uploadToBoard(shareable.id),
+              ),
             Column(
               children: [
                 _StartButton(
@@ -149,7 +213,11 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                       MeowHaptics.tap();
                       c.stop();
                     } else {
-                      _requestStart(node!, protocol: speedTestProtocolTitle(protocols[node]));
+                      _requestStart(
+                        node!,
+                        protocol: speedTestProtocolTitle(protocols[node]),
+                        protocolCode: speedBoardProtocolCode(protocols[node]),
+                      );
                     }
                   },
                 ),
@@ -182,6 +250,14 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                         height: 38,
                         fontSize: 13,
                         onCard: true,
+                      ),
+                      const SizedBox(height: 12),
+                      Container(height: 1, color: mm.line),
+                      const SizedBox(height: 8),
+                      SpeedBoardSettingRow(
+                        value: c.boardConsent == true,
+                        onChanged: c.setBoardConsent,
+                        onInfo: () => _askBoardConsent(fromSettings: true),
                       ),
                     ],
                   ),
@@ -250,7 +326,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
   }
 
   /// 按流量计费的网络（蜂窝）先确认一次
-  Future<void> _requestStart(String node, {String? protocol}) async {
+  Future<void> _requestStart(String node, {String? protocol, String? protocolCode}) async {
     final net = await Connectivity().checkConnectivity();
     if (!mounted) return;
     if (net.contains(ConnectivityResult.mobile)) {
@@ -267,7 +343,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
       );
       if (go != true || !mounted) return;
     }
-    c.start(node, protocol: protocol);
+    c.start(node, protocol: protocol, protocolCode: protocolCode);
   }
 }
 

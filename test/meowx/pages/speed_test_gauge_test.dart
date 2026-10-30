@@ -272,7 +272,7 @@ void main() {
   });
 
   testWidgets('测速页：测速中节点行写实际在测的节点（组中途换了节点也不跟着变）；出口没查到时这一行占着、码表不跳', (tester) async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'meowx.speedTest.upload': false}); // 测速榜已选「不上传」：不弹同意卡片
     const tokyo = '东京 01', osaka = '大阪 02';
     var status = '{"runID":1,"phase":"latency","via":"$tokyo","exitPending":true}';
     final c = SpeedTestController(call: (method, data) async => method == ActionMethod.meowSpeedTestStatus ? status : '');

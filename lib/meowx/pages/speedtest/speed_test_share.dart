@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 
+import '../../state/speed_board.dart';
 import '../../state/speed_test.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart' show BrandHead, meowRounded;
@@ -24,8 +25,9 @@ import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
 /// 下载大卡（标签、大数字 + Mbps、峰值，内容垂直居中；四位数放不下先缩数字、不截断）、上传 / 延迟上下两格（只测下载的源上传
 /// 画「—」+「此测速源只测下载」）、参数表（测速源 · 线程、网络、协议——后两样记了才有——出站、出口，行均匀分布填满高度，
 /// 最后一行允许折成两行）→ 底部速率曲线卡（标题 + 右边图例，曲线横贯整宽，同详情页的画法）。出口只写 ASN / 运营商，
-/// **不写 IP**（直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。设计稿里下载卡的「超越了 82%」现在不画（上传 /
-/// 统计还没做）。
+/// **不写 IP**（直连测速时那是用户自家的公网 IP）。不画任何可点的控件样式。
+/// 已上传到测速榜（speed_board.dart）时照设计稿 D 多两样：下载卡底部「超越了 x% 的测速」+ 比较范围 + 进度条（服务端给了百分位
+/// 才画，样本不够时没有），页头右边日期下面一行结果链接（「speed.meowx.net/r/7Kq2Xp」）。没上传的图与以前一样。
 ///
 /// 按 800 × 450 的逻辑尺寸排（1cqw = 卡片宽度的 1% = 8 逻辑像素，字号、间距都照设计稿的 cqw 换算）、整张放大 2.4 倍。
 class SpeedTestShareImage {
@@ -109,6 +111,8 @@ class SpeedTestShareContent {
     this.protocol,
     required this.outbound,
     this.exit,
+    this.percentile,
+    this.link,
   });
 
   /// 「2026-10-29 14:32」
@@ -140,6 +144,12 @@ class SpeedTestShareContent {
   /// 出口「AS2516 KDDI」（只有 ASN / 运营商，不带 IP）；查不到 null
   final String? exit;
 
+  /// 测速榜的超越比例（已上传且服务端给了才有）
+  final SpeedBoardPercentile? percentile;
+
+  /// 测速榜结果链接，去掉协议头（「speed.meowx.net/r/7Kq2Xp」）；没上传 null
+  final String? link;
+
   static String _two(int v) => v.toString().padLeft(2, '0');
 
   /// 失败的记录返回 null
@@ -149,6 +159,7 @@ class SpeedTestShareContent {
     final hasUpload = r.source.hasUpload;
     final e = r.exit;
     final exit = e == null ? '' : [?e.asnTag, ?e.shortOrg].join(' ');
+    final board = r.board?.isUploaded == true ? r.board : null;
     return SpeedTestShareContent(
       dateTime: '${d.year}-${_two(d.month)}-${_two(d.day)} ${_two(d.hour)}:${_two(d.minute)}',
       download: fmtRecordMbps(r.downloadMbps),
@@ -163,6 +174,8 @@ class SpeedTestShareContent {
       protocol: r.isDirect ? null : r.protocol,
       outbound: r.isDirect ? '直连 · 本机网络' : r.outbound,
       exit: exit.isEmpty ? null : exit,
+      percentile: board?.percentile,
+      link: board?.shortUrl,
     );
   }
 }
@@ -345,30 +358,91 @@ class _SharePainter {
         ..restore();
     }
     final centerY = top + size / 2;
-    final date = _text(content.dateTime, _style(1.9 * cqw, mm.t2));
-    date.paint(canvas, Offset(w - padH - date.width, centerY - date.height / 2));
+    // 右边：日期；上传过的下面再一行结果链接（等宽字），两行一起按图标的中线居中、右对齐（设计稿 `.meta`）
+    final metaStyle = content.link == null ? _style(1.9 * cqw, mm.t2) : _style(1.9 * cqw, mm.t2).copyWith(height: 1.35);
+    final date = _text(content.dateTime, metaStyle);
+    final link = content.link == null
+        ? null
+        : _text(content.link!, metaStyle.copyWith(fontFamily: MeowFont.monoFamily, fontFamilyFallback: MeowFont.monoFallback),
+            maxWidth: w / 2);
+    final metaHeight = date.height + (link?.height ?? 0);
+    final metaTop = centerY - metaHeight / 2;
+    date.paint(canvas, Offset(w - padH - date.width, metaTop));
+    link?.paint(canvas, Offset(w - padH - link.width, metaTop + date.height));
+    final metaWidth = link == null || date.width > link.width ? date.width : link.width;
     final x = padH + size + 1.6 * cqw;
     final brand = _text('MeowX', _style(3.2 * cqw, mm.t1, weight: FontWeight.w900, rounded: true));
     final brandTop = centerY - brand.height / 2;
     brand.paint(canvas, Offset(x, brandTop));
     final subLeft = x + brand.width + 1.2 * cqw;
-    final sub = _text('网络测速', _style(2 * cqw, mm.t2, weight: FontWeight.w600), maxWidth: w - padH - date.width - 2 * cqw - subLeft);
+    final sub = _text('网络测速', _style(2 * cqw, mm.t2, weight: FontWeight.w600), maxWidth: w - padH - metaWidth - 2 * cqw - subLeft);
     sub.paint(canvas, Offset(subLeft, brandTop + _baseline(brand) - _baseline(sub)));
   }
 
-  /// 下载大卡：「● 下载」、大数字 + Mbps、峰值；内容垂直居中
+  /// 下载大卡：「● 下载」、大数字 + Mbps、峰值；有超越比例时卡片底部是「超越了 x% 的测速」+ 比较范围 + 进度条（设计稿 `.beat`），
+  /// 上面三样在剩下的高度里垂直居中；没有就整卡居中
   void _downloadCard(Canvas canvas, Rect r) {
     _card(canvas, r);
     final left = r.left + cardPadH, maxWidth = r.width - cardPadH * 2;
+    final beatTop = _beat(canvas, r, left, maxWidth);
     final labelHeight = _text(' ', _style(2 * cqw, mm.t2, weight: FontWeight.w700)).height;
-    final (number, unit) = _fitValue(content.download, mm.down, 12 * cqw, 'Mbps', 2.8 * cqw, 0.8 * cqw, maxWidth);
     final peak = content.downloadPeak == null ? null : _text(content.downloadPeak!, _style(2 * cqw, mm.t2), maxWidth: maxWidth);
-    final total = labelHeight + 0.6 * cqw + number.height + (peak == null ? 0 : 0.6 * cqw + peak.height);
-    var y = r.top + (r.height - total) / 2;
+    final fixed = labelHeight + 0.6 * cqw + (peak == null ? 0 : 0.6 * cqw + peak.height);
+    var (number, unit) = _fitValue(content.download, mm.down, 12 * cqw, 'Mbps', 2.8 * cqw, 0.8 * cqw, maxWidth);
+    double y;
+    if (beatTop == null) {
+      y = r.top + (r.height - fixed - number.height) / 2;
+    } else {
+      // 上面三样排在卡片顶边到超越比例之间：放不下就把数字再缩小（不截断、不压到下面那块）
+      final top = r.top + cardPadV, avail = beatTop - 1.2 * cqw - top;
+      if (fixed + number.height > avail && number.height > 0) {
+        final size = (12 * cqw * (avail - fixed) / number.height).floorToDouble().clamp(8.0, 12 * cqw);
+        (number, unit) = _fitValue(content.download, mm.down, size, 'Mbps', 2.8 * cqw, 0.8 * cqw, maxWidth);
+      }
+      final spare = avail - fixed - number.height;
+      y = top + (spare > 0 ? spare / 2 : 0);
+    }
     y += _label(canvas, Offset(left, y), '下载', mm.down) + 0.6 * cqw;
     _paintValue(canvas, Offset(left, y), number, unit, 0.8 * cqw);
     y += number.height;
     if (peak != null) peak.paint(canvas, Offset(left, y + 0.6 * cqw));
+  }
+
+  /// 下载卡底部的超越比例（玫红）：「超越了 **82%** 的测速」、下一行比较范围、再下面一条进度条；从卡片底边往上排。
+  /// 返回这一块的顶边；没有超越比例返回 null、不画
+  double? _beat(Canvas canvas, Rect r, double left, double maxWidth) {
+    final p = content.percentile;
+    if (p == null) return null;
+    final rose = mm.accent;
+    final small = _style(2.1 * cqw, rose, weight: FontWeight.w700);
+    final big = _num(3 * cqw, rose);
+    final title = TextPainter(
+      text: TextSpan(children: [
+        TextSpan(text: '超越了 ', style: small),
+        TextSpan(text: '${p.value}%', style: big),
+        TextSpan(text: ' 的测速', style: small),
+      ]),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '…',
+    )..layout(maxWidth: maxWidth);
+    _painters.add(title);
+    final scope = p.scope.isEmpty ? null : _text(p.scope, _style(1.8 * cqw, mm.t2, weight: FontWeight.w500), maxWidth: maxWidth);
+    const barHeight = 0.9 * cqw, barGap = 0.8 * cqw, scopeGap = 0.2 * cqw;
+    final barTop = r.bottom - cardPadV - barHeight;
+    final scopeTop = scope == null ? barTop - barGap : barTop - barGap - scope.height;
+    final titleTop = scopeTop - (scope == null ? 0 : scopeGap) - title.height;
+    title.paint(canvas, Offset(left, titleTop));
+    scope?.paint(canvas, Offset(left, scopeTop));
+    const radius = Radius.circular(0.5 * cqw);
+    final track = Rect.fromLTWH(left, barTop, maxWidth, barHeight);
+    canvas
+      ..save()
+      ..clipRRect(RRect.fromRectAndRadius(track, radius))
+      ..drawRect(track, Paint()..color = rose.withValues(alpha: 0.15))
+      ..drawRect(Rect.fromLTWH(left, barTop, maxWidth * p.value.clamp(0, 100) / 100, barHeight), Paint()..color = rose)
+      ..restore();
+    return titleTop;
   }
 
   /// 上传 / 延迟卡：上下两格各占一半（格间 1.6cqw），下面那格顶上一条细线、再空 1.6cqw；

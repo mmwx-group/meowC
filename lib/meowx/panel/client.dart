@@ -335,6 +335,19 @@ class PanelClient {
     return NodeMedal.parseList(r);
   }
 
+  /// 测速榜上传凭证（`POST /user/speedtest/grant`，规格 speedtest-board.md §4）：主控代已登录用户向许可证服务要一张绑定
+  /// [payloadHash]（上传正文的 sha256）的凭证。只看 `success`；拿不到（主控旧、没许可证、限流、连不上）回 null，不抛——
+  /// 客户端退回匿名上传，不打扰用户。
+  Future<String?> speedTestGrant(String token, String payloadHash) async {
+    if (token.isEmpty) return null;
+    try {
+      final r = await rpc('/user/speedtest/grant', payload: {'payload_hash': payloadHash}, token: token);
+      final grant = r['grant'];
+      if (r['success'] == true && grant is String && grant.isNotEmpty) return grant;
+    } catch (_) {}
+    return null;
+  }
+
   /// 用户登记的 po0 服务器列表（客户端 IP 加白目标）；没有时为空列表。未登录 / 出错抛 [PanelException]。
   Future<List<Po0Server>> po0Servers(String token) async {
     final r = await rpc('/user/po0-servers', method: 'GET', token: token);
