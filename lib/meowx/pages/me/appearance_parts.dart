@@ -319,7 +319,7 @@ class GlassPatternRow extends ConsumerWidget {
       label: '背景',
       caption: switch (pattern) {
         MeowBgPattern.flat => '只有底色，卡片照样磨砂（底下没有东西可模糊）。',
-        MeowBgPattern.blobs => '底色化成几团大光斑铺在整屏，卡片透出模糊后的光斑。',
+        MeowBgPattern.blobs => '单色是主控同款的几团大光晕（主色光 + 互补光），渐变是两种颜色化成的几团光斑；卡片透出模糊后的光。',
         MeowBgPattern.art => '自己选的图片铺满整屏、压一层底色，卡片透出模糊后的图片；磨砂调低时那层底色跟着变淡。还没选图时先按光斑画。',
       },
       child: MeowSegment<MeowBgPattern>(

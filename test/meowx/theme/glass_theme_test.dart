@@ -609,18 +609,22 @@ void main() {
       expect(g0.selectedCard, Color.alphaBlend(g0.soft.withValues(alpha: g0.soft.a * 0.25 / 0.7), g0.elev));
     });
 
-    test('颜色来源：渐变用两端；单色第二色 = 同色相 +28°；光斑四团的位置、大小、颜色按 340 宽等比', () {
+    test('颜色来源：渐变用两端；单色平涂第二色 = 同色相 +28°；光斑四团（渐变）的位置、大小、颜色按 340 宽等比', () {
       final g = MeowBackdrop.of(
         const MeowLook(style: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient, gradientFrom: 0xFFCDEBDD, gradientTo: 0xFFCFDDF3),
         dark: false,
       );
       expect(g.hueA, closeTo(_hsl(const Color(0xFFCDEBDD)).hue, 0.01));
       expect(g.hueB, closeTo(_hsl(const Color(0xFFCFDDF3)).hue, 0.01));
-      final s = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFFFEFF4), dark: false);
+      // 单色 + 光斑是主控同款的极光（见下一组），单色的 +28° 只剩平涂用
+      final s = MeowBackdrop.of(
+        const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFFFEFF4, bgPattern: MeowBgPattern.flat),
+        dark: false,
+      );
       expect(s.hueB, closeTo((s.hueA + 28) % 360, 0.01));
-      expect(s.diagonal, isTrue);
+      expect(g.diagonal, isTrue);
       // 340 × 720 的手机上就是设计稿的数
-      final blobs = s.blobs(const Size(340, 720));
+      final blobs = g.blobs(const Size(340, 720));
       expect(blobs.map((b) => (b.center, b.radius)).toList(), const [
         (Offset(50, 180), 120.0),
         (Offset(300, 390), 130.0),
@@ -633,11 +637,75 @@ void main() {
       expect(_hsl(blobs[2].color).hue, closeTo(340, 0.5));
       expect(blobs[2].color.a, closeTo(0.72, 0.01));
       expect(blobs[3].color.a, closeTo(0.63, 0.01));
-      final dark = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFFFEFF4), dark: true).blobs(const Size(340, 720));
+      final dark = MeowBackdrop.of(
+        const MeowLook(style: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient, gradientFrom: 0xFFCDEBDD, gradientTo: 0xFFCFDDF3),
+        dark: true,
+      ).blobs(const Size(340, 720));
       expect(_hsl(dark[1].color).lightness, closeTo(0.28, 0.01));
       expect(dark[0].color.a, closeTo(0.75, 0.01));
       // 宽屏按高度比例，不按宽度放大
       expect(MeowBackdrop.scaleOf(const Size(1280, 720)), 1.0);
+    });
+
+    test('单色 + 光斑 = 主控同款极光：选「白」时底色与三团光逐位等于主控 glass-theme.css，罩色 22%；渐变仍是四团光斑', () {
+      List<int> rgb(Color c) => [c.r, c.g, c.b].map((v) => (v * 255).round()).toList();
+      bool near(List<int> a, List<int> b) => Iterable.generate(3).every((i) => (a[i] - b[i]).abs() <= 1);
+      final l = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass), dark: false);
+      expect(l.aurora, isTrue);
+      expect(l.base.first, l.base.last);
+      expect(near(rgb(l.base.first), [0xE8, 0xEE, 0xF5]), isTrue);
+      final lights = l.auroraLights;
+      // 自下而上：底部淡色光、右上琥珀、左上天青
+      expect(near(rgb(lights[0].color), [201, 214, 255]), isTrue);
+      expect(lights[0].color.a, closeTo(0.22, 0.01));
+      expect(near(rgb(lights[1].color), [240, 163, 91]), isTrue);
+      expect(lights[1].color.a, closeTo(0.36, 0.01));
+      expect(near(rgb(lights[2].color), [76, 184, 245]), isTrue);
+      expect(lights[2].color.a, closeTo(0.42, 0.01));
+      expect((lights[2].cx, lights[2].cy, lights[2].rx, lights[2].ry, lights[2].stop), (0.08, 0.10, 0.76, 0.69, 0.60));
+      expect(l.auroraScrim, 0.22);
+      final d = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass), dark: true);
+      expect(near(rgb(d.base.first), [0x0B, 0x12, 0x20]), isTrue);
+      expect(d.auroraLights.map((x) => x.color.a).toList(), [closeTo(0.30, 0.01), closeTo(0.42, 0.01), closeTo(0.55, 0.01)]);
+      expect(d.auroraScrim, 0.22);
+      // 其它颜色：主色光取所选颜色的色相，互补光 +187.34°，淡色光 +23.9°
+      final sakura = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFFFEFF4), dark: false);
+      final h = _hsl(const Color(0xFFFFEFF4)).hue;
+      double gap(double a, double b) => math.min((a - b).abs() % 360, 360 - (a - b).abs() % 360);
+      expect(gap(_hsl(sakura.auroraLights[2].color).hue, h), lessThan(2));
+      expect(gap(_hsl(sakura.auroraLights[1].color).hue, h + 187.34), lessThan(2));
+      expect(gap(_hsl(sakura.auroraLights[0].color).hue, h + 23.9), lessThan(2));
+      // 渐变底色不变
+      final gradient = MeowBackdrop.of(
+        const MeowLook(style: MeowThemeStyle.glass, bgStyle: MeowBgStyle.gradient, gradientFrom: 0xFFCDEBDD, gradientTo: 0xFFCFDDF3),
+        dark: false,
+      );
+      expect(gradient.aurora, isFalse);
+    });
+
+    test('主控同款极光 · 深色：亮色相（薄荷）罩色加浓到浅色字能读清，浅色不动', () {
+      final d = MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFECF8F1), dark: true);
+      expect(d.auroraScrim, greaterThan(0.22));
+      expect(d.auroraScrim, lessThan(0.6));
+      const white = Color(0xFFFFFFFF);
+      expect(
+        MeowBackdrop.auroraSamples(d.base.first, d.auroraLights, d.auroraScrim).every((c) => MeowTokens.contrast(white, c) >= 4.6),
+        isTrue,
+      );
+      expect(MeowBackdrop.of(const MeowLook(style: MeowThemeStyle.glass, cardColor: 0xFFECF8F1), dark: false).auroraScrim, 0.22);
+    });
+
+    test('主控同款卡片：一圈细边、顶边高光、左上斜向高光、主控投影色；其它背景没有斜向高光', () {
+      for (final dark in [false, true]) {
+        expect(MeowFrostStyle.rim(dark, aurora: true).toSet(), {dark ? const Color(0x1FFFFFFF) : const Color(0x1716202B)});
+        expect(MeowFrostStyle.spec(dark, aurora: true), dark ? const Color(0x38FFFFFF) : const Color(0xBFFFFFFF));
+        expect(MeowFrostStyle.drop(dark, 0, aurora: true), dark ? const Color(0x7302060E) : const Color(0x2916202B));
+        expect(MeowFrostStyle.sheen(dark, aurora: true), dark ? const Color(0x29FFFFFF) : const Color(0x8CFFFFFF));
+        expect(MeowFrostStyle.sheen(dark), isNull);
+        final t = MeowTokens.resolve(dark ? Brightness.dark : Brightness.light, const MeowLook(style: MeowThemeStyle.glass));
+        expect(t.card2, MeowFrostStyle.card2(dark, aurora: true));
+      }
+      expect(MeowFrostStyle.sheenLength, 160);
     });
 
     test('插画那层底色：浅 (h,0.5,0.92) α.35 → (h,0.5,0.88) α.45；深 (h,0.5,0.12) α.55 → (h,0.5,0.07) α.60', () {

@@ -1,5 +1,6 @@
 import 'package:bett_box/meowx/glass/liquid_glass.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
+import 'package:bett_box/meowx/theme/backdrop.dart';
 import 'package:bett_box/meowx/theme/button_fill.dart';
 import 'package:bett_box/meowx/theme/glass.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
@@ -64,7 +65,8 @@ void main() {
     test('液态玻璃：次级块那档白 + 一点主题色（主要 18% 墨色 / 强调 14% / 选中 22% 强调色 / 危险 14% 红）+ 0.8 细亮边', () {
       for (final dark in [false, true]) {
         final mm = _glass(dark);
-        final base = Colors.white.withValues(alpha: dark ? 0.07 : 0.38);
+        // 次级块那档白跟着背景：缺省的「白 + 单色 + 光斑」是主控同款（白 .42 / .06），其它是 .38 / .07
+        final base = MeowFrostStyle.card2(dark, aurora: mm.backdrop?.aurora ?? false);
         expect(mm.card2, base);
         expect(mm.buttonFill(MeowButtonFill.plain), base);
         expect(mm.buttonFill(MeowButtonFill.secondary), base);

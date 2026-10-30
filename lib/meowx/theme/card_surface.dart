@@ -469,7 +469,8 @@ class _RenderMeowFrostBox extends RenderProxyBox {
 
     // 投影（卡片底是不透明的背景图，盖得住投影落在卡片下面的那部分）。四角圆角一样时用全 App 共用的九宫格图
     // （[_FrostShadow]）：以前每张卡片每次重画都现算两次高斯模糊，滚动、平推时每帧都在算
-    final drop = MeowFrostStyle.drop(dark, spec.hueA);
+    final aurora = spec.aurora;
+    final drop = MeowFrostStyle.drop(dark, spec.hueA, aurora: aurora);
     _FrostShadow.paint(canvas, edge, drop, c.dpr);
 
     // 卡片背后那块背景：预模糊图按屏幕坐标贴成着色器、直接画成这个圆角形状（不先按圆角裁切：裁切在 Impeller 下要多走模板缓冲）
@@ -515,6 +516,15 @@ class _RenderMeowFrostBox extends RenderProxyBox {
                 Colors.white.withValues(alpha: fill.bottom),
               ])),
     );
+    // 左上角的斜向高光（主控同款）：135° 方向，沿该方向 sheenLength 处淡完；只在卡片顶上那一截画
+    final sheen = MeowFrostStyle.sheen(dark, aurora: aurora);
+    if (sheen != null && !c.openTop) {
+      const d = MeowFrostStyle.sheenLength / math.sqrt2;
+      canvas.drawRRect(
+        rrect,
+        Paint()..shader = ui.Gradient.linear(rect.topLeft, rect.topLeft + const Offset(d, d), [sheen, sheen.withValues(alpha: 0)]),
+      );
+    }
 
     // 顶部 1dp 内高光、底部 1dp 内暗边：沿边线描一道，往里很快淡掉（圆角处顺着弧线）
     final band = math.max(rrect.tlRadius.y, 6.0);
@@ -526,12 +536,12 @@ class _RenderMeowFrostBox extends RenderProxyBox {
         edge.deflate(0.5),
         line
           ..shader = ui.Gradient.linear(rect.topLeft, rect.topLeft + Offset(0, band), [
-            MeowFrostStyle.spec(dark),
-            MeowFrostStyle.spec(dark).withValues(alpha: 0),
+            MeowFrostStyle.spec(dark, aurora: aurora),
+            MeowFrostStyle.spec(dark, aurora: aurora).withValues(alpha: 0),
           ]),
       );
     }
-    if (!c.openBottom) {
+    if (!c.openBottom && !aurora) {
       final inner = MeowFrostStyle.inner(dark, spec.hueA);
       canvas.drawRRect(
         edge.deflate(0.5),
@@ -554,7 +564,7 @@ class _RenderMeowFrostBox extends RenderProxyBox {
         ..shader = ui.Gradient.linear(
           center - dir * (length / 2),
           center + dir * (length / 2),
-          MeowFrostStyle.rim(dark),
+          MeowFrostStyle.rim(dark, aurora: aurora),
           MeowFrostStyle.rimStops,
         ),
     );

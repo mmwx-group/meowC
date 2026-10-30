@@ -230,7 +230,7 @@ class MeowTokens extends ThemeExtension<MeowTokens> {
         backdrop: backdrop,
         elev: elev,
         elevSolid: solid,
-        card2: MeowFrostStyle.card2(isDark),
+        card2: MeowFrostStyle.card2(isDark, aurora: backdrop.aurora),
         cardRim: s.rim,
         cardSheen: s.sheen,
         cardShadow: s.shadow,

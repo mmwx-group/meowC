@@ -25,6 +25,8 @@ class MeowBackdrop {
     required this.diagonal,
     required this.frost,
     this.artImage,
+    this.aurora = false,
+    this.auroraScrim = 0.22,
   });
 
   /// 按底色选择推：渐变用两端；单色时第二色 = 同色相 +28°（「白」取原来的页面底 #F5F1EC 的色相）。
@@ -37,6 +39,32 @@ class MeowBackdrop {
     );
     final b = gradient ? HSLColor.fromColor(Color(look.gradientTo)) : a.withHue((a.hue + 28) % 360);
     final pattern = look.bgPattern;
+    if (pattern == MeowBgPattern.blobs && !gradient) {
+      // 「单色 + 光斑」画成主控同款的极光（同 MeowX iOS / macOS 2026-10-30，取值逐位一致）：冷灰底 + 三团大椭圆光——
+      // 左上主色光（所选颜色的色相；「白」= 主控的天青 201.66°）、右上互补光 +187.34°、底部淡色光 +23.9°，整屏再罩一层底色
+      final h = white ? 201.66 : HSLColor.fromColor(Color(look.cardColor).withValues(alpha: 1)).hue;
+      final ground = dark ? _hsl(h + 18.34, 0.4884, 0.0843) : _hsl(h + 10.65, 0.3939, 0.9353);
+      // 底色罩主控是 22%。深色下亮色相（薄荷这类绿）的光太亮：直接压在背景上的浅色字提到纯白也不到 4.5:1，罩色加浓到够为止
+      var k = 0.22;
+      if (dark) {
+        const pure = Color(0xFFFFFFFF);
+        final lights = auroraLightsOf(h, dark: true);
+        while (k < 0.6 && !auroraSamples(ground, lights, k).every((c) => MeowTokens.contrast(pure, c) >= 4.6)) {
+          k += 0.01;
+        }
+      }
+      return MeowBackdrop(
+        pattern: pattern,
+        dark: dark,
+        hueA: h,
+        hueB: (h + 187.34) % 360,
+        base: [ground, ground],
+        diagonal: true,
+        frost: look.glassFrost.clamp(0.0, 1.0),
+        aurora: true,
+        auroraScrim: k,
+      );
+    }
     final List<Color> base;
     final bool diagonal;
     if (pattern == MeowBgPattern.flat) {
@@ -76,6 +104,35 @@ class MeowBackdrop {
 
   /// 插画背景的图片编号（自己选的图，见 glass_art.dart；换图就重画）。没选图时外观里已经退回光斑（[MeowLook.of]），这里不会是 null
   final String? artImage;
+
+  /// 主控同款的极光（「单色 + 光斑」）：[hueA] 是主色光的色相，[base] 两端同色（冷灰底），[auroraScrim] 是最后整屏罩的那层底色的不透明度
+  final bool aurora;
+  final double auroraScrim;
+
+  static Color _hsl(double hue, double s, double l, [double alpha = 1]) =>
+      HSLColor.fromAHSL(alpha, hue % 360, s, l).toColor();
+
+  /// 三团极光，自下而上（主控 CSS 里写在前面的在上面）：圆心与两个半径按屏幕宽 / 高的比例，颜色从圆心线性淡到 [stop]（半径的比例）处全透明。
+  /// 选「白」时三团光与底色逐位等于主控 glass-theme.css（各色的色相差 / 饱和度 / 亮度从主控色值反算）
+  static List<({double cx, double cy, double rx, double ry, double stop, Color color})> auroraLightsOf(double h, {required bool dark}) {
+    final a = dark ? const [0.55, 0.42, 0.30] : const [0.42, 0.36, 0.22];
+    return [
+      (cx: 0.55, cy: 1.00, rx: 0.69, ry: 0.78, stop: 0.62, color: _hsl(h + 23.9, 1, 0.8941, a[2])),
+      (cx: 0.92, cy: 0.18, rx: 0.625, ry: 0.62, stop: 0.60, color: _hsl(h + 187.34, 0.8324, 0.649, a[1])),
+      (cx: 0.08, cy: 0.10, rx: 0.76, ry: 0.69, stop: 0.60, color: _hsl(h, 0.8942, 0.6294, a[0])),
+    ];
+  }
+
+  List<({double cx, double cy, double rx, double ry, double stop, Color color})> get auroraLights =>
+      auroraLightsOf(hueA, dark: dark);
+
+  /// 极光背景上可能出现的颜色：底本身、每团光在圆心最浓处、左上与右上两团在顶边叠在一起的地方，最后都罩上底色
+  static List<Color> auroraSamples(Color ground, List<({double cx, double cy, double rx, double ry, double stop, Color color})> lights, double scrim) {
+    final peaks = [for (final l in lights) Color.alphaBlend(l.color, ground)];
+    final top = lights.length >= 3 ? Color.alphaBlend(lights[2].color, Color.alphaBlend(lights[1].color, ground)) : ground;
+    final veil = ground.withValues(alpha: scrim);
+    return [for (final c in [ground, ...peaks, top]) Color.alphaBlend(veil, c)];
+  }
 
   /// 光斑与插画几何的参考宽度（设计稿的手机宽 340、高 720）
   static const refWidth = 340.0, refHeight = 720.0;
@@ -173,6 +230,19 @@ class MeowBackdrop {
     switch (pattern) {
       case MeowBgPattern.flat:
         break;
+      case MeowBgPattern.blobs when aurora:
+        // 圆形径向渐变（圆心颜色 → 同色全透明）竖向压扁 / 拉长成椭圆，再整屏罩一层底色
+        for (final l in auroraLights) {
+          final rx = l.rx * screen.width, ry = l.ry * screen.height;
+          if (rx <= 0 || ry <= 0) continue;
+          final matrix = Float64List.fromList([1, 0, 0, 0, 0, ry / rx, 0, 0, 0, 0, 1, 0, l.cx * screen.width, l.cy * screen.height, 0, 1]);
+          canvas.drawRect(
+            rect,
+            Paint()
+              ..shader = ui.Gradient.radial(Offset.zero, rx, [l.color, l.color.withValues(alpha: 0)], [0, l.stop], TileMode.clamp, matrix),
+          );
+        }
+        canvas.drawRect(rect, Paint()..color = base.first.withValues(alpha: auroraScrim));
       case MeowBgPattern.blobs:
         final sigma = blobSigma * scaleOf(screen);
         for (final b in blobs(screen)) {
@@ -282,6 +352,8 @@ class MeowBackdrop {
     switch (pattern) {
       case MeowBgPattern.flat:
         raw = samples;
+      case MeowBgPattern.blobs when aurora:
+        raw = auroraSamples(base.first, auroraLights, auroraScrim);
       case MeowBgPattern.blobs:
         raw = [
           ...samples,
@@ -331,11 +403,13 @@ class MeowBackdrop {
       other.diagonal == diagonal &&
       other.frost == frost &&
       other.artImage == artImage &&
+      other.aurora == aurora &&
+      other.auroraScrim == auroraScrim &&
       other.base.length == base.length &&
       Iterable.generate(base.length).every((i) => other.base[i] == base[i]);
 
   @override
-  int get hashCode => Object.hash(pattern, dark, hueA, hueB, diagonal, frost, artImage, Object.hashAll(base));
+  int get hashCode => Object.hash(pattern, dark, hueA, hueB, diagonal, frost, artImage, aurora, auroraScrim, Object.hashAll(base));
 }
 
 /// 玻璃卡片的固定画法参数（与底栏同一套高光）
@@ -343,23 +417,37 @@ abstract final class MeowFrostStyle {
   /// 高光边 1.2dp，140° 方向四段：浅色 白 .98 → .35(38%) → .12(62%) → .70；深色 .55 → .10 → .04 → .28
   static const rimWidth = 1.2;
   static const rimStops = [0.0, 0.38, 0.62, 1.0];
-  static List<Color> rim(bool dark) => [
-    for (final a in dark ? const [0.55, 0.10, 0.04, 0.28] : const [0.98, 0.35, 0.12, 0.70])
-      Colors.white.withValues(alpha: a),
-  ];
+  /// [aurora]（主控同款，同 MeowX iOS）：一圈均匀的细边（浅 墨色 9% / 深 白 12%）
+  static List<Color> rim(bool dark, {bool aurora = false}) => aurora
+      ? List.filled(4, dark ? const Color(0x1FFFFFFF) : const Color(0x1716202B))
+      : [
+          for (final a in dark ? const [0.55, 0.10, 0.04, 0.28] : const [0.98, 0.35, 0.12, 0.70])
+            Colors.white.withValues(alpha: a),
+        ];
 
-  /// 顶部 1dp 内高光（浅 白 .95 / 深 白 .22）、底部 1dp 内暗边（浅 底色色相 α.10 / 深 黑 α.25）
-  static Color spec(bool dark) => Colors.white.withValues(alpha: dark ? 0.22 : 0.95);
-  static Color inner(bool dark, double hue) =>
-      dark ? const Color(0x40000000) : HSLColor.fromAHSL(0.10, hue, 0.4, 0.5).toColor();
+  /// 顶部 1dp 内高光（浅 白 .95 / 深 白 .22；主控同款 浅 .75 / 深 .22）、底部 1dp 内暗边（浅 底色色相 α.10 / 深 黑 α.25；主控同款没有）
+  static Color spec(bool dark, {bool aurora = false}) => aurora
+      ? (dark ? const Color(0x38FFFFFF) : const Color(0xBFFFFFFF))
+      : Colors.white.withValues(alpha: dark ? 0.22 : 0.95);
+  static Color inner(bool dark, double hue, {bool aurora = false}) => aurora
+      ? const Color(0x00000000)
+      : (dark ? const Color(0x40000000) : HSLColor.fromAHSL(0.10, hue, 0.4, 0.5).toColor());
 
-  /// 投影：浅 底色色相 L0.35 α.16 模糊 28 下移 10 + 一圈 1dp 小影；深 黑 α.35
-  static Color drop(bool dark, double hue) =>
-      dark ? const Color(0x59000000) : HSLColor.fromAHSL(0.16, hue, 0.35, 0.35).toColor();
+  /// 投影：浅 底色色相 L0.35 α.16 模糊 28 下移 10 + 一圈 1dp 小影；深 黑 α.35。主控同款换主控的投影色（浅 #16202B 16% / 深 #02060E 45%）
+  static Color drop(bool dark, double hue, {bool aurora = false}) => aurora
+      ? (dark ? const Color(0x7302060E) : const Color(0x2916202B))
+      : (dark ? const Color(0x59000000) : HSLColor.fromAHSL(0.16, hue, 0.35, 0.35).toColor());
   static const dropBlur = 28.0, dropDy = 10.0;
 
-  /// 次级块（未选分段、进度槽、徽标底）
-  static Color card2(bool dark) => Colors.white.withValues(alpha: dark ? 0.07 : 0.38);
+  /// 次级块（未选分段、进度槽、徽标底）；主控同款 浅 白 .42 / 深 .06
+  static Color card2(bool dark, {bool aurora = false}) => aurora
+      ? (dark ? const Color(0x0FFFFFFF) : const Color(0x6BFFFFFF))
+      : Colors.white.withValues(alpha: dark ? 0.07 : 0.38);
+
+  /// 左上角的斜向高光（只有主控同款）：135° 方向，从这个颜色线性淡到沿该方向 [sheenLength] 处全透明（浅 白 55% / 深 16%）
+  static Color? sheen(bool dark, {bool aurora = false}) =>
+      aurora ? (dark ? const Color(0x29FFFFFF) : const Color(0x8CFFFFFF)) : null;
+  static const sheenLength = 160.0;
 }
 
 /// 渲染好的背景：清晰的整屏背景 [sharp]（页面底用，屏幕坐标 × [sharpScale]）与卡片用的预模糊图 [frost]（× [frostScale]）。
