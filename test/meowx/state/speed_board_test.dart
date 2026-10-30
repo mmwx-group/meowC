@@ -149,16 +149,16 @@ void main() {
       expect(text.length, lessThan(16 * 1024));
     });
 
-    test('只测下载的源（Google / Microsoft）：upload 为 null、upload_samples 为空；时长没记的按 10 秒估', () {
+    test('只测下载的源（Google / Microsoft）：upload 为 null、upload_samples 为空；时长没记的按每段 10 秒 + 1.5 秒估', () {
       for (final source in [SpeedTestSource.google, SpeedTestSource.microsoft]) {
         final t = testPart(speedBoardBody(_record(source: source, durationMs: null), installId: _installId, client: _client));
         expect(t.containsKey('upload_mbps'), isTrue);
         expect(t['upload_mbps'], isNull);
         expect(t['upload_peak_mbps'], isNull);
         expect(t['upload_samples'], isEmpty);
-        expect(t['duration_ms'], 10000);
+        expect(t['duration_ms'], 11500);
       }
-      expect(testPart(speedBoardBody(_record(durationMs: null), installId: _installId, client: _client))['duration_ms'], 20000);
+      expect(testPart(speedBoardBody(_record(durationMs: null), installId: _installId, client: _client))['duration_ms'], 21500);
     });
 
     test('直连：mode = direct、没有协议；没查到出口 claimed_exit 为 null；没取到网络 network 为 null', () {

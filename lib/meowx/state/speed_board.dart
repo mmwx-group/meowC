@@ -313,8 +313,8 @@ Map<String, Object?> speedBoardBody(SpeedTestRecord r, {required String installI
       'download_samples': [for (final v in r.downloadSamples.take(SpeedTestHistory.maxSamples)) _round2(v)],
       'upload_samples': hasUpload ? [for (final v in r.uploadSamples.take(SpeedTestHistory.maxSamples)) _round2(v)] : const [],
       'bytes_used': r.bytesUsed,
-      // 旧记录没记时长：按每段 10 秒估（服务端只拿它粗核「用量 ≈ 速率 × 时长」，3 倍以内都算对）
-      'duration_ms': r.durationMs ?? (hasUpload ? 20000 : 10000),
+      // 旧记录没记时长：按每段 10 秒、加测延迟约 1.5 秒估（同 iOS；服务端只拿它粗核「用量 ≈ 速率 × 时长」，3 倍以内都算对）
+      'duration_ms': r.durationMs ?? ((r.source.hasUpload ? 20000 : 10000) + 1500),
       'server': r.server,
       'finished_at': speedBoardTime(r.date),
     },
