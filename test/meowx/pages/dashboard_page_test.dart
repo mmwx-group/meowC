@@ -733,7 +733,10 @@ void main() {
       textScale: 1,
     );
     // 切模式之后真实实现会防抖推一次配置给核心，测试里没有核心
-    addTearDown(() => debouncer.cancel(FunctionTag.updateClashConfig));
+    addTearDown(() {
+      debouncer.cancel(FunctionTag.updateClashConfig);
+      debouncer.cancel(FunctionTag.updateGroups);
+    });
     final container = ProviderScope.containerOf(tester.element(find.byType(HomeHeroCard)));
     Mode mode() => container.read(patchClashConfigProvider).mode;
 
@@ -743,6 +746,10 @@ void main() {
 
     await tester.tap(find.text('直连'));
     await tester.pump();
+    // 切模式排了两次防抖（推配置、刷新代理组），下面 pumpAndSettle 会走掉那 600ms：先撤掉。
+    // 否则会真去推配置（取下载目录，Linux CI 上直接抛 UnsupportedError）、刷新代理组（测试里没有 appState）
+    debouncer.cancel(FunctionTag.updateClashConfig);
+    debouncer.cancel(FunctionTag.updateGroups);
     expect(mode(), Mode.direct);
     expect(haptics, [kSelection]);
 
