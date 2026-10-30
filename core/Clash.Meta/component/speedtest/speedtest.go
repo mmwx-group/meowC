@@ -61,6 +61,8 @@ type Progress struct {
 	// 出口（经同一出站查 Cloudflare /meta）：ExitPending 查询中；查完 Exit 有值 = 查到了，nil = 查不到（不显示）
 	Exit        *ExitInfo `json:"exit,omitempty"`
 	ExitPending bool      `json:"exitPending,omitempty"`
+	// 测完时才有：从开始测延迟到测完的毫秒数（测速榜上传的 duration_ms；服务端拿它核对「用量 ≈ 速率 × 时长」）
+	DurationMs int64 `json:"durationMs,omitempty"`
 }
 
 const (
@@ -216,6 +218,7 @@ func speedRun(ctx context.Context, runID int, source string, proxy constant.Prox
 		return
 	}
 	speedUpdate(runID, func(p *Progress) { p.Server = endpoints.server; p.Phase = "latency" })
+	measured := time.Now()
 
 	// 延迟只是附带的一项：一条连接偶尔卡在握手里不该让整次测速失败——重试一次，还不行就不显示延迟、照测下载
 	var latency *int
@@ -245,6 +248,9 @@ func speedRun(ctx context.Context, runID int, source string, proxy constant.Prox
 		p.CurrentMbps, p.PhaseProgress = 0, 0
 		p.BytesUsed = used.Load()
 		p.Phase = next
+		if next == "done" {
+			p.DurationMs = time.Since(measured).Milliseconds()
+		}
 	})
 	if !endpoints.hasUpload {
 		return
@@ -259,6 +265,7 @@ func speedRun(ctx context.Context, runID int, source string, proxy constant.Prox
 		p.CurrentMbps, p.PhaseProgress = 0, 1
 		p.BytesUsed = used.Load()
 		p.Phase = "done"
+		p.DurationMs = time.Since(measured).Milliseconds()
 	})
 }
 

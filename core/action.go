@@ -270,6 +270,11 @@ func handleAction(action *Action, result ActionResult) {
 		handleMeowSpeedTestStop()
 		result.success("")
 		return
+	case meowSpeedTestBoardMethod:
+		handleMeowSpeedTestBoard(action.Data.(string), func(value string) {
+			result.success(value)
+		})
+		return
 	case crashMethod:
 		result.success(true)
 		handleCrash()

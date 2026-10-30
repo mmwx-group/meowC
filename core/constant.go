@@ -139,6 +139,7 @@ const (
 	meowSpeedTestStartMethod              Method = "meowSpeedTestStart"
 	meowSpeedTestStatusMethod             Method = "meowSpeedTestStatus"
 	meowSpeedTestStopMethod               Method = "meowSpeedTestStop"
+	meowSpeedTestBoardMethod              Method = "meowSpeedTestBoard"
 	parseExternalProviderContentMethod    Method = "parseExternalProviderContent"
 	getCoreStatusMethod                   Method = "getCoreStatus"
 )

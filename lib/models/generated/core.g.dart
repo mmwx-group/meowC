@@ -332,6 +332,7 @@ const _$ActionMethodEnumMap = {
   ActionMethod.meowSpeedTestStart: 'meowSpeedTestStart',
   ActionMethod.meowSpeedTestStatus: 'meowSpeedTestStatus',
   ActionMethod.meowSpeedTestStop: 'meowSpeedTestStop',
+  ActionMethod.meowSpeedTestBoard: 'meowSpeedTestBoard',
   ActionMethod.setState: 'setState',
   ActionMethod.startTun: 'startTun',
   ActionMethod.stopTun: 'stopTun',
