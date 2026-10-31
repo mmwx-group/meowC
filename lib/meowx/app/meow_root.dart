@@ -23,6 +23,7 @@ import '../panel/realtime.dart';
 import '../state/battery_prompt.dart';
 import '../state/connection.dart';
 import '../state/ggy_reporter.dart';
+import '../state/home_widget.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
@@ -56,6 +57,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<bool> _batterySub;
   final List<ProviderSubscription<Object?>> _wifiSubs = [];
   RealtimeClient? _realtime;
+  /// 安卓桌面小组件的数据同步（只 Android，见 state/home_widget.dart）
+  late final HomeWidgetSync _homeWidget = HomeWidgetSync(ref);
 
   @override
   void initState() {
@@ -125,6 +128,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       }
     });
     if (system.isAndroid) _listenWifiSwitch();
+    _homeWidget.start();
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {
@@ -229,6 +233,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       sub.close();
     }
     _realtime?.stop();
+    _homeWidget.stop();
     super.dispose();
   }
 

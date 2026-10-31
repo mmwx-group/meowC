@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MeowX：桌面小组件在小组件列表里的名字与说明（界面只有中文）。 -->
+<resources>
+    <string name="meowx_widget_small_label">MeowX 小号</string>
+    <string name="meowx_widget_medium_label">MeowX 中号</string>
+    <string name="meowx_widget_small_description">连接开关、本次流量、订阅用量与出站模式</string>
+    <string name="meowx_widget_medium_description">订阅名、运行时长、本次流量、订阅用量与出站模式</string>
+</resources>

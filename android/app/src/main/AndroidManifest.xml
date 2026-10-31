@@ -272,6 +272,44 @@
             </intent-filter>
         </receiver>
 
+        <!-- MeowX：桌面小组件（小 / 中），见 meowx/MeowXWidget.kt。Provider 必须导出（系统要发 APPWIDGET_UPDATE），
+             按钮动作走不导出的 MeowXWidgetActionReceiver，别的 App 开关不了 VPN。 -->
+        <receiver
+            android:name=".meowx.MeowXWidgetSmall"
+            android:exported="true"
+            android:label="@string/meowx_widget_small_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/meowx_widget_small_info" />
+        </receiver>
+
+        <receiver
+            android:name=".meowx.MeowXWidgetMedium"
+            android:exported="true"
+            android:label="@string/meowx_widget_medium_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/meowx_widget_medium_info" />
+        </receiver>
+
+        <receiver
+            android:name=".meowx.MeowXWidgetActionReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name=".meowx.MeowXWidgetModeActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

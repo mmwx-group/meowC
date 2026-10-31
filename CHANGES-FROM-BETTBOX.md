@@ -216,3 +216,9 @@
 - `core/Clash.Meta/component/speedtest`（我们加的内核包）：新增 `board.go`——`BoardSend` 经测速用的同一个出站（节点名或 DIRECT，`FindNode` 同测速）发一次 POST / DELETE 到许可证服务（正文按 base64 原样传、原样发，保证与申请上传凭证时算 sha256 的字节一致），按系统根证书校验证书，整次 10 秒超时，回状态码、`Retry-After` 与响应正文；找不到出站回 `noProxy`。测速进度测完时多一个 `durationMs`（从测延迟开始到测完，旧界面忽略）。测试 `board_test.go`。
 - 桥层（Bettbox 层，最小改动）：`core/constant.go` 加 `meowSpeedTestBoardMethod`、`core/action.go` 加一个 case（goroutine 里发完回调，见 `core/meow_speedtest.go` 的 `handleMeowSpeedTestBoard`）；`lib/enum/enum.dart` 的 `ActionMethod` 加 `meowSpeedTestBoard`，`lib/models/generated/core.g.dart` 的枚举映射手动补一行（与 build_runner 输出一致）。旧内核不认识这个方法 → 界面记为上传失败「内核版本过旧」。
 - 其余都在 `lib/meowx/`：上传正文 / 应答与重试 / 删除（`state/speed_board.dart`），测速记录多存 `protocolCode` / `durationMs` / `board`（`state/speed_test.dart`，旧记录照常读），同意与本机随机 ID 存 SharedPreferences（`meowx.speedTest.upload` / `meowx.speedTest.installId`，退出登录不清），已登录主控时经加密 RPC `/user/speedtest/grant` 要上传凭证（`panel/client.dart`），界面在 `pages/speedtest/`（同意卡片、设置开关、「超越了 x%」条、记录详情「测速榜」一组、分享菜单、分享图的超越比例与链接）。与 iOS / macOS 同一份规格（miaomiaowuC `Design/speedtest-board.md`）。
+
+## 2026-10-31 · Android 桌面小组件（同 MeowX iOS）
+- 新增 `android/app/src/main/kotlin/com/appshub/bettbox/meowx/`（`MeowXWidget.kt` 画法 / 数据 / 小号与中号两个 Provider / 不导出的按钮接收器，`MeowXWidgetPlugin.kt` 通道「meowx/widget」与切模式的跳板 Activity）、`res/layout/meowx_widget_{small,medium}.xml`、`res/xml/meowx_widget_*_info.xml`、`res/drawable/meowx_w_*.xml`、`res/values{,-night}/meowx_widget_colors.xml`、`res/values/meowx_widget_strings.xml`；Dart 侧 `lib/meowx/state/home_widget.dart`（挂在 `MeowRoot`）。
+- `AndroidManifest.xml`：注册两个小组件 Provider（导出，系统要发 APPWIDGET_UPDATE）、按钮接收器（不导出，别的 App 开关不了 VPN）与跳板 Activity（不导出）。
+- `MainActivity.kt`：界面引擎多挂一个 `MeowXWidgetPlugin`。
+- `GlobalState.kt updateRunState`：起停时通知小组件重画（App 没开、从磁贴 / 小组件起停时也准）。

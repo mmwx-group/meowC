@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MeowX：桌面小组件（中号 4×2），见 meowx/MeowXWidget.kt。不定时刷新（updatePeriodMillis=0）：数据变了由 App / 隧道起停主动重画。 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/meowx_widget_medium_description"
+    android:initialLayout="@layout/meowx_widget_medium"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="250dp"
+    android:minResizeHeight="110dp"
+    android:previewLayout="@layout/meowx_widget_medium"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

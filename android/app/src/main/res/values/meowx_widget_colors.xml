@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MeowX：桌面小组件配色，取值同 iOS 的 Widget/StatusWidgetView.swift（Palette）。浅色 -->
+<resources>
+    <color name="meowx_w_hero">#F7CDDB</color>
+    <color name="meowx_w_hero_idle">#E3DACE</color>
+    <color name="meowx_w_card">#FFFFFF</color>
+    <color name="meowx_w_ink">#2A2130</color>
+    <color name="meowx_w_t2">#665A69</color>
+    <color name="meowx_w_idle_text">#5C5160</color>
+    <color name="meowx_w_strong">#7A5647</color>
+    <color name="meowx_w_on_strong">#EFE8DF</color>
+    <color name="meowx_w_power_on">#E77FA6</color>
+    <color name="meowx_w_on_power_on">#2A2130</color>
+    <color name="meowx_w_good">#17693F</color>
+    <color name="meowx_w_vio">#5B45B0</color>
+    <color name="meowx_w_rose">#B02E63</color>
+    <color name="meowx_w_pink">#F3A6BF</color>
+    <color name="meowx_w_track">#F3EDE6</color>
+</resources>

@@ -10,6 +10,7 @@ import android.util.Log
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.appshub.bettbox.meowx.MeowXWidgetPlugin
 import com.appshub.bettbox.plugins.AppPlugin
 import com.appshub.bettbox.plugins.ServicePlugin
 import com.appshub.bettbox.plugins.TilePlugin
@@ -67,7 +68,8 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        listOf(VpnPlugin, AppPlugin(), ServicePlugin(), TilePlugin()).forEach { plugin ->
+        // MeowX：MeowXWidgetPlugin = 桌面小组件的数据通道（只挂在界面引擎上，见 meowx/MeowXWidgetPlugin.kt）
+        listOf(VpnPlugin, AppPlugin(), ServicePlugin(), TilePlugin(), MeowXWidgetPlugin()).forEach { plugin ->
             if (flutterEngine.plugins.get(plugin.javaClass) == null) {
                 flutterEngine.plugins.add(plugin)
             }

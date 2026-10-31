@@ -99,6 +99,8 @@ object GlobalState {
         currentRunState = newState
         _runState.value = newState
         requestTileUpdate()
+        // MeowX：桌面小组件跟着起停重画（App 没开、从磁贴 / 小组件起停时也准）
+        com.appshub.bettbox.meowx.MeowXWidgets.onRunState(newState)
     }
 
     private val tileRetryRunnable = Runnable {

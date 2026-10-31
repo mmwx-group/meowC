@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- MeowX：小组件订阅用量环（小号），从 12 点方向顺时针。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="ring" android:innerRadiusRatio="2.6" android:thicknessRatio="9" android:useLevel="false">
+            <solid android:color="@color/meowx_w_track" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <rotate android:fromDegrees="270" android:toDegrees="270" android:pivotX="50%" android:pivotY="50%">
+            <shape android:shape="ring" android:innerRadiusRatio="2.6" android:thicknessRatio="9" android:useLevel="true">
+                <solid android:color="@color/meowx_w_pink" />
+            </shape>
+        </rotate>
+    </item>
+</layer-list>
