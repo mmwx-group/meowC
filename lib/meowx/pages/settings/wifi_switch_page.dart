@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/meow.dart';
+import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -138,6 +139,39 @@ class _WifiSwitchPageState extends ConsumerState<WifiSwitchPage> with WidgetsBin
     await _refresh();
   }
 
+  /// 读当前 Wi-Fi 的名称给「添加规则」用，省得手动输入：安卓只把名称告诉有定位权限的 App，没有权限先说明并申请，
+  /// 定位服务关着先去打开（回来后再点一次）。读不到返回 null 并说明原因，仍可手动输入。
+  Future<String?> _readCurrentSsid() async {
+    await _refresh();
+    var perm = _perm;
+    if (perm == null) return null;
+    if (!perm.wifi) {
+      globalState.showNotifier('当前没有连着 Wi-Fi');
+      return null;
+    }
+    if (!perm.fineLocation) {
+      await _requestLocation(background: false);   // 授权后里面会再读一次名称
+      perm = _perm;
+      if (perm == null || !perm.fineLocation) return null;   // 没给：申请时的说明里讲过原因，不再提示
+    }
+    if (!perm.locationEnabled) {
+      globalState.showNotifier('请打开系统定位服务，回来后再点一次');
+      await wifiSsidManager.openLocationSettings();
+      return null;
+    }
+    final ssid = _pageSsid ?? ref.read(wifiSwitchStatusProvider).snapshot?.ssid;
+    if (ssid == null) globalState.showNotifier('系统没有给出 Wi-Fi 名称，可以手动输入');
+    return ssid;
+  }
+
+  /// 「添加当前 Wi-Fi」：读到名称就带着它打开添加框；这个名称已经有规则时打开那一条。
+  Future<void> _addCurrent() async {
+    final ssid = await _readCurrentSsid();
+    if (ssid == null || !mounted) return;
+    final i = ref.read(meowSettingProvider).wifiRules.indexWhere((r) => r.ssid == ssid);
+    await _edit(index: i >= 0 ? i : null, suggested: ssid);
+  }
+
   Future<void> _edit({int? index, String? suggested}) async {
     final rules = ref.read(meowSettingProvider).wifiRules;
     final existing = index == null ? null : rules[index];
@@ -163,6 +197,21 @@ class _WifiSwitchPageState extends ConsumerState<WifiSwitchPage> with WidgetsBin
                   labelText: 'Wi-Fi 名称（SSID）',
                   helperText: '区分大小写，与系统里显示的一致',
                   errorText: err,
+                  // 添加时可以直接读当前连着的 Wi-Fi（要定位权限，没有时先申请）
+                  suffixIcon: existing == null
+                      ? IconButton(
+                          tooltip: '读取当前 Wi-Fi',
+                          icon: const Icon(Icons.wifi_find_rounded),
+                          onPressed: () async {
+                            final ssid = await _readCurrentSsid();
+                            if (ssid == null || !ctx.mounted) return;
+                            setState(() {
+                              input.text = ssid;
+                              err = null;
+                            });
+                          },
+                        )
+                      : null,
                 ),
               ),
               const SizedBox(height: 14),
@@ -292,6 +341,18 @@ class _WifiSwitchPageState extends ConsumerState<WifiSwitchPage> with WidgetsBin
                 label: '添加当前 Wi-Fi「$currentSsid」',
                 leading: Icon(Icons.add_rounded, size: 20, color: mm.accent),
                 onTap: () => _edit(suggested: currentSsid),
+              )
+            else if (currentSsid == null && (perm?.wifi ?? false))
+              // 连着 Wi-Fi 却还不知道名称（多半是还没给定位权限）：点了先补权限再读，不用手动输入
+              MeRow(
+                label: '添加当前 Wi-Fi',
+                subtitle: !perm!.fineLocation
+                    ? '读取名称需要定位权限，点这里授权'
+                    : !perm.locationEnabled
+                    ? '读取名称需要打开系统定位服务'
+                    : null,
+                leading: Icon(Icons.wifi_find_rounded, size: 20, color: mm.accent),
+                onTap: _addCurrent,
               ),
           ],
         ),
