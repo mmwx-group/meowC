@@ -60,6 +60,16 @@ void applyMeowDns(Map<String, dynamic> rawConfig, MeowDnsMode mode) {
   rawConfig['dns'] = dns;
 }
 
+/// MeowX IPv6：覆盖顶层 `ipv6` 与 `dns.ipv6`（默认开）。mihomo 的 `ipv6:false` 会禁掉拨 v6 节点服务器、不解析 AAAA，
+/// 导致 v6 节点连不上（iOS / Mac 的自研引擎没这限制、v6 节点一直能拨）。这是我们这层的权威值，盖过「高级 · 内核配置」里那两个开关。
+/// 在 Bettbox 写回 `rawConfig['ipv6']` 与 `rawConfig['dns']` 之后调用。
+void applyMeowIpv6(Map<String, dynamic> rawConfig, bool ipv6) {
+  rawConfig['ipv6'] = ipv6;
+  if (rawConfig['dns'] is Map) {
+    (rawConfig['dns'] as Map)['ipv6'] = ipv6;
+  }
+}
+
 /// MeowX 用户覆写：DNS 劫持 → hosts；绕过 / 推送直连 → 规则最前；本地代理凭据 → authentication。
 /// 在 Bettbox 拼好 hosts 之后调用（hosts 部分），规则部分在 rules 写回 rawConfig 前调用。
 void applyMeowHosts(Map<String, dynamic> rawConfig, MeowSettings meow) {

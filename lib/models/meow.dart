@@ -271,6 +271,10 @@ abstract class MeowSettings with _$MeowSettings {
   const factory MeowSettings({
     @Default(MeowDnsMode.follow) MeowDnsMode dnsMode,
     @Default(LatencyMode.url) LatencyMode latencyMode,
+
+    /// IPv6：覆盖顶层 ipv6 + dns.ipv6（默认开，否则 mihomo 拨不了 v6 节点服务器、不解析 AAAA；
+    /// 盖过「高级 · 内核配置」里那两个开关。iOS / Mac 的自研引擎不受此开关影响，v6 节点一直能拨）
+    @Default(true) bool ipv6,
     @JsonKey(unknownEnumValue: NodeCardSize.standard)
     @Default(NodeCardSize.standard)
     NodeCardSize nodeCardSize,

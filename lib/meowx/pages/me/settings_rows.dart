@@ -61,6 +61,7 @@ class ProxyRows extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final dnsMode = ref.watch(meowSettingProvider.select((s) => s.dnsMode));
     final latencyMode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
+    final ipv6 = ref.watch(meowSettingProvider.select((s) => s.ipv6));
     final testUrl = ref.watch(appSettingProvider.select((s) => s.testUrl));
     return MeRows(
       children: [
@@ -74,6 +75,15 @@ class ProxyRows extends ConsumerWidget {
             final changed = effectiveDnsMode(dnsMode, declared) != effectiveDnsMode(v, declared);
             ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(dnsMode: v));
             if (changed) _reloadIfRunning(ref);
+          },
+        ),
+        MeSwitchRow(
+          label: 'IPv6',
+          subtitle: '连接 IPv6 节点、解析 AAAA；关掉只走 IPv4',
+          value: ipv6,
+          onChanged: (v) {
+            ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(ipv6: v));
+            _reloadIfRunning(ref);
           },
         ),
         MePickerRow<LatencyMode>(

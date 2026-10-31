@@ -807,6 +807,8 @@ class GlobalState {
     // MeowX：DNS 模式（跟随订阅 / Redir-Host / Fake-IP）只改 dns.enhanced-mode，在 Bettbox 的 dns 覆写之后生效；
     // DNS 劫持写进 hosts；本地代理凭据写 authentication
     applyMeowDns(rawConfig, config.meow.dnsMode);
+    // MeowX：IPv6（默认开）覆盖顶层 ipv6 与 dns.ipv6，让 v6 节点能连（见 applyMeowIpv6），在 dns 覆写之后
+    applyMeowIpv6(rawConfig, config.meow.ipv6);
     applyMeowHosts(rawConfig, config.meow);
     applyMeowAuthentication(rawConfig, config.meow);
     // MeowX：记下当前订阅各节点的 type / server / port，奖牌与解锁在节点名对不上时（主控的套餐订阅会改名）按它认节点
