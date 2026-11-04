@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/meow_tab.dart';
 import '../../app/window_controls.dart';
 import '../../app/strings.dart';
+import '../../state/closed_connections.dart';
 import '../../state/connection.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
@@ -28,6 +29,15 @@ import '../../theme/widgets.dart';
 import 'conn_rule_card.dart';
 
 enum _Seg { connections, logs }
+
+/// 「已关闭」那份记录：放在页面外，页面重建 / 离开再回来都还在；断开代理、内核重启时清空。
+/// 只有动态页在轮询（页面可见、App 在前台）时才比得出谁关了，所以只记这段时间里关闭的。
+final _closedConnsProvider = Provider<ClosedConnections>((ref) {
+  final closed = ClosedConnections();
+  ref.listen(isRunningProvider, (prev, next) => closed.clear());
+  ref.listen(isRestartingCoreProvider, (prev, next) => closed.clear());
+  return closed;
+});
 
 /// 没有画面在用、动态页的轮询该停。[background] = globalState.backgroundMode（口径同每秒节拍）：
 /// 桌面只有隐藏或最小化才为真，失焦不算，为真就停。移动端它把 inactive 也算后台，而 Android 分屏 / 小窗里
@@ -56,8 +66,13 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   final _search = TextEditingController();
   String _query = '';
 
-  /// 类型筛选（全部 / 推送 / DNS / 直连 / 代理），连接与日志共用（对应 iOS，APNs 换成 Google 推送）
+  /// 类型筛选（全部 / 推送 / DNS / 直连 / 代理 / 已关闭），连接与日志共用（对应 iOS，APNs 换成 Google 推送）；
+  /// 「已关闭」只作用于连接，日志按「全部」
   ActivityKind _kind = ActivityKind.all;
+
+  bool get _closedMode => _kind == ActivityKind.closed;
+
+  ClosedConnections get _closed => ref.read(_closedConnsProvider);
   List<TrackerInfo> _conns = const [];
   String? _selectedId;
   Timer? _timer;
@@ -98,7 +113,15 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     });
     ref.listenManual(isRunningProvider, (prev, next) {
       _loaded = false;
+      // 「已关闭」随之清空（见 _closedConnsProvider）；手上的旧快照不能拿来和新内核的比
+      _polledAt = null;
+      _polled.fire();
       if (next) unawaited(_poll());
+    });
+    // 内核重启：连接 id 全换了，旧快照里的不是「关闭了」
+    ref.listenManual(isRestartingCoreProvider, (prev, next) {
+      _polledAt = null;
+      _polled.fire();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_poll()));
   }
@@ -154,6 +177,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       if (!mounted) return;
       final now = DateTime.now();
       final ms = _polledAt == null ? 0 : now.difference(_polledAt!).inMilliseconds;
+      // 上一轮有、这一轮没有 = 关闭了。中间隔了一段没拉（切到别的 Tab、退到后台、刚连上 / 内核重启）时，
+      // 不知道是什么时候关的，只拿这一份当新的基准
+      if (_polledAt != null && !ref.read(isRestartingCoreProvider)) _closed.recordDiff(_conns, list, now);
       final old = {for (final c in _conns) c.id: c};
       // 上一份快照里没有的连接（新建的、刚回到本页的）速率记 0
       int rate(int cur, int? prev) => (prev == null || ms <= 0 || cur <= prev) ? 0 : (cur - prev) * 1000 ~/ ms;
@@ -193,15 +219,19 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
   /// 要显示的列表与汇总。[filtered] = 按搜索词筛（「日志」分段的搜索词不作用于连接）。
   /// 每条连接要做五六次 toLowerCase，快照或搜索词变了才重算；选中一行、布局变化之类的重建直接用上一份。
+  /// 「已关闭」时列表换成最近关闭的那几条（新的在前），同样按搜索词筛。
   ({List<TrackerInfo> items, _Sum sum}) _view(bool filtered) {
     final query = filtered ? _query : '';
     final kind = filtered ? _kind : ActivityKind.all;
-    if (!identical(_viewOf, _conns) || _viewQuery != query || _viewKind != kind) {
-      _viewOf = _conns;
+    final source = kind == ActivityKind.closed ? _closed.connections : _conns;
+    if (!identical(_viewOf, source) || _viewQuery != query || _viewKind != kind) {
+      _viewOf = source;
       _viewQuery = query;
       _viewKind = kind;
-      final byQuery = query.isEmpty ? _conns : _filter(_conns, query);
-      _viewItems = kind == ActivityKind.all ? byQuery : byQuery.where((c) => connectionKinds(c).contains(kind)).toList();
+      final byQuery = query.isEmpty ? source : _filter(source, query);
+      _viewItems = kind == ActivityKind.all || kind == ActivityKind.closed
+          ? byQuery
+          : byQuery.where((c) => connectionKinds(c).contains(kind)).toList();
       _viewSum = _Sum.of(_viewItems);
     }
     return (items: _viewItems, sum: _viewSum);
@@ -216,9 +246,11 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     });
   }
 
+  /// 手动关的也进「已关闭」：它马上从 [_conns] 里拿掉，下一轮比快照时就比不出来了
   void _close(String id) {
     clashCore.closeConnection(id);
     setState(() {
+      _closed.add(_conns.where((c) => c.id == id), DateTime.now());
       _conns = _conns.where((c) => c.id != id).toList();
       if (_selectedId == id) _selectedId = null;
     });
@@ -226,11 +258,14 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
   void _closeAll() {
     clashCore.closeConnections();
-    setState(() => _conns = const []);
+    setState(() {
+      _closed.add(_conns, DateTime.now());
+      _conns = const [];
+    });
   }
 
-  /// 窄屏没有右栏：详情放进底部弹层，内容随轮询刷新。
-  Future<void> _openSheet(TrackerInfo c) async {
+  /// 窄屏没有右栏：详情放进底部弹层，内容随轮询刷新。[closedAt] 不为空 = 已关闭的连接（不刷新、没有关闭按钮）。
+  Future<void> _openSheet(TrackerInfo c, {DateTime? closedAt}) async {
     FocusManager.instance.primaryFocus?.unfocus();
     _sheetConn.value = c;
     await showModalBottomSheet<void>(
@@ -249,14 +284,17 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _ConnDetail(c: live),
+                  _ConnDetail(c: live, closedAt: closedAt),
                   const SizedBox(height: 14),
-                  _CloseConnButton(
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      _close(live.id);
-                    },
-                  ),
+                  if (closedAt != null)
+                    const _EndedNote()
+                  else
+                    _CloseConnButton(
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        _close(live.id);
+                      },
+                    ),
                 ],
               ),
             );
@@ -295,7 +333,10 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       height: twoPane ? 40 : 44,
       fontSize: twoPane ? 13 : 14,
     );
-    final Widget rowAction = onConns
+    // 「已关闭」没有可关的，不放「全部关闭」
+    final Widget? rowAction = onConns && _closedMode
+        ? null
+        : onConns
         ? _Selected<bool>(
             listenable: _polled,
             select: () => _conns.isEmpty,
@@ -303,7 +344,16 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           )
         : _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs());
     final kindFilter = _KindFilter(value: _kind, compact: twoPane, onChanged: (k) => setState(() => _kind = k));
-    final emptyText = _query.isEmpty && _kind == ActivityKind.all ? '暂无活动连接' : '无匹配连接';
+    final emptyText = _query.isNotEmpty
+        ? '无匹配连接'
+        : switch (_kind) {
+            ActivityKind.all => '暂无活动连接',
+            ActivityKind.closed => '暂无已关闭的连接',
+            _ => '无匹配连接',
+          };
+    // 日志不认「已关闭」，按「全部」
+    final logKind = _closedMode ? ActivityKind.all : _kind;
+    DateTime? closedAtOf(TrackerInfo c) => _closedMode ? _closed.byId(c.id)?.closedAt : null;
     // 等第一份快照。本页被别的 Tab 盖着时（IndexedStack 里还挂着）不画转圈：隐藏页里的动画照样逼着整个 App 每个 vsync 出一帧
     final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
@@ -312,7 +362,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       final bottom = (wide ? 0.0 : 16.0) + MediaQuery.paddingOf(context).bottom;
       final Widget body;
       if (!onConns) {
-        body = _LogList(query: _query, kind: _kind, bottomPadding: bottom);
+        body = _LogList(query: _query, kind: logKind, bottomPadding: bottom);
       } else if (!running) {
         body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
       } else {
@@ -327,14 +377,18 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             return ListView.builder(
               padding: EdgeInsets.only(bottom: bottom),
               itemCount: items.length,
-              itemBuilder: (_, i) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _ConnRow(
-                  c: items[i],
-                  onTap: () => unawaited(_openSheet(items[i])),
-                  onClose: () => _close(items[i].id),
-                ),
-              ),
+              itemBuilder: (_, i) {
+                final closedAt = closedAtOf(items[i]);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _ConnRow(
+                    c: items[i],
+                    closedAt: closedAt,
+                    onTap: () => unawaited(_openSheet(items[i], closedAt: closedAt)),
+                    onClose: () => _close(items[i].id),
+                  ),
+                );
+              },
             );
           },
         );
@@ -360,7 +414,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             segment,
             const SizedBox(height: 12),
             // 搜索框 + 本段操作同一行，下面一排类型筛选（同 iOS）
-            Row(children: [Expanded(child: search), const SizedBox(width: 8), rowAction]),
+            Row(children: [Expanded(child: search), if (rowAction != null) ...[const SizedBox(width: 8), rowAction]]),
             const SizedBox(height: 10),
             kindFilter,
             const SizedBox(height: 12),
@@ -372,7 +426,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
     final Widget body;
     if (!onConns) {
-      body = _LogList(query: _query, kind: _kind, bottomPadding: 0);
+      body = _LogList(query: _query, kind: logKind, bottomPadding: 0);
     } else if (!running) {
       body = const _Empty(icon: Icons.power_off_rounded, text: S.tunnelNotConnected);
     } else {
@@ -381,7 +435,8 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
         builder: (context, _) {
           if (!_loaded) return loading;
           final (:items, :sum) = _view(true);
-          final selected = _conns.firstWhereOrNull((c) => c.id == _selectedId);
+          final selected = (_closedMode ? _closed.connections : _conns).firstWhereOrNull((c) => c.id == _selectedId);
+          final selectedClosedAt = selected == null ? null : closedAtOf(selected);
           return Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Row(
@@ -392,6 +447,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                     items: items,
                     selectedId: _selectedId,
                     emptyText: emptyText,
+                    closedAtOf: _closedMode ? closedAtOf : null,
                     // 再点一次选中的行 = 取消选中，右栏回到汇总
                     onSelect: (id) => setState(() => _selectedId = _selectedId == id ? null : id),
                   ),
@@ -400,13 +456,20 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                 SizedBox(
                   width: 268,
                   child: selected == null
-                      ? _SummaryPane(summary: '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}', sum: sum)
+                      ? _SummaryPane(
+                          label: _closedMode ? '已关闭' : '活动连接',
+                          summary: '${items.length} 条 · 代理 ${sum.proxied} · 直连 ${sum.direct}',
+                          sum: sum,
+                        )
                       : Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(child: SingleChildScrollView(child: _ConnDetail(c: selected))),
+                            Expanded(child: SingleChildScrollView(child: _ConnDetail(c: selected, closedAt: selectedClosedAt))),
                             const SizedBox(height: 10),
-                            _CloseConnButton(onTap: () => _close(selected.id)),
+                            if (selectedClosedAt != null)
+                              const _EndedNote()
+                            else
+                              _CloseConnButton(onTap: () => _close(selected.id)),
                           ],
                         ),
                 ),
@@ -437,8 +500,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                   SizedBox(width: 190 * MediaQuery.textScalerOf(context).scale(13) / 13, child: segment),
                   const SizedBox(width: 8),
                   Expanded(child: search),
-                  const SizedBox(width: 8),
-                  rowAction,
+                  if (rowAction != null) ...[const SizedBox(width: 8), rowAction],
                 ],
               ),
             ),
@@ -538,6 +600,13 @@ String _age(DateTime start) {
   final h = s ~/ 3600;
   return h > 0 ? '$h:${two(s % 3600 ~/ 60)}:${two(s % 60)}' : '${two(s ~/ 60)}:${two(s % 60)}';
 }
+
+/// 已关闭的连接：「用时 X · HH:mm:ss」（用时 = 关闭时刻 − 开始时间）
+String _closedTime(TrackerInfo c, DateTime closedAt) =>
+    '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt).duration)} · ${fmtClockTime(closedAt)}';
+
+/// 行里的时间：活动连接是已持续的时长，已关闭的见 [_closedTime]
+String _timeOf(TrackerInfo c, DateTime? closedAt) => closedAt == null ? _age(c.start) : _closedTime(c, closedAt);
 
 /// 一份连接列表的汇总：代理 / 直连条数（口径同侧栏角标的 ConnStats）与累计上下行。
 class _Sum {
@@ -771,10 +840,12 @@ String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase(
 
 /// 窄屏连接行（同 iOS）：每条一张小卡。第一行 协议标签 + 主机；第二行 规则选中的出站（DIRECT 绿、拒绝红、其余玫红）+ 规则；
 /// 第三行 ↑ 上传 ↓ 下载 · 时长；右侧关闭。点卡片看详情。
+/// 已关闭的（[closedAt] 不为空）第三行换成「用时 X · 关闭时刻」，没有关闭按钮。
 class _ConnRow extends StatelessWidget {
-  const _ConnRow({required this.c, required this.onTap, required this.onClose});
+  const _ConnRow({required this.c, required this.onTap, required this.onClose, this.closedAt});
   final TrackerInfo c;
   final VoidCallback onTap, onClose;
+  final DateTime? closedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -793,7 +864,7 @@ class _ConnRow extends StatelessWidget {
         onTap: onTap,
         customBorder: shape,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 2, 10),
+          padding: EdgeInsets.fromLTRB(12, 10, closedAt == null ? 2 : 12, 10),
           child: Row(
             children: [
               Expanded(
@@ -836,23 +907,25 @@ class _ConnRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '↑ ${fmtSize(c.upload)}  ↓ ${fmtSize(c.download)} · ${_age(c.start)}',
+                      '↑ ${fmtSize(c.upload)}  ↓ ${fmtSize(c.download)} · ${_timeOf(c, closedAt)}',
                       maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       textScaler: aux,
                       style: num,
                     ),
                   ],
                 ),
               ),
-              Semantics(
-                button: true,
-                label: '关闭这条连接',
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onClose,
-                  child: SizedBox(width: 44, height: 44, child: Icon(Icons.close_rounded, size: 18, color: mm.t2)),
+              if (closedAt == null)
+                Semantics(
+                  button: true,
+                  label: '关闭这条连接',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: onClose,
+                    child: SizedBox(width: 44, height: 44, child: Icon(Icons.close_rounded, size: 18, color: mm.t2)),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
@@ -913,12 +986,20 @@ class _KindFilter extends StatelessWidget {
 
 /// 两栏连接表：一张撑满高度的卡片，表头固定、行懒加载；选中行柔粉底。
 /// 「出站」列与「主机」列按 2:3 分剩余宽度（设计稿 1100 宽时出站 ≈ 128），窗口窄 / 字号大时一起收窄。
+/// 已关闭的（[closedAtOf] 不为空）后两列换成「关闭于」（HH:mm:ss）与「用时」。
 class _ConnTable extends StatelessWidget {
-  const _ConnTable({required this.items, required this.selectedId, required this.emptyText, required this.onSelect});
+  const _ConnTable({
+    required this.items,
+    required this.selectedId,
+    required this.emptyText,
+    required this.onSelect,
+    this.closedAtOf,
+  });
   final List<TrackerInfo> items;
   final String? selectedId;
   final String emptyText;
   final ValueChanged<String> onSelect;
+  final DateTime? Function(TrackerInfo c)? closedAtOf;
 
   @override
   Widget build(BuildContext context) {
@@ -948,9 +1029,9 @@ class _ConnTable extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(flex: 2, child: cell('出站')),
                   const SizedBox(width: 10),
-                  SizedBox(width: rateW, child: cell('下载', align: TextAlign.end)),
+                  SizedBox(width: rateW, child: cell(closedAtOf == null ? '下载' : '关闭于', align: TextAlign.end)),
                   const SizedBox(width: 10),
-                  SizedBox(width: ageW, child: cell('时长', align: TextAlign.end)),
+                  SizedBox(width: ageW, child: cell(closedAtOf == null ? '时长' : '用时', align: TextAlign.end)),
                 ],
               ),
             ),
@@ -962,6 +1043,7 @@ class _ConnTable extends StatelessWidget {
                     itemCount: items.length,
                     itemBuilder: (_, i) => _ConnTableRow(
                       c: items[i],
+                      closedAt: closedAtOf?.call(items[i]),
                       selected: items[i].id == selectedId,
                       rateWidth: rateW,
                       ageWidth: ageW,
@@ -982,8 +1064,10 @@ class _ConnTableRow extends StatelessWidget {
     required this.rateWidth,
     required this.ageWidth,
     required this.onTap,
+    this.closedAt,
   });
   final TrackerInfo c;
+  final DateTime? closedAt;
   final bool selected;
   final double rateWidth, ageWidth;
   final VoidCallback onTap;
@@ -1039,9 +1123,15 @@ class _ConnTableRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                fit(fmtRate(c.downloadSpeed ?? 0), rateWidth),
-                const SizedBox(width: 10),
-                fit(_age(c.start), ageWidth),
+                if (closedAt case final at?) ...[
+                  fit(fmtClockTime(at), rateWidth),
+                  const SizedBox(width: 10),
+                  fit(fmtClosedDuration(ClosedConnection(c, at).duration), ageWidth),
+                ] else ...[
+                  fit(fmtRate(c.downloadSpeed ?? 0), rateWidth),
+                  const SizedBox(width: 10),
+                  fit(_age(c.start), ageWidth),
+                ],
               ],
             ),
           ),
@@ -1115,10 +1205,11 @@ class _StatPair extends StatelessWidget {
 }
 
 /// 连接详情：出站链路（主卡）/ 命中规则 / 上传 · 下载 / 网络 · 入站 · 主机 · 目标 IP · 已持续 / 这个域名走（自定义规则）。
-/// 宽屏放右栏，窄屏放底部弹层；「关闭这条连接」由外层另放。
+/// 宽屏放右栏，窄屏放底部弹层；「关闭这条连接」由外层另放。已关闭的（[closedAt] 不为空）「已持续」换成用时与关闭时刻。
 class _ConnDetail extends StatelessWidget {
-  const _ConnDetail({required this.c});
+  const _ConnDetail({required this.c, this.closedAt});
   final TrackerInfo c;
+  final DateTime? closedAt;
 
   @override
   Widget build(BuildContext context) {
@@ -1129,7 +1220,11 @@ class _ConnDetail extends StatelessWidget {
       if (inbound.isNotEmpty) ('入站', '$inbound${c.metadata.inboundName.isEmpty ? '' : ' · ${c.metadata.inboundName}'}'),
       ('主机', '${_hostOf(c)}:${c.metadata.destinationPort}'),
       if (c.metadata.destinationIP.isNotEmpty && c.metadata.host.isNotEmpty) ('目标 IP', c.metadata.destinationIP),
-      ('已持续', _age(c.start)),
+      if (closedAt case final at?) ...[
+        ('用时', fmtClosedDuration(ClosedConnection(c, at).duration)),
+        ('关闭于', fmtClockTime(at)),
+      ] else
+        ('已持续', _age(c.start)),
     ];
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1202,10 +1297,24 @@ class _CloseConnButton extends StatelessWidget {
   }
 }
 
+/// 已关闭的连接详情下方，代替「关闭这条连接」。
+class _EndedNote extends StatelessWidget {
+  const _EndedNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      alignment: Alignment.center,
+      child: Text('已结束', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.mm.t2)),
+    );
+  }
+}
+
 /// 两栏右栏、没选连接时：当前列表的汇总（条数 / 累计上下行），选一行换成该连接的详情。
 class _SummaryPane extends StatelessWidget {
-  const _SummaryPane({required this.summary, required this.sum});
-  final String summary;
+  const _SummaryPane({required this.label, required this.summary, required this.sum});
+  final String label, summary;
   final _Sum sum;
 
   @override
@@ -1215,7 +1324,7 @@ class _SummaryPane extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _InfoCard(label: '活动连接', value: summary, hero: true),
+          _InfoCard(label: label, value: summary, hero: true),
           const SizedBox(height: 10),
           _StatPair(up: sum.up, down: sum.down),
           const SizedBox(height: 14),

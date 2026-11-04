@@ -187,18 +187,18 @@ void main() {
   testWidgets('类型筛选（同 iOS，APNs 换成安卓的推送）：直连 / 代理按最终出站，连接与日志共用一个选择', (tester) async {
     await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1);
 
-    await tester.tap(find.text('直连'));
+    await _tapChip(tester, '直连');
     await tester.pump();
     expect(find.textContaining('bilibili.com'), findsOneWidget);
     expect(find.text('www.youtube.com:443'), findsNothing);
 
-    await tester.tap(find.text('代理'));
+    await _tapChip(tester, '代理');
     await tester.pump();
     expect(find.text('www.youtube.com:443'), findsOneWidget);
     expect(find.text('api.telegram.org:443'), findsOneWidget);
     expect(find.textContaining('bilibili.com'), findsNothing);
 
-    await tester.tap(find.text('推送'));
+    await _tapChip(tester, '推送');
     await tester.pump();
     expect(find.text('无匹配连接'), findsOneWidget);
 
@@ -206,7 +206,7 @@ void main() {
     await tester.tap(find.text('日志'));
     await tester.pump();
     expect(find.text('无匹配日志'), findsOneWidget);
-    await tester.tap(find.text('全部'));
+    await _tapChip(tester, '全部');
     await tester.pump();
     expect(find.textContaining('NXDOMAIN'), findsOneWidget);
   });
@@ -301,6 +301,143 @@ void main() {
     expect(find.text('github.com:443'), findsNothing);
     expect(tester.widget(find.byType(PageTitle)), same(title));
     expect(tester.widget(find.byType(TextField)), same(field));
+  });
+
+  testWidgets('已关闭：轮询里消失的与手动关的入列（新的在前），行上是用时与关闭时刻、没有关闭按钮；日志按全部', (tester) async {
+    var round = 0;
+    final rounds = [
+      _conns,
+      [_conns[0], _conns[1]],   // bilibili 关了
+    ];
+    await _pump(
+      tester,
+      size: const Size(412, 892),
+      wide: false,
+      twoPane: false,
+      textScale: 1,
+      fetch: () async => rounds[round < rounds.length ? round++ : rounds.length - 1],
+    );
+    Future<void> pick(String label) async {
+      await tester.ensureVisible(find.text(label));
+      await tester.tap(find.text(label));
+      await tester.pump();
+    }
+
+    // 还没有关闭的
+    await pick('已关闭');
+    expect(find.text('暂无已关闭的连接'), findsOneWidget);
+    expect(find.text('全部关闭'), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump();
+    expect(find.textContaining('bilibili.com'), findsOneWidget);
+    expect(find.textContaining('· 用时 4'), findsOneWidget);   // 开始于 42 秒前
+    expect(find.bySemanticsLabel('关闭这条连接'), findsNothing);
+
+    // 回到全部、手动关掉 youtube：它排到已关闭的最前面
+    await pick('全部');
+    expect(find.text('全部关闭'), findsOneWidget);
+    expect(find.textContaining('bilibili.com'), findsNothing);
+    await tester.tap(find.bySemanticsLabel('关闭这条连接').first);
+    await tester.pump();
+    await pick('已关闭');
+    final youtube = tester.getTopLeft(find.text('www.youtube.com:443')).dy;
+    final bilibili = tester.getTopLeft(find.textContaining('bilibili.com')).dy;
+    expect(youtube, lessThan(bilibili));
+
+    // 搜索照常筛
+    await tester.enterText(find.byType(TextField), 'bilibili');
+    await tester.pump();
+    expect(find.text('www.youtube.com:443'), findsNothing);
+    expect(find.textContaining('bilibili.com'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+
+    // 详情：用时 / 关闭于，没有「关闭这条连接」
+    await tester.tap(find.textContaining('bilibili.com'));
+    await tester.pumpAndSettle();
+    expect(find.text('关闭于'), findsOneWidget);
+    expect(find.text('已结束'), findsOneWidget);
+    expect(find.text('关闭这条连接'), findsNothing);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+
+    // 日志段不按「已关闭」筛
+    await tester.tap(find.text('日志'));
+    await tester.pump();
+    expect(find.textContaining('NXDOMAIN'), findsOneWidget);
+    // 等核心那次 closeConnection 的超时定时器走完（测试里没有核心回话）
+    await tester.pump(const Duration(seconds: 31));
+  });
+
+  testWidgets('已关闭（两栏）：后两列是关闭于 / 用时，右栏汇总与详情；断开代理清空', (tester) async {
+    var round = 0;
+    final rounds = [
+      _conns,
+      [_conns[1]],
+    ];
+    await _pump(
+      tester,
+      size: const Size(1100, 700),
+      wide: true,
+      twoPane: true,
+      textScale: 1,
+      fetch: () async => rounds[round < rounds.length ? round++ : rounds.length - 1],
+    );
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump();
+    await _tapChip(tester, '已关闭');
+    await tester.pump();
+    expect(find.text('关闭于'), findsOneWidget);
+    expect(find.text('用时'), findsOneWidget);
+    expect(find.text('全部关闭'), findsNothing);
+    expect(find.text('2 条 · 代理 1 · 直连 1'), findsOneWidget);
+    expect(find.text('api.telegram.org:443'), findsNothing);
+
+    await tester.tap(find.text('www.youtube.com:443'));
+    await tester.pump();
+    expect(find.text('已结束'), findsOneWidget);
+    expect(find.text('关闭这条连接'), findsNothing);
+  });
+
+  testWidgets('已关闭：断开代理时清空', (tester) async {
+    final running = StateProvider<bool>((ref) => true);
+    var round = 0;
+    final rounds = [_conns, <TrackerInfo>[]];
+    tester.view.physicalSize = const Size(1100, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          isRunningProvider.overrideWith((ref) => ref.watch(running)),
+          isWideLayoutProvider.overrideWithValue(true),
+          isTwoPaneProvider.overrideWithValue(true),
+          meowTabProvider.overrideWith((ref) => MeowTab.connections),
+          appSettingProvider.overrideWith(_TestAppSetting.new),
+          logsProvider.overrideWith(() => _TestLogs()),
+        ],
+        child: MaterialApp(
+          home: Scaffold(body: ConnectionsPage(fetch: () async => rounds[round < rounds.length ? round++ : rounds.length - 1])),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump();
+    await _tapChip(tester, '已关闭');
+    await tester.pump();
+    expect(find.text('3 条 · 代理 2 · 直连 1'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(tester.element(find.byType(ConnectionsPage)));
+    container.read(running.notifier).state = false;
+    await tester.pump();
+    container.read(running.notifier).state = true;
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('暂无已关闭的连接'), findsOneWidget);
   });
 
   testWidgets('App 退到后台 / 窗口收进托盘不取数，旧快照留着；回到前台立即补一次', (tester) async {
@@ -639,4 +776,12 @@ void main() {
     expect(paused(true, true, AppLifecycleState.inactive), isTrue);
     expect(paused(true, true, AppLifecycleState.hidden), isTrue);
   });
+}
+
+/// 类型胶囊一行放不下（横向滚动）：先滚到可见再点
+Future<void> _tapChip(WidgetTester tester, String label) async {
+  final chip = find.text(label).first;
+  await tester.ensureVisible(chip);
+  await tester.pumpAndSettle();
+  await tester.tap(chip);
 }

@@ -222,3 +222,8 @@
 - `AndroidManifest.xml`：注册两个小组件 Provider（导出，系统要发 APPWIDGET_UPDATE）、按钮接收器（不导出，别的 App 开关不了 VPN）与跳板 Activity（不导出）。
 - `MainActivity.kt`：界面引擎多挂一个 `MeowXWidgetPlugin`。
 - `GlobalState.kt updateRunState`：起停时通知小组件重画（App 没开、从磁贴 / 小组件起停时也准）。
+
+## 2026-11-03 · 动态页「已关闭」：最近关闭的 50 条连接（同 iOS）
+- `lib/meowx/state/traffic_kind.dart`：类型筛选加「已关闭」，排在「全部」后面（一行放不下时不用横向滑才看得到）；只作用于连接，日志按「全部」显示。
+- 新增 `lib/meowx/state/closed_connections.dart`：内核只给活动连接，关没关由客户端比两轮快照得出——上一轮有、这一轮没有的记下（按上一轮看到的那份、关闭时刻为本轮），最多 50 条、新的在前；中间隔了一段没拉（切 Tab、退后台、刚连上 / 内核重启）时只拿这一轮当新基准，不误记。测试 `test/meowx/state/closed_connections_test.dart`。
+- `lib/meowx/pages/connections/connections_page.dart`：记录放在页面外，页面重建 / 离开再回来都还在，断开代理、内核重启时清空；手动关掉的也进「已关闭」。已关闭的行显示「用时 X · 关闭时刻」、没有关闭按钮，详情里「已持续」换成用时与关闭时刻；「已关闭」下不放「全部关闭」。测试 `test/meowx/pages/connections_page_test.dart`。

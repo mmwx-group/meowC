@@ -1,9 +1,11 @@
 import 'package:bett_box/models/models.dart';
 
-/// 动态页的类型筛选（对应 iOS 的 ActivityKindFilter）：全部 / 推送 / DNS / 直连 / 代理，连接与日志共用一个选择。
+/// 动态页的类型筛选（对应 iOS 的 ActivityKindFilter）：全部 / 推送 / DNS / 直连 / 代理 / 已关闭，连接与日志共用一个选择。
 /// iOS 的「APNs」在安卓 / Windows 上换成「推送」：Google 推送（GMS / FCM）。
+/// 「已关闭」只作用于连接（最近关闭的 50 条，见 closed_connections.dart），日志按「全部」显示。
 enum ActivityKind {
   all('全部'),
+  closed('已关闭'), // 排在「全部」后面（同 iOS）：一行放不下时不用横向滑才看得到
   push('推送'),
   dns('DNS'),
   direct('直连'),
