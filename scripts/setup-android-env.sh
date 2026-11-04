@@ -40,6 +40,9 @@ linker = "$NDK_BIN/armv7a-linux-androideabi26-clang"
 linker = "$NDK_BIN/x86_64-linux-android26-clang"
 CFG
 
+echo "== 内核子模块（core/Clash.Meta）"
+git -C "$(dirname "$0")/.." submodule update --init
+
 echo "== Go 模块预热（绕过本机代理，之后构建可离线）"
 ( cd "$(dirname "$0")/../core" && env -u http_proxy -u https_proxy -u all_proxy GOPROXY=https://proxy.golang.org,direct GOFLAGS=-mod=mod go mod download all )
 

@@ -58,6 +58,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
+          # 内核 core/Clash.Meta 是子模块 mmwx-group/meowx-core
+          submodules: true
 
       - name: Setup Rust (for code_forge / cargokit)
         uses: dtolnay/rust-toolchain@stable
@@ -152,6 +154,8 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
+          # 内核 core/Clash.Meta 是子模块 mmwx-group/meowx-core
+          submodules: true
 
       - name: Setup Rust (helper service)
         uses: dtolnay/rust-toolchain@stable

@@ -17,6 +17,8 @@ Windows 安装包未做代码签名，SmartScreen 提示时选「更多信息 �
 
 ## 构建
 
+内核 `core/Clash.Meta` 是子模块 [meowx-core](https://github.com/mmwx-group/meowx-core)（与 OpenWrt 版共用）：`git clone --recursive`，已有的仓库里 `git submodule update --init`。改内核在子模块里提交、打 tag，这边只提交子模块指针。
+
 全部在 GitHub Actions 里构建（Flutter 3.44.9 / Go 1.25 / NDK 28.2 / Rust stable）：
 
 - `ci.yaml`：push / PR 时 `flutter analyze` + `flutter test`（`lib/meowx/` 与 `test/meowx/` 以 `--fatal-warnings` 收紧）

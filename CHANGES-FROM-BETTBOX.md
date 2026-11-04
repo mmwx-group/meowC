@@ -232,3 +232,9 @@
 - 现象：在规则里设了「断开」的 Wi-Fi 上暂停了代理，走出信号范围后代理没恢复。Wi-Fi 信号变弱时系统先把默认网络切到蜂窝、Wi-Fi 还连着（这一刻读到的仍是那个 Wi-Fi，不切换）；等 Wi-Fi 真断开，默认网络没变，connectivity_plus 与 VPN 插件一个事件都不发。
 - `plugins/wifi_ssid`（Kotlin `WifiSsidPlugin.kt` + Dart `wifi_ssid_manager.dart`）：Wi-Fi 连上 / 断开 / 名称变了时向 Dart 发 `networkChanged`（按网络记上次报过的名称，只在出现、消失、改名时报，去抖 500ms），Dart 侧 `WifiSsidManager.networkChanges`；只在 Android 12+ 且有定位权限时有事件。
 - `lib/meowx/state/wifi_switch.dart`：网络事件多接上插件这一路；规则暂停期间每 30 秒兜底重读一次网络（插件事件不可用时也恢复得了；已经暂停着的也接着盯，如界面进程重启后），恢复或关掉开关就停；暂停 / 恢复失败不记成已决策，同一网络的下一个事件或定时重读再试。测试 `test/meowx/state/wifi_switch_test.dart`。
+
+## 2026-11-03 · 内核拆成独立仓库 meowx-core（子模块）
+- `core/Clash.Meta/`：改为 git 子模块 https://github.com/mmwx-group/meowx-core（固定在 `v0.4.7`）。内核原样拆出、历史保留，与 OpenWrt 版（meowx-openwrt 的 `meowx-core` 包）从此共用同一个仓库；以后改内核在子模块里提交、打 tag，这里只提交子模块指针。拉代码：`git clone --recursive`，或已有的仓库里 `git submodule update --init`。
+- `core/third_party/sing-tun`：移进内核仓库（`Clash.Meta/third_party/sing-tun`，OpenWrt 版也用上了这份补丁）；`core/go.mod` 的 replace 跟着改路径。
+- `v0.4.7` 相对原来的 `core/Clash.Meta` 多了：OpenWrt 原先以补丁形式加的两处（独立程序运行时由 ApplyConfig 起监听端口与 TUN，只在 `main` 里打开，库模式不变；`main` 包的 `panel` 子命令，库模式不编进去），以及 Miu 修复——下行换通道失败后上行再写时拿到空通道，整个内核崩溃。
+- `.github/workflows/build.yaml`：android / windows 两个作业检出时带上子模块。
