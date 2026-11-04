@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:bett_box/meowx/state/wifi_switch.dart';
 import 'package:bett_box/models/meow.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wifi_ssid/wifi_ssid.dart';
 
@@ -18,6 +19,7 @@ class _Harness {
     List<MeowWifiRule>? rules,
     this.other = MeowWifiAction.connect,
     this.running = true,
+    Duration pausedPoll = const Duration(seconds: 30),
   }) : rules = rules ?? const [MeowWifiRule(ssid: 'Home', action: MeowWifiAction.disconnect)] {
     controller = WifiSwitchController(
       config: () => (enabled: enabled, rules: this.rules, other: other),
@@ -29,6 +31,10 @@ class _Harness {
       isRunning: () => running,
       isSuspended: () async => suspended,
       suspend: () async {
+        if (failNext) {
+          failNext = false;
+          throw StateError('smartStop failed');
+        }
         suspends++;
         suspended = true;
         running = false;
@@ -45,6 +51,7 @@ class _Harness {
       log: logs.add,
       onStatus: statuses.add,
       debounce: const Duration(milliseconds: 10),
+      pausedPoll: pausedPoll,
     );
   }
 
@@ -53,6 +60,9 @@ class _Harness {
   MeowWifiAction other;
   bool running;
   bool suspended = false;
+
+  /// 下一次暂停抛异常（模拟原生调用失败）
+  bool failNext = false;
   NetSnapshot net = _cell;
   int reads = 0, suspends = 0, resumes = 0;
   bool? lastNeedSsid;
@@ -280,6 +290,133 @@ void main() {
       await h.moveTo(_wifi('Office'));
       expect(h.suspended, isFalse);
       expect(h.resumes, 1);
+    });
+    test('暂停着时定时重读：Wi-Fi 断开却没有网络事件（默认网络早已切到蜂窝）也能恢复', () async {
+      final h = _Harness(pausedPoll: const Duration(milliseconds: 30))..net = _wifi('Home');
+      h.controller.start();
+      await h.settle();
+      expect(h.suspended, isTrue);
+      expect(h.controller.polling, isTrue);
+
+      // 不发事件：只改网络，等定时重读
+      h.net = _cell;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.resumes, 1);
+      expect(h.suspended, isFalse);
+      expect(h.controller.polling, isFalse, reason: '恢复后不再定时读');
+      expect(h.controller.status.manualOverride, isFalse);
+
+      final reads = h.reads;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.reads, reads, reason: '没暂停时不读网络');
+      h.controller.stop();
+    });
+
+    test('暂停着还在同一个 Wi-Fi：定时重读不重复动作；别处恢复后停止重读', () async {
+      final h = _Harness(pausedPoll: const Duration(milliseconds: 30))..net = _wifi('Home');
+      h.controller.start();
+      await h.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.suspends, 1);
+      expect(h.resumes, 0);
+      expect(h.reads, greaterThan(1));
+
+      // 用户从磁贴恢复（不经控制器）
+      h.suspended = false;
+      h.running = true;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.controller.polling, isFalse);
+      h.controller.stop();
+    });
+
+    test('启动时已经处于暂停（界面进程重启）也会定时重读', () async {
+      final h = _Harness(pausedPoll: const Duration(milliseconds: 30))
+        ..net = _wifi('Home')
+        ..suspended = true
+        ..running = false;
+      h.controller.start();
+      await h.settle();
+      expect(h.suspends, 0);
+      expect(h.controller.polling, isTrue);
+      h.net = _cell;
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(h.resumes, 1);
+      h.controller.stop();
+    });
+
+    test('总开关关掉 / 手动恢复都停止定时重读', () async {
+      final h = _Harness(pausedPoll: const Duration(milliseconds: 30))..net = _wifi('Home');
+      h.controller.start();
+      await h.settle();
+      expect(h.controller.polling, isTrue);
+      await h.controller.resumeManually();
+      expect(h.controller.polling, isFalse);
+
+      await h.moveTo(_cell);
+      await h.moveTo(_wifi('Home'));
+      expect(h.controller.polling, isTrue);
+      h.enabled = false;
+      await h.controller.disabled();
+      expect(h.controller.polling, isFalse);
+      h.controller.stop();
+    });
+    test('暂停失败不记成已决策：同一网络的下一个事件再试', () async {
+      final h = _Harness()
+        ..net = _wifi('Home')
+        ..failNext = true;
+      h.controller.start();
+      await h.settle();
+      expect(h.suspends, 0);
+      expect(h.controller.lastKey, isNull);
+      expect(h.controller.status.note, contains('切换失败'));
+      expect(h.logs.any((l) => l.contains('切换失败')), isTrue);
+
+      await h.moveTo(_wifi('Home'));
+      expect(h.suspends, 1);
+      expect(h.suspended, isTrue);
+      expect(h.controller.lastKey, _wifi('Home').key);
+    });
+  });
+
+  group('wifi_ssid 插件的 Wi-Fi 事件', () {
+    TestWidgetsFlutterBinding.ensureInitialized();
+
+    Future<void> nativeSends(String method) =>
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+          'wifi_ssid',
+          const StandardMethodCodec().encodeMethodCall(MethodCall(method)),
+          (_) {},
+        );
+
+    test('原生 networkChanged 进 networkChanges，别的方法不算', () async {
+      var n = 0;
+      final sub = wifiSsidManager.networkChanges.listen((_) => n++);
+      await nativeSends('networkChanged');
+      await nativeSends('somethingElse');
+      await Future<void>.delayed(Duration.zero);
+      expect(n, 1);
+      await sub.cancel();
+    });
+
+    test('接进控制器：不是默认网络的 Wi-Fi 连上 / 断开，事件一到就判断（两个方向）', () async {
+      final h = _Harness()..net = _cell;
+      final sub = wifiSsidManager.networkChanges.listen(h.events.add);
+      h.controller.start();
+      await h.settle();
+      expect(h.suspended, isFalse);
+
+      h.net = _wifi('Home');
+      await nativeSends('networkChanged');
+      await h.settle();
+      expect(h.suspends, 1);
+
+      h.net = _cell;
+      await nativeSends('networkChanged');
+      await h.settle();
+      expect(h.resumes, 1);
+      expect(h.suspended, isFalse);
+      h.controller.stop();
+      await sub.cancel();
     });
   });
 }

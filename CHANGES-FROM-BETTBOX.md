@@ -227,3 +227,8 @@
 - `lib/meowx/state/traffic_kind.dart`：类型筛选加「已关闭」，排在「全部」后面（一行放不下时不用横向滑才看得到）；只作用于连接，日志按「全部」显示。
 - 新增 `lib/meowx/state/closed_connections.dart`：内核只给活动连接，关没关由客户端比两轮快照得出——上一轮有、这一轮没有的记下（按上一轮看到的那份、关闭时刻为本轮），最多 50 条、新的在前；中间隔了一段没拉（切 Tab、退后台、刚连上 / 内核重启）时只拿这一轮当新基准，不误记。测试 `test/meowx/state/closed_connections_test.dart`。
 - `lib/meowx/pages/connections/connections_page.dart`：记录放在页面外，页面重建 / 离开再回来都还在，断开代理、内核重启时清空；手动关掉的也进「已关闭」。已关闭的行显示「用时 X · 关闭时刻」、没有关闭按钮，详情里「已持续」换成用时与关闭时刻；「已关闭」下不放「全部关闭」。测试 `test/meowx/pages/connections_page_test.dart`。
+
+## 2026-11-03 · Wi-Fi 智能开关：离开 Wi-Fi 时漏判、没恢复代理
+- 现象：在规则里设了「断开」的 Wi-Fi 上暂停了代理，走出信号范围后代理没恢复。Wi-Fi 信号变弱时系统先把默认网络切到蜂窝、Wi-Fi 还连着（这一刻读到的仍是那个 Wi-Fi，不切换）；等 Wi-Fi 真断开，默认网络没变，connectivity_plus 与 VPN 插件一个事件都不发。
+- `plugins/wifi_ssid`（Kotlin `WifiSsidPlugin.kt` + Dart `wifi_ssid_manager.dart`）：Wi-Fi 连上 / 断开 / 名称变了时向 Dart 发 `networkChanged`（按网络记上次报过的名称，只在出现、消失、改名时报，去抖 500ms），Dart 侧 `WifiSsidManager.networkChanges`；只在 Android 12+ 且有定位权限时有事件。
+- `lib/meowx/state/wifi_switch.dart`：网络事件多接上插件这一路；规则暂停期间每 30 秒兜底重读一次网络（插件事件不可用时也恢复得了；已经暂停着的也接着盯，如界面进程重启后），恢复或关掉开关就停；暂停 / 恢复失败不记成已决策，同一网络的下一个事件或定时重读再试。测试 `test/meowx/state/wifi_switch_test.dart`。

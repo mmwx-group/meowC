@@ -1,4 +1,7 @@
-// 移植自 FlClash plugins/wifi_ssid（MIT，© 2025 FlClash）。MeowX 加了 [WifiNetworkState] 与两个跳设置页的方法。
+// 移植自 FlClash plugins/wifi_ssid（MIT，© 2025 FlClash）。MeowX 加了 [WifiNetworkState]、两个跳设置页的方法与
+// [WifiSsidManager.networkChanges]。
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 
 /// The platform permission state required to read the current Wi-Fi SSID.
@@ -53,6 +56,22 @@ class WifiSsidManager {
   static const _checkPermissionMethod = 'checkPermission';
   static const _requestPermissionMethod = 'requestPermission';
   static const _getNetworkStateMethod = 'getNetworkState';
+  static const _networkChangedEvent = 'networkChanged';
+
+  StreamController<void>? _networkChanges;
+
+  /// Wi-Fi 连上 / 断开 / 名称变了（原生已去抖）。包括不是默认网络的 Wi-Fi——connectivity_plus 只报默认网络。
+  /// 只在 Android 12+ 且有精确定位权限时有事件（原生的 Wi-Fi 回调只在那时挂着）。
+  Stream<void> get networkChanges {
+    final existing = _networkChanges;
+    if (existing != null) return existing.stream;
+    final controller = StreamController<void>.broadcast();
+    _networkChanges = controller;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == _networkChangedEvent) controller.add(null);
+    });
+    return controller.stream;
+  }
 
   /// Returns the current WiFi SSID, or null if not connected to WiFi.
   Future<String?> getSsid() {

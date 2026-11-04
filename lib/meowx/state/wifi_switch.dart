@@ -209,6 +209,7 @@ class WifiSwitchController {
     required this.log,
     this.onStatus,
     this.debounce = const Duration(seconds: 1),
+    this.pausedPoll = const Duration(seconds: 30),
   });
 
   final WifiSwitchConfig Function() config;
@@ -224,15 +225,22 @@ class WifiSwitchController {
   final Future<void> Function() suspend;
   final Future<void> Function() resume;
 
-  /// 网络变化事件（connectivity_plus + 原生 networkChanged）
+  /// 网络变化事件（connectivity_plus + 原生 networkChanged + wifi_ssid 插件的 Wi-Fi 变化）
   final Stream<void> Function() networkEvents;
   final void Function(String) log;
   final void Function(WifiSwitchStatus)? onStatus;
   final Duration debounce;
 
+  /// 规则暂停着时多久重读一次网络（兜底）。connectivity_plus 与 VPN 插件的事件只跟默认网络走：离开时 Wi-Fi
+  /// 信号变弱，系统先把默认网络切到蜂窝、Wi-Fi 还连着（这一刻读到的仍是同一个 Wi-Fi，不切换）；等 Wi-Fi 真断开，
+  /// 默认网络没变，它们一个事件都不发。wifi_ssid 插件的 Wi-Fi 事件补上了这一下，但它只在 Android 12+ 且有定位
+  /// 权限时才有。暂停期间 VPN 已关，定时读一次的开销可以忽略；没暂停时不读。
+  final Duration pausedPoll;
+
   final _lock = Lock();
   StreamSubscription<void>? _sub;
   Timer? _debounce;
+  Timer? _poll;
 
   /// 上一次决策过的网络；null = 还没决策过（启动后第一次读到就按规则走）
   String? _lastKey;
@@ -262,6 +270,28 @@ class WifiSwitchController {
     _sub = null;
     _debounce?.cancel();
     _debounce = null;
+    _stopPoll();
+  }
+
+  @visibleForTesting
+  bool get polling => _poll != null;
+
+  void _startPoll() {
+    _poll ??= Timer.periodic(pausedPoll, (_) => unawaited(_pollTick()));
+  }
+
+  void _stopPoll() {
+    _poll?.cancel();
+    _poll = null;
+  }
+
+  /// 暂停期间的定时重读：别处已经恢复了（电源键、磁贴）或总开关关了就不再看。
+  Future<void> _pollTick() async {
+    if (!config().enabled || !await isSuspended()) {
+      _stopPoll();
+      return;
+    }
+    await evaluate(fromNetwork: true);
   }
 
   /// 网络变化：去抖后读网络、按规则决策（同一网络不重复）。
@@ -287,6 +317,7 @@ class WifiSwitchController {
   Future<void> disabled() => _lock.synchronized(() async {
     _manual = false;
     _lastKey = null;
+    _stopPoll();
     if (await isSuspended()) {
       await _act(resume);
       log('Wi-Fi 智能开关已关闭，恢复代理');
@@ -306,6 +337,7 @@ class WifiSwitchController {
   Future<void> resumeManually() => _lock.synchronized(() async {
     noteManualToggle();
     if (await isSuspended()) await _act(resume);
+    _stopPoll();
   });
 
   /// 运行状态变了（电源键、磁贴、通知……）：不是自己暂停 / 恢复引起的就算用户手动。
@@ -352,7 +384,6 @@ class WifiSwitchController {
         _publish(status);
         return;
       }
-      _lastKey = snap.key;
       if (_manual) {
         _manual = false;
         status = status.copyWith(manualOverride: false);
@@ -367,28 +398,42 @@ class WifiSwitchController {
     }
     final verdict = decideWifiAction(cfg.rules, cfg.other, snap);
     final why = verdict.rule != null ? '命中「${verdict.rule!.ssid}」' : '其它网络';
-    switch (verdict.action) {
-      case MeowWifiAction.ignore:
-        status = status.copyWith(clearNote: true);
-      case MeowWifiAction.disconnect:
-        if (!await isSuspended() && isRunning()) {
-          await _act(suspend);
-          final note = '在${snap.label}上断开了代理（$why）';
-          log('Wi-Fi 智能开关：$note');
-          status = status.copyWith(note: note);
-        } else {
+    try {
+      switch (verdict.action) {
+        case MeowWifiAction.ignore:
           status = status.copyWith(clearNote: true);
-        }
-      case MeowWifiAction.connect:
-        if (await isSuspended()) {
-          await _act(resume);
-          final note = '在${snap.label}上恢复了代理（$why）';
-          log('Wi-Fi 智能开关：$note');
-          status = status.copyWith(note: note);
-        } else {
-          status = status.copyWith(clearNote: true);
-        }
+        case MeowWifiAction.disconnect:
+          final suspended = await isSuspended();
+          if (!suspended && isRunning()) {
+            await _act(suspend);
+            _startPoll();
+            final note = '在${snap.label}上断开了代理（$why）';
+            log('Wi-Fi 智能开关：$note');
+            status = status.copyWith(note: note);
+          } else {
+            // 已经暂停着（如界面进程重启后第一次决策）也要接着盯，离开时才恢复得了
+            if (suspended) _startPoll();
+            status = status.copyWith(clearNote: true);
+          }
+        case MeowWifiAction.connect:
+          if (await isSuspended()) {
+            await _act(resume);
+            _stopPoll();
+            final note = '在${snap.label}上恢复了代理（$why）';
+            log('Wi-Fi 智能开关：$note');
+            status = status.copyWith(note: note);
+          } else {
+            status = status.copyWith(clearNote: true);
+          }
+      }
+    } catch (e) {
+      // 没做成就不记成已决策：同一网络的下一个事件（或暂停期的定时重读）再试
+      final note = '在${snap.label}上切换失败：$e';
+      log('Wi-Fi 智能开关：$note');
+      _publish(status.copyWith(note: note));
+      return;
     }
+    if (fromNetwork) _lastKey = snap.key;
     _publish(status);
   });
 
@@ -458,6 +503,7 @@ final wifiSwitchProvider = Provider<WifiSwitchController>((ref) {
     networkEvents: () {
       late final StreamController<void> out;
       StreamSubscription<List<ConnectivityResult>>? sub;
+      StreamSubscription<void>? wifiSub;
       Future<void> onNative(String method, dynamic _) async {
         if (method == 'networkChanged') out.add(null);
       }
@@ -466,10 +512,13 @@ final wifiSwitchProvider = Provider<WifiSwitchController>((ref) {
         onListen: () {
           sub = Connectivity().onConnectivityChanged.listen((_) => out.add(null), onError: (_) {});
           service?.addNativeEventCallback(onNative);
+          // 前两个只报默认网络的变化；不是默认网络的 Wi-Fi 连上 / 断开靠插件这一路
+          wifiSub = wifiSsidManager.networkChanges.listen((_) => out.add(null), onError: (_) {});
         },
         onCancel: () async {
           service?.removeNativeEventCallback(onNative);
           await sub?.cancel();
+          await wifiSub?.cancel();
         },
       );
       return out.stream;

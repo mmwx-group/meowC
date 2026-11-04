@@ -1,5 +1,6 @@
 // 移植自 FlClash plugins/wifi_ssid（MIT，© 2025 FlClash，见本插件的 LICENSE）。
-// MeowX 的改动：加 getNetworkState（物理网络类型 + 蜂窝制式 + 定位权限 / 定位服务状态）、openAppSettings、openLocationSettings。
+// MeowX 的改动：加 getNetworkState（物理网络类型 + 蜂窝制式 + 定位权限 / 定位服务状态）、openAppSettings、openLocationSettings；
+// Wi-Fi 连上 / 断开 / 换名称时向 Dart 发 networkChanged。
 package com.follow.clash.wifi_ssid
 
 import android.Manifest
@@ -48,6 +49,14 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private var hasPendingSsid = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private var ssidTimeout: Runnable? = null
+    // MeowX：Wi-Fi 连上 / 断开 / 名称变了就告诉 Dart。Wi-Fi 不是默认网络时（信号弱、系统已切到蜂窝）
+    // connectivity_plus 与 VPN 插件都不报，Wi-Fi 智能开关就漏掉这次变化。按网络记上次报过的名称
+    // （读不到为空串），只在出现、消失、名称变了时报：能力变化（信号强度等）会连着来，不算；
+    // 重挂回调（checkPermission）时同一网络同一名称也不再报，免得与 Dart 侧的重读互相触发。
+    private val notifiedWifi = ConcurrentHashMap<Network, String>()
+    private val notifyNetworkChanged = Runnable {
+        runCatching { channel.invokeMethod(EVENT_NETWORK_CHANGED, null) }
+    }
 
     private val permissionResultListener = RequestPermissionsResultListener { requestCode, _, _ ->
         if (requestCode != REQUEST_CODE_LOCATION && requestCode != REQUEST_CODE_BACKGROUND_LOCATION) {
@@ -91,6 +100,8 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         private const val REQUEST_CODE_BACKGROUND_LOCATION = 2102
         private const val DENIED_PERMISSIONS_PREFERENCES = "wifi_ssid_denied_permissions"
         private const val SSID_TIMEOUT_MILLIS = 3_000L
+        private const val EVENT_NETWORK_CHANGED = "networkChanged"
+        private const val NETWORK_CHANGED_DEBOUNCE_MILLIS = 500L
 
         // Values must match WifiSsidPermission enum index in Dart
         private const val PERMISSION_GRANTED = 0
@@ -116,7 +127,9 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
             errorMessage = "Plugin detached before SSID lookup completed",
         )
         channel.setMethodCallHandler(null)
+        mainHandler.removeCallbacks(notifyNetworkChanged)
         unregisterWifiNetworkCallback()
+        notifiedWifi.clear()
         detachFromActivity(cancelPermissionRequest = true)
         context = null
         wifiManager = null
@@ -426,6 +439,8 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                 } else {
                     wifiInfoByNetwork[network] = wifiInfo
                 }
+                val name = normalizeSsid(wifiInfo?.ssid) ?: ""
+                if (notifiedWifi.put(network, name) != name) scheduleNetworkChanged()
                 if (!hasPendingSsid) {
                     return
                 }
@@ -438,6 +453,7 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
             override fun onLost(network: Network) {
                 wifiInfoByNetwork.remove(network)
+                if (notifiedWifi.remove(network) != null) scheduleNetworkChanged()
             }
         }
         val request = NetworkRequest.Builder()
@@ -446,6 +462,12 @@ class WifiSsidPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         return runCatching { cm.registerNetworkCallback(request, callback) }
             .onSuccess { wifiNetworkCallback = callback }
             .isSuccess
+    }
+
+    // 去抖：一次连上 / 断开会带来好几次回调，安静 500ms 后只报一次
+    private fun scheduleNetworkChanged() {
+        mainHandler.removeCallbacks(notifyNetworkChanged)
+        mainHandler.postDelayed(notifyNetworkChanged, NETWORK_CHANGED_DEBOUNCE_MILLIS)
     }
 
     private fun scheduleSsidTimeout() {
