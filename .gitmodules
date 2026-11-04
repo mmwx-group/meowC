@@ -1,0 +1,3 @@
+[submodule "core/Clash.Meta"]
+	path = core/Clash.Meta
+	url = https://github.com/mmwx-group/meowx-core.git

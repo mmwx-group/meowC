@@ -2,10 +2,12 @@ module core
 
 go 1.20
 
+// 内核是子模块 mmwx-group/meowx-core（与 OpenWrt 版共用），见仓库根的 .gitmodules
 replace github.com/metacubex/mihomo => ./Clash.Meta
 
-// accept 循环遇错不退出（见 third_party/sing-tun/README.md）
-replace github.com/metacubex/sing-tun => ./third_party/sing-tun
+// accept 循环遇错不退出（见 Clash.Meta/third_party/sing-tun/README.md）。补丁版放在内核仓库里，
+// 但 Go 只认主模块的 replace，这里得再写一遍
+replace github.com/metacubex/sing-tun => ./Clash.Meta/third_party/sing-tun
 
 require (
 	github.com/metacubex/mihomo v0.0.0-00010101000000-000000000000

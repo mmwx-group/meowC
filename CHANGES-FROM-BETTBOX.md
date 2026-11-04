@@ -222,3 +222,9 @@
 - `AndroidManifest.xml`：注册两个小组件 Provider（导出，系统要发 APPWIDGET_UPDATE）、按钮接收器（不导出，别的 App 开关不了 VPN）与跳板 Activity（不导出）。
 - `MainActivity.kt`：界面引擎多挂一个 `MeowXWidgetPlugin`。
 - `GlobalState.kt updateRunState`：起停时通知小组件重画（App 没开、从磁贴 / 小组件起停时也准）。
+
+## 2026-11-03 · 内核拆成独立仓库 meowx-core（子模块）
+- `core/Clash.Meta/`：改为 git 子模块 https://github.com/mmwx-group/meowx-core（固定在 `v0.4.7`）。内核原样拆出、历史保留，与 OpenWrt 版（meowx-openwrt 的 `meowx-core` 包）从此共用同一个仓库；以后改内核在子模块里提交、打 tag，这里只提交子模块指针。拉代码：`git clone --recursive`，或已有的仓库里 `git submodule update --init`。
+- `core/third_party/sing-tun`：移进内核仓库（`Clash.Meta/third_party/sing-tun`，OpenWrt 版也用上了这份补丁）；`core/go.mod` 的 replace 跟着改路径。
+- `v0.4.7` 相对原来的 `core/Clash.Meta` 多了：OpenWrt 原先以补丁形式加的两处（独立程序运行时由 ApplyConfig 起监听端口与 TUN，只在 `main` 里打开，库模式不变；`main` 包的 `panel` 子命令，库模式不编进去），以及 Miu 修复——下行换通道失败后上行再写时拿到空通道，整个内核崩溃。
+- `.github/workflows/build.yaml`：android / windows 两个作业检出时带上子模块。

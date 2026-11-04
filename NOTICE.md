@@ -7,7 +7,7 @@ MeowX（Android / Windows 客户端）以 GNU General Public License v3.0 发布
 - **Bettbox** v1.19.2（commit `b2d8734`）— https://github.com/appshubcc/Bettbox
   本仓库的首个提交即 Bettbox 的原样快照；之后的全部修改记录在 `CHANGES-FROM-BETTBOX.md`。
 - **FlClash** — https://github.com/chen08209/FlClash（Bettbox 的上游）
-- **mihomo**（Clash Meta 内核）— https://github.com/MetaCubeX/mihomo（`core/Clash.Meta/` 为其快照拷贝）
+- **mihomo**（Clash Meta 内核）— https://github.com/MetaCubeX/mihomo（`core/Clash.Meta/` 是子模块 https://github.com/mmwx-group/meowx-core，即本项目修改过的 mihomo，与 OpenWrt 版共用）
 
 原作者的版权声明与文件头一律保留。
 
