@@ -1,15 +1,15 @@
-# MeowX（Android / Windows）
+# MeowX（Android / Windows / Linux）
 
-MeowX 的 Android 与 Windows 客户端，基于 [Bettbox](https://github.com/appshubcc/Bettbox)（Flutter + [mihomo](https://github.com/MetaCubeX/mihomo) 内核）修改。界面与 MeowX iOS / iPad 版同一套设计（奶白 / 樱粉 / 墨色，设计稿在 `design/ui-redesign/`）：手机端底部悬浮的液态玻璃底栏四个 Tab（首页 / 节点 / 动态 / 我的），宽屏（Windows、平板）左侧栏（≥ 1000 宽是带常驻连接卡的完整侧栏，窄一些是图标栏）+ 两栏 / 三栏内容；Bettbox 的原有功能全部保留在「我的 → 高级」。
+MeowX 的 Android、Windows 与 Linux 客户端，基于 [Bettbox](https://github.com/appshubcc/Bettbox)（Flutter + [mihomo](https://github.com/MetaCubeX/mihomo) 内核）修改。界面与 MeowX iOS / iPad 版同一套设计（奶白 / 樱粉 / 墨色，设计稿在 `design/ui-redesign/`）：手机端底部悬浮的液态玻璃底栏四个 Tab（首页 / 节点 / 动态 / 我的），宽屏（Windows、Linux、平板）左侧栏（≥ 1000 宽是带常驻连接卡的完整侧栏，窄一些是图标栏）+ 两栏 / 三栏内容；Bettbox 的原有功能全部保留在「我的 → 高级」。
 
 - 许可证：GPL-3.0（见 `LICENSE`、`NOTICE.md`、`CHANGES-FROM-BETTBOX.md`）
 - 下载：[客户端下载页](https://miaomiaowux.com/docs/client-download)（包放在 dl.miaomiaowux.com）；开发中的构建在 [Actions](https://github.com/mmwx-group/meowC/actions/workflows/build.yaml) 的 artifacts 里
-- 支持：Android 8.0+（arm64 / universal）、Windows 10+（x64）
+- 支持：Android 8.0+（arm64 / universal）、Windows 10+（x64）、Linux（Ubuntu 22.04+ / Debian 12+，x64 / arm64，deb 与 AppImage）
 
 ## 使用
 
 1. **导入订阅**：「我的」页点「导入订阅」粘贴订阅链接；或「账号登录」/ 手机「扫码登录」妙妙屋X 主控后，在「我的订阅」里点一条即下载并切换。也支持 `clash://install-config?url=…` 与 `miaomiaowu://login?host=…&code=…` 深链。
-2. **连接**：首页电源键。Android 走 VPN（TUN），Windows 默认系统代理（TUN 需管理员，沿用 Bettbox 的 helper 服务流程）。
+2. **连接**：首页电源键。Android 走 VPN（TUN），Windows 默认系统代理（TUN 需管理员，沿用 Bettbox 的 helper 服务流程）。Linux 默认系统代理；deb 装好后内核带 setuid，TUN 直接可开，AppImage 只能用系统代理。
 3. **节点**：节点页按代理组分标签（或列表，右上角菜单切换），点节点切换、点闪电测速；「我的 → 代理与测速」可切 HTTPS 延迟 / 真连接延迟 / TCPing。
 4. **设置**（在「我的」页）：DNS 模式（跟随订阅 / Redir-Host / Fake-IP）、阻止 QUIC、DNS 劫持、绕过代理、本地代理端口与凭据、订阅同步间隔、日志开关、主题。
 
@@ -26,7 +26,7 @@ Windows 安装包未做代码签名，SmartScreen 提示时选「更多信息 �
 
 macOS（Apple Silicon）本机出 Android 包：`./scripts/setup-android-env.sh`（一次性，约 5 GB；加 `--emulator` 顺带装模拟器）→ `./scripts/build-android.sh`（约 6 分钟，产物在 `dist/`）。
 
-本地构建与 Bettbox 相同：`flutter pub get` → `dart run build_runner build -d` → `dart setup.dart <android|windows> --arch <arm64|amd64>`（Android 需要 `ANDROID_NDK`；Windows 只能在 Windows 上构建，需要 Visual Studio、Inno Setup 6）。Go 核心可单独验证：`cd core && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags with_gvisor .`。
+本地构建与 Bettbox 相同：`flutter pub get` → `dart run build_runner build -d` → `dart setup.dart <android|windows> --arch <arm64|amd64>`（Android 需要 `ANDROID_NDK`；Windows 只能在 Windows 上构建，需要 Visual Studio、Inno Setup 6）。Linux 只能在 Linux 上构建：`dart setup.dart linux --arch <amd64|arm64> --out core-only` → `flutter build linux --release` → `linux/packaging/package_linux.sh <amd64|arm64>`（出 deb + AppImage，依赖见 `build.yaml` 的 linux 作业）。Go 核心可单独验证：`cd core && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -tags with_gvisor .`。
 
 ## 目录
 

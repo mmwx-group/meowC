@@ -331,7 +331,11 @@ class Request {
           ) >
           0;
       if (!hasUpdate) return null;
-      const assetSuffix = String.fromEnvironment('APP_ASSET_SUFFIX');
+      const builtSuffix = String.fromEnvironment('APP_ASSET_SUFFIX');
+      // MeowX：Linux 的 deb 与 AppImage 是同一份构建（编进去的是 .deb）；AppImage 运行时带 APPIMAGE 环境变量，换成 AppImage 包
+      final assetSuffix = system.isLinux && Platform.environment.containsKey('APPIMAGE')
+          ? builtSuffix.replaceFirst(RegExp(r'\.deb$'), '.AppImage')
+          : builtSuffix;
       final file = pickUpdateFile(
         entry['files'] as List? ?? const [],
         portable: appPath.isPortable,
