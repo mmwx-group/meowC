@@ -189,6 +189,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
                     style: TextStyle(
                       fontSize: widget.fontSize,
                       fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                      fontFamilyFallback: linuxTextFallback,   // 这里另起一份样式、不继承主题
                       // 玻璃滑块是透明的，选中的字仍用墨色
                       color: i == index ? (glass ? mm.t1 : mm.onProminent) : mm.t2,
                     ),

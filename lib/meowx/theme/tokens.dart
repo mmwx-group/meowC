@@ -7,9 +7,13 @@ import 'package:flutter/material.dart';
 import 'backdrop.dart';
 
 /// Linux 的中文回落：系统的 Noto Sans CJK（Ubuntu 等桌面自带，名字和 meowRounded 里的 Noto Sans SC 不一样），没有就用随包的
-/// HarmonyOS Sans（简体）。不加的话中文全是方框：干净的 Ubuntu 容器里装了 Noto CJK，Flutter 也没自己回落过去（2026-11 实测）。
-/// 其它平台为空，渲染不变。
+/// HarmonyOS Sans（简体）。linux-arm64 的 Flutter 不会自己回落到系统字体（amd64 会），不写进回落列表的中文全是方框
+/// （2026-11 在干净的 Ubuntu 22.04 / 24.04 上实测）。其它平台为空，渲染不变。
 final linuxCjkFallback = Platform.isLinux ? const <String>['Noto Sans CJK SC', 'HarmonyOS_Sans'] : const <String>[];
+
+/// 主题的回落（Linux）；另起一份、不继承主题的文字样式（`AnimatedDefaultTextStyle` 直接给的 TextStyle）也要带上它。
+/// 其它平台 null：主题与这些样式都同以前。
+final List<String>? linuxTextFallback = linuxCjkFallback.isEmpty ? null : [...linuxCjkFallback, 'Twemoji'];
 
 /// MeowX 颜色 token：与 iOS / iPad 改版同一套——奶白底、白卡片、樱粉主卡、墨色强调
 /// （设计稿 design/ui-redesign/boards 里的 --bg / --card / --card2 / --hero / --btnon / --ink / --ink2 / --soft / --rose …）。
