@@ -739,5 +739,6 @@
   "checkFailed": "Timeout",
   "testing": "Проверка",
   "other": "Другое",
-  "flagged": "Помечен"
+  "flagged": "Помечен",
+  "meowNest": "MeowNest"
 }

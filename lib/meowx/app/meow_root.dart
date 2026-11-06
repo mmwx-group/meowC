@@ -24,6 +24,7 @@ import '../state/battery_prompt.dart';
 import '../state/connection.dart';
 import '../state/ggy_reporter.dart';
 import '../state/home_widget.dart';
+import '../state/mesh.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/status.dart';
@@ -129,6 +130,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     });
     if (system.isAndroid) _listenWifiSwitch();
     _homeWidget.start();
+    // 喵窝：建出控制器（登录 / 启动后问主控能不能用；配置生效后叫醒内核里的喵窝节点）
+    ref.read(meshProvider);
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {

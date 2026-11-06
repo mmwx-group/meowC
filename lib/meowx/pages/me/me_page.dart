@@ -16,6 +16,8 @@ import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
 import '../../update/update_state.dart';
+import '../../state/mesh.dart';
+import '../settings/networking_page.dart';
 import '../settings/proxy_apps_page.dart';
 import '../settings/wifi_switch_page.dart';
 import 'account_card.dart';
@@ -109,9 +111,11 @@ class _MePageState extends ConsumerState<MePage> {
         MeSection(title: 'Wi-Fi 智能开关', accent: true, children: [WifiSwitchRows()]),
       ],
     ];
-    const rest = <Widget>[
-      MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
-      MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
+    final rest = <Widget>[
+      // 组网（喵窝 / Tailscale 三选一）：管理员账号、订阅里有组网节点或开着一个时才列
+      if (ref.watch(networkingEntryVisibleProvider)) const MeSection(title: '组网', children: [NetworkingRow()]),
+      const MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
+      const MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
     ];
     // Windows：第 2 列全是专属分组，通用分组都在第 3 列；平板没有那么多专属项，通用分组两列对半分
     final colA = isDesktopUi ? platform : [proxy, traffic, ...platform];
@@ -184,6 +188,7 @@ class _MePageState extends ConsumerState<MePage> {
 enum _Glyph {
   proxy('M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18'),
   traffic('M6 3v6a6 6 0 0 0 6 6v6M18 3v6a6 6 0 0 1-6 6'),
+  network('M12 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4M5 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4M19 16a2 2 0 1 0 0 4 2 2 0 0 0 0-4M12 7v5M12 12l-6 4M12 12l6 4'),
   apps('M5 4h5v5H5zM14 4h5v5h-5zM5 13h5v5H5zM14 17l2 2 4-4'),
   shield('M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z'),
   wifi('M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0M12 19.5h.01'),
@@ -264,6 +269,9 @@ class _EntryList extends ConsumerWidget {
           ], empty: '默认'),
           page('流量控制', const TrafficRows()),
         ),
+        // 组网（喵窝 / Tailscale 三选一）：管理员账号、订阅里有组网节点或开着一个时才列
+        if (ref.watch(networkingEntryVisibleProvider))
+          entry(_Glyph.network, '组网', networkingSummary(context, ref), () => showMeSheet(context, const NetworkingPage())),
         if (system.isAndroid) ...[
           entry(
             _Glyph.apps,

@@ -5983,6 +5983,11 @@ class AppLocalizations {
   String get flagged {
     return Intl.message('Flagged', name: 'flagged', desc: '', args: []);
   }
+
+  /// `MeowNest`
+  String get meowNest {
+    return Intl.message('MeowNest', name: 'meowNest', desc: '', args: []);
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {

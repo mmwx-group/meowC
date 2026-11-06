@@ -2,6 +2,7 @@ import 'package:dynamic_color/dynamic_color.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
+import 'package:bett_box/meowx/state/mesh.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
@@ -20,7 +21,17 @@ List<Group> getVisibleGroups({
 }) {
   final modeGroups = switch (mode) {
     Mode.direct => const <Group>[],
-    Mode.global => groups,
+    // MeowX：GLOBAL 里不列 Tailscale 组网节点（喵窝 / 订阅里的）：它们只被规则与 DNS 引用，选成全局出口就上不了网
+    Mode.global => [
+      for (final group in groups)
+        group.name == GroupName.GLOBAL.name
+            ? group.copyWith(
+                all: group.all
+                    .where((p) => p.type.toLowerCase() != 'tailscale')
+                    .toList(),
+              )
+            : group,
+    ],
     Mode.rule =>
       groups.where((group) => group.name != GroupName.GLOBAL.name).toList(),
   };
@@ -161,16 +172,21 @@ UpdateParams updateParams(Ref ref) {
       ),
     ),
   );
+  // MeowX：喵窝开着时它的网段要进 TUN（安卓「绕过私有网络」时补进路由、桌面从排除的私网段里挖掉），见 meshAdjustTun
+  final meshRoutes = ref.watch(meshTunRoutesProvider);
   return ref.watch(
     patchClashConfigProvider.select(
       (state) => UpdateParams(
-        tun: state.tun.getRealTun(
-          bypassPrivateRoute,
-          fakeIpRange: state.dns.fakeIpRange,
-          fakeIpRangeV6: state.dns.effectiveFakeIpRangeV6(
-            ipv6Enabled: state.ipv6,
+        tun: meshAdjustTun(
+          state.tun.getRealTun(
+            bypassPrivateRoute,
+            fakeIpRange: state.dns.fakeIpRange,
+            fakeIpRangeV6: state.dns.effectiveFakeIpRangeV6(
+              ipv6Enabled: state.ipv6,
+            ),
+            bypassPrivateRouteAddress: realBypassPrivateRouteAddress,
           ),
-          bypassPrivateRouteAddress: realBypassPrivateRouteAddress,
+          meshRoutes,
         ),
         allowLan: state.allowLan,
         findProcessMode: state.findProcessMode,

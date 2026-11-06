@@ -265,6 +265,40 @@ abstract class Po0CustomServer with _$Po0CustomServer {
       _$Po0CustomServerFromJson(json);
 }
 
+/// 喵窝（主控内置的组网，设计 MeowX 仓库 `Design/meshnet.md` §8）的本机设置：开关、主控 `mesh/status` 给的控制地址与
+/// MagicDNS 后缀、本账号的站点网段（OpenWrt 开放的局域网，原样或映射段）、本机的设备名与它在主控里的编号。
+/// 入网 key **不落盘**（只在内存里，见 `lib/meowx/state/mesh.dart`）。生成运行配置时按它注入「喵窝」节点与最前面的规则。
+@freezed
+abstract class MeowMesh with _$MeowMesh {
+  const factory MeowMesh({
+    @Default(false) bool enabled,
+
+    /// 控制地址：用主控 `mesh/status` 回的 `control_url`（主控套了 CDN 时是不经 CDN 的独立控制入口 / 中继地址，不是主控网址）
+    @Default('') String controlUrl,
+
+    /// MagicDNS 后缀（如 meowx.internal）：这个后缀的域名交给喵窝
+    @Default('') String magicDns,
+
+    /// 本账号站点在喵窝里用的网段（主控 `mesh/devices` 的 sites[].advertised）
+    @Default([]) List<String> routes,
+
+    /// 入网时报给控制服务器的设备名（规范化过的，见 `meshHostname`）
+    @Default('') String hostname,
+
+    /// 这台设备在主控里的编号：重新入网时带给主控（`previous_node_id`），主控先删掉旧的
+    int? nodeId,
+
+    /// 上次问主控的回答：null = 没问过 / 已退出登录；'' = 可用；not_admin / disabled / starting / 其它原因码。
+    /// 启动时先按它决定显不显示「喵窝」（只给管理员），不用等主控答复
+    String? panelReason,
+
+    /// 上次主控给的不可用说明（disabled / starting 时显示）
+    @Default('') String panelMessage,
+  }) = _MeowMesh;
+
+  factory MeowMesh.fromJson(Map<String, Object?> json) => _$MeowMeshFromJson(json);
+}
+
 /// MeowX 壳自己的设置（挂在 Config.meow 上，随 Bettbox 的偏好一起落盘）。
 @freezed
 abstract class MeowSettings with _$MeowSettings {
@@ -370,6 +404,12 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// 已做过「网速图默认隐藏」的一次性迁移（老配置存的是空列表，分不清是没动过还是手动全开；之后用户再打开就保留）
     @Default(false) bool homeChartMigrated,
+
+    /// 喵窝（主控内置的组网）。与订阅里的 Tailscale 组网节点只能开一个（「组网」三选一，见 `lib/meowx/config/mesh_config.dart`）
+    @Default(MeowMesh()) MeowMesh mesh,
+
+    /// 订阅里的 Tailscale 组网节点启不启用（缺省开：老用户照旧）。喵窝开着时一律算关；关着时生成运行配置去掉这些节点
+    @Default(true) bool tailscaleNodes,
   }) = _MeowSettings;
 
   factory MeowSettings.fromJson(Map<String, Object?> json) =>

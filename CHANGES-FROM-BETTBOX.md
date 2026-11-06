@@ -238,3 +238,10 @@
 - `core/third_party/sing-tun`：移进内核仓库（`Clash.Meta/third_party/sing-tun`，OpenWrt 版也用上了这份补丁）；`core/go.mod` 的 replace 跟着改路径。
 - `v0.4.7` 相对原来的 `core/Clash.Meta` 多了：OpenWrt 原先以补丁形式加的两处（独立程序运行时由 ApplyConfig 起监听端口与 TUN，只在 `main` 里打开，库模式不变；`main` 包的 `panel` 子命令，库模式不编进去），以及 Miu 修复——下行换通道失败后上行再写时拿到空通道，整个内核崩溃。
 - `.github/workflows/build.yaml`：android / windows 两个作业检出时带上子模块。
+
+## 2026-11-06 · 喵窝 / MeowNest（主控内置的组网）与「组网」三选一（同 MeowX iOS / macOS）
+- `lib/state.dart patchRawConfig`：写回规则表之前调 `applyNetworkingToConfig`（`lib/meowx/state/mesh.dart`）——喵窝开着或「组网」选了关闭时去掉订阅里 `type: tailscale` 的组网节点（指向它们的规则改 DIRECT、代理组里的引用去掉、删空的组补 DIRECT、`ts://<节点>` 的 DNS 策略去掉，配置照样合法）；喵窝开着时注入「喵窝」节点（`type: tailscale`，控制地址用主控 `mesh/status` 回的 `control_url`，`state-dir: meowx-mesh`，`accept-routes: true`；入网 key 只在这台设备还没登记时带、只在内存里）、MagicDNS 后缀的 `ts://喵窝` 策略（fake-ip 时加进 fake-ip-filter）、TUN 路由放行喵窝网段；`meowRuleTable` 多一个 `networkingRules` 参数，喵窝的规则（100.64.0.0/10、MagicDNS 后缀、本账号站点网段）排在整张表最前（先于阻止 QUIC）。
+- `lib/providers/state.dart`：`updateParams` 的 TUN 经 `meshAdjustTun` 调整路由（安卓「绕过私有网络」时把喵窝的站点网段补进路由，桌面从排除的私网段里挖掉，否则 Windows TUN 下访问不了家里的局域网）；`getVisibleGroups` 全局模式下 GLOBAL 不列 Tailscale 类型的节点（喵窝 / 订阅组网节点只被规则与 DNS 引用，选成全局出口就上不了网）。
+- `lib/models/meow.dart`：`MeowSettings` 加 `mesh`（`MeowMesh`：开关、控制地址、MagicDNS 后缀、站点网段、设备名、主控里的设备编号、上次主控的回答）与 `tailscaleNodes`（订阅组网节点开关，缺省开）。
+- `arb/*.arb` + `lib/l10n/`（`intl_utils:generate` 重新生成）：加 `meowNest`（简体「喵窝」、繁体「喵窩」、其它语言「MeowNest」）。
+- 其余都在 `lib/meowx/`：主控接口（`panel/mesh.dart`：`mesh/status`、`mesh/enroll`、`mesh/devices`、`DELETE mesh/devices/{id}`，经加密通道）、配置改写与路由计算（`config/mesh_config.dart`，纯函数）、状态与入网（`state/mesh.dart`：内核的 tailscale 出站懒启动，配置生效后拿它测一次延迟叫醒；本机在主控里的编号读 tsnet 状态文件 `meowx-mesh/tailscaled.state`；只在页面 / 首页卡片看得见时问主控）、「组网」页（`pages/settings/networking_page.dart`）、首页喵窝卡（`pages/dashboard/mesh_card.dart`）、「我的」入口、退出登录时关掉喵窝（`panel/account.dart`）。测试 `test/meowx/config/mesh_config_test.dart`、`test/meowx/pages/networking_page_test.dart`。

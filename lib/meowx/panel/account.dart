@@ -8,6 +8,7 @@ import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/direct_profile.dart';
+import '../state/mesh.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import 'client.dart';
@@ -153,6 +154,8 @@ class AccountActions {
     }
     _update((a) => a.copyWith(token: '', nickname: '', avatarUrl: ''));
     _clearAccountData();
+    // 喵窝跟着账号走：关掉（设备留在主控里，换回这个账号再打开直接上线）；登录过期不关（登记过的设备不靠登录）
+    ref.read(meshProvider.notifier).accountLoggedOut();
   }
 
   /// 登录过期（主控回 `unauthorized`）：清掉失效的 token 与跟账号走的数据，回到未登录态让用户重新登录；

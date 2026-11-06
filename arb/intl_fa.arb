@@ -737,5 +737,6 @@
   "checkFailed": "Timeout",
   "testing": "در حال بررسی",
   "other": "سایر",
-  "flagged": "نشانه‌گذاری‌شده"
+  "flagged": "نشانه‌گذاری‌شده",
+  "meowNest": "MeowNest"
 }

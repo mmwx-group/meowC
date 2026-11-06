@@ -736,5 +736,6 @@
   "checkFailed": "Timeout",
   "testing": "Testing",
   "other": "Other",
-  "flagged": "Flagged"
+  "flagged": "Flagged",
+  "meowNest": "MeowNest"
 }

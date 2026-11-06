@@ -737,5 +737,6 @@
   "checkFailed": "Timeout",
   "testing": "檢測中",
   "other": "其他",
-  "flagged": "已標記"
+  "flagged": "已標記",
+  "meowNest": "喵窩"
 }

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/strings.dart';
 import '../../state/connection.dart';
 import '../../state/exit_ip.dart';
+import '../../state/mesh.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/haptics.dart';
@@ -19,6 +20,7 @@ import '../../theme/widgets.dart';
 import 'active_connections_card.dart';
 import 'hero_card.dart';
 import 'info_cards.dart';
+import 'mesh_card.dart';
 import 'speed_card.dart';
 import 'takeover_card.dart';
 
@@ -26,7 +28,7 @@ const _gap = 12.0;
 const _pad = 16.0;
 
 /// 首页（设计稿 design/ui-redesign/boards/Main.dc.html、WHome.dc.html）。
-/// 手机：一列——品牌顶栏 → 连接主卡 → 网速 → 订阅 → 代理应用（Android）→ 指标 → 出口 IP。
+/// 手机：一列——品牌顶栏 → 连接主卡 → 网速 → 订阅 → 喵窝（管理员）→ 代理应用（Android）→ 指标 → 出口 IP。
 /// 宽屏（有侧栏）：5 : 7 两列——左：连接主卡 → 接管方式（Windows）/ 代理应用（Android 平板）→ 网速（撑满）；
 /// 右：订阅 → 指标 → 出口 IP → 活跃连接（撑满）。700–899 宽放不下两列，退成一列。
 ///
@@ -70,13 +72,15 @@ class DashboardPage extends ConsumerWidget {
         if (shows(c)) c,
     ];
     final metrics = tiles.isEmpty ? null : HomeMetricsRow(cards: tiles, dense: wide);
+    // 喵窝（主控内置的组网）：管理员账号或已经开着时才有
+    final mesh = ref.watch(meshVisibleProvider) ? HomeMeshCard(dense: wide) : null;
     final exitIp = shows(HomeCard.ip) ? HomeExitIp(dense: wide) : null;
 
     if (!wide) {
       return ListView(
         // 悬浮底栏盖在内容上（壳 extendBody）：底部留白要把它的高度（MediaQuery.padding.bottom）加进去
         padding: EdgeInsets.fromLTRB(_pad, 0, _pad, _pad + MediaQuery.paddingOf(context).bottom),
-        children: _spaced([_BrandBar(actions: actions), hero, speed, subscription, apps, metrics, exitIp]),
+        children: _spaced([_BrandBar(actions: actions), hero, speed, subscription, mesh, apps, metrics, exitIp]),
       );
     }
 
@@ -93,6 +97,7 @@ class DashboardPage extends ConsumerWidget {
             apps,
             speed,
             subscription,
+            mesh,
             metrics,
             exitIp,
             HomeActiveConnections(minRows: 5, fetch: fetchConnections),
@@ -104,7 +109,7 @@ class DashboardPage extends ConsumerWidget {
     // 够高：整页正好一屏，「网速」「活跃连接」撑满两列剩下的高度；不够高（最小窗口、手机横屏、大字号）：按内容高度排、整页滚动。
     // 用 IntrinsicHeight 量内容自己要多高（两个撑满的卡各报一个最小高度），和视口高度取大者——所以这棵子树里不能出现 LayoutBuilder。
     final left = _spaced([hero, takeover, apps, if (speed != null) chart ? Expanded(child: speed) : speed]);
-    final right = _spaced([subscription, metrics, exitIp, Expanded(child: HomeActiveConnections(expand: true, fetch: fetchConnections))]);
+    final right = _spaced([subscription, mesh, metrics, exitIp, Expanded(child: HomeActiveConnections(expand: true, fetch: fetchConnections))]);
     return PageWidth(
       child: LayoutBuilder(
         builder: (context, c) => SingleChildScrollView(

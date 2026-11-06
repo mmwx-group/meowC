@@ -11,6 +11,7 @@ import 'package:bett_box/l10n/l10n.dart';
 import 'package:bett_box/meowx/config/meow_patch.dart';
 import 'package:bett_box/meowx/panel/node_match.dart';
 import 'package:bett_box/meowx/state/custom_rules.dart';
+import 'package:bett_box/meowx/state/mesh.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/plugins/service.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -1066,11 +1067,21 @@ class GlobalState {
     }
 
     rawConfig.remove('rule');
+    // MeowX：「组网」——去掉订阅里的 Tailscale 组网节点（喵窝开着 / 选了关闭时，指向它们的规则改 DIRECT）、注入喵窝节点；
+    // 喵窝的规则排在整张规则表最前（见 lib/meowx/config/mesh_config.dart）
+    final networking = applyNetworkingToConfig(
+      rawConfig,
+      rules,
+      config.meow,
+      current: profileId == config.currentProfile?.id,
+    );
+    rules = networking.rules;
     // MeowX：阻止 QUIC → po0 直连 / 绕过代理 / 推送直连 / 自定义规则放最前（先于订阅规则）；
     // 自定义规则的「代理」要看代理组与订阅规则（推断主代理组），界面显示的组名也从这份记下
     if (profileId == config.currentProfile?.id) captureMainProxyGroup(profileId, rawConfig['proxy-groups'], rules);
     rawConfig['rules'] = meowRuleTable(
       config.meow,
+      networkingRules: networking.prepend,
       quicRules: quicRules,
       rules: rules,
       proxyGroups: rawConfig['proxy-groups'],

@@ -121,6 +121,7 @@ class MeowSegment<T> extends StatefulWidget {
     this.fontSize = 14,
     this.track,
     this.glass = false,
+    this.dimmed = const {},
   });
 
   final List<(T, String)> items;
@@ -131,6 +132,9 @@ class MeowSegment<T> extends StatefulWidget {
   final double fontSize;
   final Color? track;
   final bool glass;
+
+  /// 画灰的段（暂时用不了，如「组网」里订阅没有 Tailscale 节点）：照样能点，由调用方说原因
+  final Set<T> dimmed;
 
   @override
   State<MeowSegment<T>> createState() => _MeowSegmentState<T>();
@@ -190,7 +194,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
                       fontSize: widget.fontSize,
                       fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
                       // 玻璃滑块是透明的，选中的字仍用墨色
-                      color: i == index ? (glass ? mm.t1 : mm.onProminent) : mm.t2,
+                      color: i == index ? (glass ? mm.t1 : mm.onProminent) : (widget.dimmed.contains(it.$1) ? mm.t3 : mm.t2),
                     ),
                     child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
                   ),

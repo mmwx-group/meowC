@@ -737,5 +737,6 @@
   "checkFailed": "Timeout",
   "testing": "검사 중",
   "other": "기타",
-  "flagged": "표시됨"
+  "flagged": "표시됨",
+  "meowNest": "MeowNest"
 }

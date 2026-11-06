@@ -737,5 +737,6 @@
   "checkFailed": "Timeout",
   "testing": "検出中",
   "other": "その他",
-  "flagged": "フラグ付き"
+  "flagged": "フラグ付き",
+  "meowNest": "MeowNest"
 }
