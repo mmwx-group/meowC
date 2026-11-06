@@ -70,7 +70,14 @@ class MeshRuntime {
   }
 }
 
-String get _fallbackHostname => Platform.isAndroid ? 'meowx-android' : 'meowx-windows';
+String get _fallbackHostname => 'meowx-${_osName.toLowerCase()}';
+
+/// 报给主控的系统名（设备列表里显示）
+String get _osName => Platform.isAndroid
+    ? 'Android'
+    : Platform.isLinux
+        ? 'Linux'
+        : 'Windows';
 
 final meshRuntime = MeshRuntime();
 
@@ -695,7 +702,7 @@ class MeshController extends Notifier<MeshState> {
       final r = await client.meshEnroll(
         token,
         hostname: hostname,
-        os: Platform.isAndroid ? 'Android' : 'Windows',
+        os: _osName,
         version: _appVersion,
         previousNodeId: previous,
       );
@@ -858,7 +865,7 @@ class MeshController extends Notifier<MeshState> {
     }
   }
 
-  /// 设备名：安卓取机型、Windows 取计算机名，规范化后报给控制服务器
+  /// 设备名：安卓取机型、Windows / Linux 取计算机名，规范化后报给控制服务器
   static Future<String> _deviceHostname() async {
     var raw = '';
     try {

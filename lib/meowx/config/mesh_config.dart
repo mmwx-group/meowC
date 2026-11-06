@@ -468,7 +468,8 @@ final _octetPattern = RegExp(r'^(\d{1,3}(?:\.\d{1,3}){0,2})(?:\.\*)+$');
 ///
 /// 通配只能写前缀，收窄靠十进制前缀：`192.168.*` 去掉 192.168.1.0/24 →
 /// `192.168.0.*`、`192.168.10*`…`192.168.19*`（第三段 10–19、100–199）、`192.168.2*`…`192.168.9*`，共 19 条。
-/// Windows（ProxyOverride）与安卓（VpnService 的代理排除）都认这种尾部通配。
+/// Windows（ProxyOverride）与安卓（VpnService 的代理排除）都认这种尾部通配；Linux 写进 GNOME 的 ignore-hosts / KDE 的
+/// NoProxyFor，Chrome 认，只认 `*.example.com` 前缀通配的程序（GIO）本来就不认缺省清单里的 `192.168.*`，行为不变。
 List<String> meshNarrowBypass(List<String> bypass, List<String> meshRoutes) {
   final holes = meshRoutes.map(Ipv4Cidr.parse).nonNulls.toList();
   if (holes.isEmpty) return bypass;
