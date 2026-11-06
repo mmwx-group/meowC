@@ -239,6 +239,16 @@
 - `v0.4.7` 相对原来的 `core/Clash.Meta` 多了：OpenWrt 原先以补丁形式加的两处（独立程序运行时由 ApplyConfig 起监听端口与 TUN，只在 `main` 里打开，库模式不变；`main` 包的 `panel` 子命令，库模式不编进去），以及 Miu 修复——下行换通道失败后上行再写时拿到空通道，整个内核崩溃。
 - `.github/workflows/build.yaml`：android / windows 两个作业检出时带上子模块。
 
+## 2026-11-06 · Linux 桌面版（先只在手动构建里出包）
+- `linux/CMakeLists.txt` / `linux/my_application.cc`：可执行文件 Bettbox → MeowX、GTK 应用 ID `com.appshub.bettbox` → `com.miaomiaowux.app`、窗口标题、单实例控制 socket（`MeowX.control.sock`，与 Dart 侧 `AppPath.controlSocketPath` 同名，以前对不上）、随包内核 `BettboxCore` → `MeowXCore`（`setup.dart` 早就按 MeowX 命名输出，CMake 没跟上）。
+- 新增 `linux/packaging/package_linux.sh`：把 `flutter build linux` 的产物打成 deb（程序目录 `/usr/share/meowx/`，内核 root 所有 + setuid，装完就能开 TUN）与 AppImage（只读镜像，只能用系统代理）。`linux/packaging/{deb,appimage,rpm}/make_config.yaml`（`setup.dart linux` 走 flutter_distributor 的旧路径，仍是 Bettbox 命名）没改、CI 不用。
+- `lib/meowx/state/connection.dart` / `lib/meowx/app/window_controls.dart`：Linux 与 Windows 同用桌面版式、窗口按钮并进标题行（两端都是无边框窗口；`flutter test` 里不算，单测在 Linux 构建机上跑、按非桌面形态写）。`lib/meowx/panel/client.dart`：发给主控的 UA 写 Linux。`lib/common/request.dart`：检查更新认 `linux` 平台条目（latest.json 还没有时当作没有新版）。
+- `.github/workflows/build.yaml`：手动构建多一个 `linux` 选项，amd64（ubuntu-22.04）与 arm64（ubuntu-22.04-arm）各出 deb + AppImage，在干净的 Ubuntu 22.04 / 24.04 容器里装一遍、检查缺库、在虚拟显示里起一次截图；不进 release / CDN。
+- `pubspec.yaml` 的 `hotkey_manager_linux` 覆盖：改从上游 leanflutter/hotkey_manager 拉 PR #66 的提交 `1b31e3c`（PR 关了没合）。原来指向 fork gepbird/hotkey_manager 的 `fix-build-failure` 分支，那个分支 2026-11 已删、提交不在 fork 的 main 上——各端 CI 靠 pub 缓存没暴露，干净环境（Linux arm64 第一次构建）`pub get` 失败。
+- Linux 首轮实测（干净 Ubuntu 22.04 / 24.04 容器 + 虚拟显示）补的：deb 依赖加 `libegl1`、`libgles2`（Flutter 引擎启动时 dlopen，没有就 abort）；`lib/meowx/theme/tokens.dart` 的 `linuxCjkFallback`（系统 Noto Sans CJK SC → 随包 HarmonyOS Sans），主题与 `meowRounded` / `MeowFont.monoFallback` 在 Linux 上接上它（以前中文全是方框：linux-arm64 的 Flutter 不会自己回落到系统字体，amd64 会；其它平台不变，`meowRounded` / `monoFallback` 因此从 const 改成 final）；`MeowSegment` 与变形菜单里另起一份、不继承主题的文字样式也带上 `linuxTextFallback`。
+- 正式发布接上 Linux：`build.yaml` 的 linux 作业在打 tag、手动选 all / linux 时都跑，`release` 与 `publish-cdn` 等它（冒烟结果改名 `smoke-linux-*`，不进 Release / CDN）；`scripts/publish_cdn.py` 认 `MeowX-<ver>-linux-<arch>.deb|.AppImage`（latest.json 的 `linux` 段，kind `deb` / `appimage`）；Release 模板加 Linux 四个包与安装说明；`lib/common/request.dart` 检查更新时 AppImage（运行时有 `APPIMAGE` 环境变量）挑 AppImage 包。
+- `lib/meowx/pages/me/account_card.dart`：Linux 上未登录时的说明改成「用主控地址、用户名和密码登录 / 导入订阅」——Linux 还没注册 `miaomiaowu://` 深链，网页上的「登录客户端」唤不起 App（以前照搬 Windows 的说法）。
+
 ## 2026-11-06 · 喵窝 / MeowNest（主控内置的组网）与「组网」三选一（同 MeowX iOS / macOS）
 - `lib/state.dart patchRawConfig`：写回规则表之前调 `applyNetworkingToConfig`（`lib/meowx/state/mesh.dart`）——喵窝开着或「组网」选了关闭时去掉订阅里 `type: tailscale` 的组网节点（指向它们的规则改 DIRECT、代理组里的引用去掉、删空的组补 DIRECT、`ts://<节点>` 的 DNS 策略去掉，配置照样合法）；喵窝开着时注入「喵窝」节点（`type: tailscale`，控制地址用主控 `mesh/status` 回的 `control_url`，`state-dir: meowx-mesh`，`accept-routes: true`；入网 key 只在这台设备还没登记时带、只在内存里）、喵窝的规则（100.64.0.0/10、MagicDNS 后缀、本账号站点网段）写进内核的 `priority-rules`（先于出站模式匹配，见下）、MagicDNS 后缀的 `ts://喵窝` 策略（fake-ip 时加进 fake-ip-filter）、TUN 路由放行喵窝网段。
 - `lib/state.dart getCoreState`：安卓 VPN 的代理排除清单经 `meshNarrowBypass` 收窄（见下一条）。
@@ -250,7 +260,7 @@
 - `lib/models/meow.dart`：`MeowSettings` 加 `mesh`（`MeowMesh`：开关、控制地址、MagicDNS 后缀、站点网段、设备名、主控里的设备编号、上次主控的回答）与 `tailscaleNodes`（订阅组网节点开关，缺省开）。
 - `lib/enum/enum.dart` 的 `ActionMethod` 加 `meowTailscaleStatus`，`lib/models/generated/core.g.dart` 的枚举映射手动补一行（与 build_runner 输出一致）。
 - 桥层：`core/constant.go` 加 `meowTailscaleStatusMethod`、`core/action.go` 加一个 case（goroutine 里取完回调），实现在 `core/meow_tailscale.go`：按出站名取内核里 tailscale 出站的状态（没启动的会先启动）。
-- 内核子模块 `core/Clash.Meta`（meowx-core 分支 `feat/meowx-mesh`，**还没推送**）：
+- 内核子模块 `core/Clash.Meta`（meowx-core 分支 `feat/meowx-mesh`，已推分支、未合 main）：
   - 顶层可选 `priority-rules`（写法同 rules）：规则 / 全局 / 直连三种模式下都在 `resolveMetadata` 里先匹配，命中就用它的出站，没命中照旧按模式走；不写时行为不变（OpenWrt 版同样）。新文件 `tunnel/priority_rules.go`，`tunnel.go` 只多一处调用，`config.go` 多一个字段与解析，`executor.go` 多一处更新。
   - `outbound.TailscaleStatusByName`（`adapter/outbound/tailscale_status*.go`）：本机状态 / 地址、各对端（编号、地址、在线、直连地址 `CurAddr`、中继 `Relay`）；`tailscale.go` 只多登记 / 注销一行。不带 tailscale 的构建有空实现。
 - `arb/*.arb` + `lib/l10n/`（`intl_utils:generate` 重新生成）：加 `meowNest`（简体「喵窝」、繁体「喵窩」、其它语言「MeowNest」）。

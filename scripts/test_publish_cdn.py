@@ -30,6 +30,17 @@ class ClassifyTest(unittest.TestCase):
         p = classify('MeowX-0.1.6-windows-amd64-portable.zip')
         self.assertEqual((p['kind'], p['arch']), ('portable', 'amd64'))
 
+    def test_linux(self):
+        self.assertEqual(
+            classify('MeowX-0.4.9-linux-amd64.deb'),
+            {'platform': 'linux', 'version': '0.4.9', 'kind': 'deb', 'arch': 'amd64'},
+        )
+        a = classify('MeowX-0.4.9-linux-arm64.AppImage')
+        self.assertEqual((a['platform'], a['kind'], a['arch']), ('linux', 'appimage', 'arm64'))
+        # 冒烟测试的截图 / 日志不算包
+        for name in ('ubuntu-22.04.png', 'ubuntu-24.04-run.log', 'MeowX-0.4.9-linux-amd64.rpm'):
+            self.assertIsNone(classify(name), name)
+
     def test_ignores_other_files(self):
         for name in ('MeowX-0.1.6-android-arm64-v8a.apk.sha1', 'output-metadata.json',
                      'MeowX-0.1.6-macos-arm64.dmg', 'MeowX-0.1.6-windows-amd64.msix'):

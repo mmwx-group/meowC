@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -5,19 +7,24 @@ import 'package:window_manager/window_manager.dart';
 import '../theme/page_background.dart';
 import '../theme/tokens.dart';
 
-/// Windows：窗口按钮（钉住 / 最小化 / 最大化 / 关闭）并进页面标题那一行（参考 Clash Party），不再单占顶上一条 40 高的标题栏。
+/// Windows / Linux：窗口按钮（钉住 / 最小化 / 最大化 / 关闭）并进页面标题那一行（参考 Clash Party），不再单占顶上一条 40 高的标题栏。
+/// 两端都是无边框窗口（`TitleBarStyle.hidden`），按钮由 App 自己画。
 ///
 /// - 按钮仍由 Bettbox 的 `WindowHeader` 画（`WindowHeaderContainer(merged: true)`），固定在窗口右上角，
 ///   竖直方向与页面标题行（[PageTitle] 的第一行：上边距 6 + 行高 44）居中对齐；
 /// - 主页四个 Tab 的标题行右侧让出按钮的位置（[windowControlsReserve]），标题行本身可以拖动窗口（[WindowDragArea]）；
 /// - 从主页推出去的二级页（测速、设置子页、高级设置…）顶上照旧有一条可拖动的窗口栏（[WindowPageFrame]，
 ///   `BaseNavigator.push` 统一包），按钮落在那条栏里。
-bool get windowControlsMerged => system.isWindows;
+/// Linux 桌面版（与 Windows 同用桌面版式、窗口按钮并进标题行）。单测跑在 Linux 构建机上（`flutter test` 会设 FLUTTER_TEST），
+/// 用例按非桌面形态写：别因为构建机是 Linux 就变了样
+final bool isLinuxDesktop = system.isLinux && !Platform.environment.containsKey('FLUTTER_TEST');
+
+bool get windowControlsMerged => system.isWindows || isLinuxDesktop;
 
 /// 只在 Android 模拟器上预览桌面布局时用（`--dart-define=MEOWX_PREVIEW_DESKTOP=true`）：画一排假的窗口按钮看对齐，正式包不带
 const _previewDesktop = bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
 
-/// 标题行要给窗口按钮让位置（真的 Windows，或模拟器上的桌面预览）
+/// 标题行要给窗口按钮让位置（真的 Windows / Linux，或模拟器上的桌面预览）
 bool get windowControlsShown => windowControlsMerged || _previewDesktop;
 
 /// 窗口按钮：四个 40×40 的图标按钮
@@ -29,7 +36,7 @@ const windowControlsTop = 8.0;
 /// 标题行右侧让出的宽度（按钮 + 间距）
 const windowControlsReserve = windowControlsWidth + 8;
 
-/// 按住拖动窗口（Windows）；别的平台原样返回。只接拖动、不接双击：祖先上挂双击会让里面按钮的单击要等双击超时才触发。
+/// 按住拖动窗口（Windows / Linux）；别的平台原样返回。只接拖动、不接双击：祖先上挂双击会让里面按钮的单击要等双击超时才触发。
 class WindowDragArea extends StatelessWidget {
   const WindowDragArea({super.key, required this.child});
 

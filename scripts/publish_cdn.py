@@ -37,7 +37,7 @@ PREFIX = 'meowx'
 MANIFEST_KEY = f'{PREFIX}/latest.json'
 
 # MeowX-<version>-<platform>-<rest>；rest 决定 kind / arch
-_NAME = re.compile(r'^MeowX-(?P<version>[0-9][^-]*)-(?P<platform>android|windows)-(?P<rest>.+)$')
+_NAME = re.compile(r'^MeowX-(?P<version>[0-9][^-]*)-(?P<platform>android|windows|linux)-(?P<rest>.+)$')
 
 
 def classify(name: str) -> dict | None:
@@ -50,7 +50,8 @@ def classify(name: str) -> dict | None:
         if not rest.endswith('.apk'):
             return None
         return {'platform': platform, 'version': m['version'], 'kind': 'apk', 'arch': rest[: -len('.apk')]}
-    for suffix, kind in (('-setup.exe', 'setup'), ('-portable.zip', 'portable')):
+    suffixes = (('.deb', 'deb'), ('.AppImage', 'appimage')) if platform == 'linux' else (('-setup.exe', 'setup'), ('-portable.zip', 'portable'))
+    for suffix, kind in suffixes:
         if rest.endswith(suffix):
             return {'platform': platform, 'version': m['version'], 'kind': kind, 'arch': rest[: -len(suffix)]}
     return None
@@ -224,7 +225,8 @@ def main() -> None:
         for path, info in items:
             key = f'{PREFIX}/{platform}/{path.name}'
             ctype = {'apk': 'application/vnd.android.package-archive', 'setup': 'application/vnd.microsoft.portable-executable',
-                     'portable': 'application/zip'}[info['kind']]
+                     'portable': 'application/zip', 'deb': 'application/vnd.debian.binary-package',
+                     'appimage': 'application/vnd.appimage'}[info['kind']]
             print(f'上传 {key}')
             r2.put_file(key, path, ctype, 'public, max-age=31536000, immutable')
 

@@ -1,7 +1,7 @@
 name: build
 
 # 打 tag（v*）自动构建、发 GitHub Release 并推 CDN；也可手动触发（workflow_dispatch）只构建某一端（publish 勾上时同样推 CDN）。
-# 只发 Android + Windows；Linux / macOS 目录保留但不构建。
+# 发 Android + Windows + Linux（deb + AppImage，amd64 / arm64）；macOS 目录保留但不构建。
 on:
   push:
     tags:
@@ -12,7 +12,7 @@ on:
         description: '构建哪一端'
         type: choice
         default: all
-        options: [all, android, windows]
+        options: [all, android, windows, linux]
       android_arch:
         description: 'Android 架构'
         type: choice
@@ -248,9 +248,150 @@ jobs:
           archive: false
           overwrite: true
 
+  # Linux：deb + AppImage，amd64 / arm64。构建机用 22.04（glibc 2.35）：装得上 Ubuntu 22.04+ / Debian 12+。
+  # 出包后在干净容器里装一遍、起一次截图（冒烟结果单独上传，名字不以 MeowX- 开头，不进 Release / CDN）。
+  linux:
+    needs: check
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || inputs.platform == 'linux' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    env:
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          # 内核 core/Clash.Meta 是子模块 mmwx-group/meowx-core
+          submodules: true
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev \
+            libayatana-appindicator3-dev libkeybinder-3.0-dev libfuse2 file
+
+      - name: Setup Rust (for code_forge / cargokit)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Golang
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      # 官方只发 x64 的 Linux SDK 压缩包：amd64 用 action（带缓存），arm64 按版本号 git 拉
+      - name: Setup Flutter (amd64)
+        if: matrix.arch == 'amd64'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+          cache-key: flutter-linux-${{ hashFiles('**/pubspec.lock') }}
+
+      - name: Setup Flutter (arm64)
+        if: matrix.arch == 'arm64'
+        run: |
+          git clone --depth 1 -b "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/flutter/bin/flutter" --version
+
+      - name: Setup appimagetool
+        run: |
+          case "$ARCH" in amd64) a=x86_64 ;; arm64) a=aarch64 ;; esac
+          curl -fsSL --retry 3 -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-$a.AppImage"
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/
+
+      - name: Clear Pub Cache Credentials
+        run: rm -f ~/.pub-cache/credentials.json 2>/dev/null || true
+
+      - name: Build Core
+        run: |
+          flutter config --enable-linux-desktop
+          flutter pub get
+          dart run build_runner build -d
+          dart setup.dart linux --arch ${ARCH} --out core-only
+
+      - name: Build MeowX (Linux)
+        run: |
+          app_env=${{ env.IS_STABLE == 'true' && 'stable' || 'pre' }}
+          args=(--release "--dart-define=APP_ENV=$app_env" "--dart-define=APP_ASSET_SUFFIX=linux-${ARCH}.deb")
+          if [ -n "$IPINFO_TOKEN" ]; then args+=("--dart-define=IPINFO_TOKEN=$IPINFO_TOKEN"); fi
+          flutter build linux "${args[@]}"
+
+      - name: Package (deb + AppImage)
+        run: |
+          bash linux/packaging/package_linux.sh ${ARCH}
+          ls -la dist
+          echo "DEB=$(ls dist/*.deb)" >> "$GITHUB_ENV"
+          echo "APPIMAGE=$(ls dist/*.AppImage)" >> "$GITHUB_ENV"
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.DEB }}
+          archive: false
+          overwrite: true
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.APPIMAGE }}
+          archive: false
+          overwrite: true
+
+      # 干净系统里只靠 deb 声明的依赖装一遍：内核要是 root 所有 + setuid、不能有找不到的库；再在虚拟显示里起一次截图
+      - name: Smoke Test
+        run: |
+          mkdir -p smoke
+          for image in ubuntu:22.04 ubuntu:24.04; do
+            tag=$(echo "$image" | tr ':' '-')
+            docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/smoke:/smoke" -e TAG="$tag" "$image" bash -c '
+              set -e
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              # 虚拟显示要 Mesa 的软件渲染；中文字体按普通桌面装上（App 另有随包的中文回落）
+              apt-get install -y -qq /dist/MeowX-*-linux-*.deb xvfb imagemagick procps libgl1-mesa-dri fonts-noto-cjk >/dev/null
+              stat -c "%U:%G %A %n" /usr/share/meowx/MeowXCore | tee /smoke/$TAG-core.txt
+              stat -c "%U:%A" /usr/share/meowx/MeowXCore | grep -q "^root:-rws" || { echo "内核没有 root setuid"; exit 1; }
+              # libdartjni.so：path_provider_android 依赖的 jni 包随所有平台编进来、只在 Android 上加载，它要的 libjvm 不用管
+              missing=$(find /usr/share/meowx -type f \( -name "*.so*" -o -name MeowX \) ! -name libdartjni.so -exec env LD_LIBRARY_PATH=/usr/share/meowx/lib ldd {} \; 2>/dev/null | grep "not found" || true)
+              if [ -n "$missing" ]; then echo "缺库：$missing"; exit 1; fi
+              xvfb-run -a -s "-screen 0 1440x900x24" bash -c "
+                meowx > /smoke/$TAG-run.log 2>&1 &
+                pid=\$!
+                sleep 30
+                import -window root /smoke/$TAG.png
+                if kill -0 \$pid 2>/dev/null; then echo alive > /smoke/$TAG-alive.txt; fi
+              "
+              [ -f /smoke/$TAG-alive.txt ] || { echo "MeowX 没起来或中途退出："; tail -50 /smoke/$TAG-run.log; exit 1; }
+            '
+          done
+          ls -la smoke
+
+      - name: Upload Smoke Result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-linux-${{ env.ARCH }}
+          path: ./smoke/*
+          if-no-files-found: ignore
+
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
-    needs: [android, windows]
+    needs: [android, windows, linux]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -292,13 +433,13 @@ jobs:
           prerelease: ${{ env.IS_PRERELEASE == 'true' }}
 
   # 推到 CDN（Cloudflare R2 → dl.miaomiaowux.com/meowx/）并更新 latest.json，App 内检查更新读的就是它。
-  # 正式 tag（不带 '-'）自动推；手动构建在 main 上且勾了 publish 才推。只推构建成功的那一端（另一端失败 / 没选时保留线上原条目）。
+  # 正式 tag（不带 '-'）自动推；手动构建在 main 上且勾了 publish 才推。只推构建成功的那几端（失败 / 没选的保留线上原条目）。
   # 需要仓库 secrets：R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY；可选 variables.R2_BUCKET（默认 mmwx-dl）。
   publish-cdn:
-    needs: [android, windows]
+    needs: [android, windows, linux]
     if: >-
       ${{ !cancelled()
-          && (needs.android.result == 'success' || needs.windows.result == 'success')
+          && (needs.android.result == 'success' || needs.windows.result == 'success' || needs.linux.result == 'success')
           && ((startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-'))
               || (github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main')) }}
     runs-on: ubuntu-latest

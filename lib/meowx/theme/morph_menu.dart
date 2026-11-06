@@ -448,6 +448,7 @@ class _ItemRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: MeowFont.subheadline,
                     fontWeight: checked ? FontWeight.w600 : FontWeight.w500,
+                    fontFamilyFallback: linuxTextFallback,   // 这里另起一份样式、不继承主题
                     color: checked ? mm.accent : color,
                   ),
                   child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),

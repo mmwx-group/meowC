@@ -193,6 +193,7 @@ class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProvid
                     style: TextStyle(
                       fontSize: widget.fontSize,
                       fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
+                      fontFamilyFallback: linuxTextFallback,   // 这里另起一份样式、不继承主题
                       // 玻璃滑块是透明的，选中的字仍用墨色
                       color: i == index ? (glass ? mm.t1 : mm.onProminent) : (widget.dimmed.contains(it.$1) ? mm.t3 : mm.t2),
                     ),
@@ -676,4 +677,4 @@ class BrandHead extends StatelessWidget {
 }
 
 /// 圆角字体族：标题 / 大数字用（系统没有圆体时回落到默认字体）。
-const meowRounded = <String>['Google Sans', 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans SC'];
+final meowRounded = <String>['Google Sans', 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans SC', ...linuxCjkFallback];

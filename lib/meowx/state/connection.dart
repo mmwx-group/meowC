@@ -13,12 +13,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/meow_tab.dart';
+import '../app/window_controls.dart' show isLinuxDesktop;
 import 'meow_settings.dart';
 import 'status.dart';
 import 'wifi_switch.dart';
 
-/// 桌面形态（Windows）。`--dart-define=MEOWX_PREVIEW_DESKTOP=true` 只用于在 Android 模拟器上预览桌面布局，正式包不带。
-final isDesktopUi = system.isWindows || const bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
+/// 桌面形态（Windows / Linux）。`--dart-define=MEOWX_PREVIEW_DESKTOP=true` 只用于在 Android 模拟器上预览桌面布局，正式包不带。
+final isDesktopUi = system.isWindows || isLinuxDesktop || const bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
 
 // ---------------------------------------------------------------------------
 // 开关：首页主卡与 Windows 侧栏的电源键共用一份状态
