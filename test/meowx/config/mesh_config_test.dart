@@ -215,6 +215,49 @@ void main() {
     });
   });
 
+  group('系统代理排除清单', () {
+    bool globMatch(String pattern, String host) =>
+        RegExp('^${RegExp.escape(pattern).replaceAll(r'\*', '.*')}\$').hasMatch(host);
+    bool excluded(List<String> list, String host) => list.any((p) => globMatch(p, host));
+
+    test('192.168.* 去掉站点 192.168.1.0/24：其余照旧不走代理，站点那一段走代理（逐个地址核对）', () {
+      final list = meshNarrowBypass(['localhost', '127.*', '192.168.*', '*.local'], ['100.64.0.0/10', '192.168.1.0/24']);
+      expect(list.take(2), ['localhost', '127.*']);
+      expect(list.last, '*.local');
+      expect(list, isNot(contains('192.168.*')));
+      expect(list.length, 3 + 19);
+      for (var c = 0; c < 256; c++) {
+        for (final d in const [0, 1, 99, 200, 255]) {
+          final host = '192.168.$c.$d';
+          expect(excluded(list, host), c != 1, reason: host);
+        }
+      }
+    });
+
+    test('10.* 去掉映射段 10.233.0.0/24：逐个第二、三段核对', () {
+      final list = meshNarrowBypass(['10.*'], ['10.233.0.0/24']);
+      for (var b = 0; b < 256; b++) {
+        for (var c = 0; c < 256; c++) {
+          final host = '10.$b.$c.7';
+          expect(excluded(list, host), !(b == 233 && c == 0), reason: host);
+        }
+      }
+      expect(list.length, lessThan(60));
+    });
+
+    test('没有喵窝网段、条目不重叠、整段都是喵窝的', () {
+      const defaults = ['10.*', '172.16.*', '192.168.*'];
+      expect(meshNarrowBypass(defaults, const []), defaults);
+      expect(meshNarrowBypass(defaults, ['100.64.0.0/10']), defaults);
+      expect(meshNarrowBypass(['100.64.*', 'example.com'], ['100.64.0.0/10']), ['example.com']);
+      // /23 的站点：第三段两个值都走代理
+      final list = meshNarrowBypass(['192.168.*'], ['192.168.4.0/23']);
+      for (var c = 0; c < 256; c++) {
+        expect(excluded(list, '192.168.$c.1'), c != 4 && c != 5, reason: '$c');
+      }
+    });
+  });
+
   group('运行配置改写', () {
     test('rewriteRuleTarget 照内核的格子认出站', () {
       const removed = {'家里'};

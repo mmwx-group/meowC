@@ -455,3 +455,105 @@ int? meshNodeIdFromState(String content) {
     return null;
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// 系统代理排除清单
+
+final _octetPattern = RegExp(r'^(\d{1,3}(?:\.\d{1,3}){0,2})(?:\.\*)+$');
+
+/// 系统代理的排除清单里，盖住喵窝网段（[meshRoutes]：设备地址段与这次接入的站点网段）的「按段通配」条目（`192.168.*`、
+/// `10.*`、`172.16.*` 这类）收窄成不含这些网段的若干条，让站点网段经系统代理进内核、交给喵窝；别的条目原样。
+/// 只在设置系统代理那一刻算（不改用户存着的清单，喵窝关掉自然恢复）。用户自己的局域网和站点重叠时那个站点本来就不接入
+/// （[meshActiveSites]），这里不会把用户的局域网推进代理。
+///
+/// 通配只能写前缀，收窄靠十进制前缀：`192.168.*` 去掉 192.168.1.0/24 →
+/// `192.168.0.*`、`192.168.10*`…`192.168.19*`（第三段 10–19、100–199）、`192.168.2*`…`192.168.9*`，共 19 条。
+/// Windows（ProxyOverride）与安卓（VpnService 的代理排除）都认这种尾部通配。
+List<String> meshNarrowBypass(List<String> bypass, List<String> meshRoutes) {
+  final holes = meshRoutes.map(Ipv4Cidr.parse).nonNulls.toList();
+  if (holes.isEmpty) return bypass;
+  final out = <String>[];
+  for (final entry in bypass) {
+    final m = _octetPattern.firstMatch(entry.trim());
+    final octets = m?.group(1)!.split('.').map(int.parse).toList();
+    if (octets == null || octets.any((o) => o > 255)) {
+      out.add(entry);
+      continue;
+    }
+    var network = 0;
+    for (var i = 0; i < 4; i++) {
+      network = (network << 8) | (i < octets.length ? octets[i] : 0);
+    }
+    final range = Ipv4Cidr(network, octets.length * 8);
+    final inside = holes.where(range.overlaps).toList();
+    if (inside.isEmpty) {
+      out.add(entry);
+      continue;
+    }
+    if (inside.any((h) => h.covers(range))) continue; // 整段都是喵窝的：去掉
+    out.addAll(_globsExcept(octets, inside));
+  }
+  return out;
+}
+
+/// [prefix]（前 k 段）下、去掉 [holes] 之后剩下的地址，写成尾部通配。
+List<String> _globsExcept(List<int> prefix, List<Ipv4Cidr> holes) {
+  final k = prefix.length; // 下一段是第 k 段（从 0 数）
+  final head = prefix.join('.');
+  // 第 k 段的每个取值：完全被洞盖住 / 部分被盖（要往下一段细分）/ 不碰
+  final covered = <int>{};
+  final partial = <int, List<Ipv4Cidr>>{};
+  for (var v = 0; v < 256; v++) {
+    var network = 0;
+    final octets = [...prefix, v];
+    for (var i = 0; i < 4; i++) {
+      network = (network << 8) | (i < octets.length ? octets[i] : 0);
+    }
+    final sub = Ipv4Cidr(network, (k + 1) * 8);
+    final hit = holes.where(sub.overlaps).toList();
+    if (hit.isEmpty) continue;
+    if (hit.any((h) => h.covers(sub))) {
+      covered.add(v);
+    } else {
+      partial[v] = hit;
+    }
+  }
+  final allowed = {for (var v = 0; v < 256; v++) v}..removeAll(covered)..removeAll(partial.keys);
+  final out = [for (final g in _decimalGlobs(allowed)) '$head.$g'];
+  // 部分被盖的取值往下一段细分（第 4 段没有下一段：只剩单个地址，写成确切地址）
+  for (final e in partial.entries) {
+    if (k + 1 < 4) {
+      out.addAll(_globsExcept([...prefix, e.key], e.value));
+    }
+  }
+  return out;
+}
+
+/// 0–255 里 [allowed] 这些取值写成十进制前缀通配：`2*` 同时盖住 2、20–29、200–255；某个前缀下有不允许的取值时，
+/// 取值本身允许就写确切的 `v.*`，再往下一位细分。
+List<String> _decimalGlobs(Set<int> allowed) {
+  final out = <String>[];
+  List<int> withPrefix(String s) => [
+    for (var v = 0; v < 256; v++)
+      if (v.toString().startsWith(s)) v,
+  ];
+  void walk(String s) {
+    final values = withPrefix(s);
+    if (values.isEmpty) return;
+    if (values.every(allowed.contains)) {
+      out.add(values.length == 1 ? '$s.*' : '$s*');
+      return;
+    }
+    final self = int.parse(s);
+    if (self < 256 && allowed.contains(self)) out.add('$s.*');
+    if (s == '0') return; // 没有前导 0
+    for (var d = 0; d < 10; d++) {
+      walk('$s$d');
+    }
+  }
+
+  for (final s in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']) {
+    walk(s);
+  }
+  return out;
+}

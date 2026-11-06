@@ -592,7 +592,11 @@ class GlobalState {
       vpnProps: config.vpnProps,
       onlyStatisticsProxy: config.appSetting.onlyStatisticsProxy,
       currentProfileName: currentProfile?.label ?? currentProfile?.id ?? '',
-      bypassDomain: config.networkProps.bypassDomain,
+      // MeowX：喵窝开着时安卓 VPN 的代理排除同样收窄（见 meshNarrowBypass）
+      bypassDomain: meshNarrowBypass(
+        config.networkProps.bypassDomain,
+        meshTunRoutes(config.meow.mesh, meshRuntime.localIPv4s),
+      ),
     );
   }
 

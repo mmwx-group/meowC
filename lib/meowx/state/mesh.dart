@@ -20,7 +20,7 @@ import 'meow_settings.dart';
 import 'status.dart';
 import 'tailscale_status.dart';
 
-export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName;
+export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName, meshNarrowBypass, meshTunRoutes;
 export '../panel/mesh.dart' show MeshDevice, MeshSite;
 export 'tailscale_status.dart' show TsStatus, TsPeer;
 

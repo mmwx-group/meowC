@@ -213,10 +213,12 @@ ProxyState proxyState(Ref ref) {
   final mixedPort = ref.watch(
     patchClashConfigProvider.select((state) => state.mixedPort),
   );
+  // MeowX：喵窝开着时把盖住站点网段的排除条目收窄，站点网段经系统代理交给喵窝（不改存着的清单），见 meshNarrowBypass
+  final meshRoutes = ref.watch(meshTunRoutesProvider);
   return ProxyState(
     isStart: isStart,
     systemProxy: vm2.a,
-    bypassDomain: vm2.b,
+    bypassDomain: meshNarrowBypass(vm2.b, meshRoutes),
     port: mixedPort,
   );
 }
