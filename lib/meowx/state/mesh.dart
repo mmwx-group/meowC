@@ -310,6 +310,8 @@ class MeshController extends Notifier<MeshState> {
 
   DateTime? _lastEnrollAt;
   DateTime? _statusAt;
+  DateTime? _statusTriedAt;
+  DateTime? _devicesTriedAt;
   Future<void>? _refreshing;
   Timer? _wakeTimer;
   Timer? _fastTimer;
@@ -363,6 +365,7 @@ class MeshController extends Notifier<MeshState> {
   Future<void> refresh() => _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
 
   Future<void> _refresh() async {
+    _statusTriedAt = DateTime.now();
     final token = _token;
     final client = ref.read(panelClientProvider);
     if (token.isEmpty || client == null) {
@@ -408,6 +411,7 @@ class MeshController extends Notifier<MeshState> {
   MeshPanelStatus? _lastStatus;
 
   Future<void> _refreshDevices(PanelClient client, String token, {bool reapplyIfChanged = false}) async {
+    _devicesTriedAt = DateTime.now();
     final MeshDeviceList list;
     try {
       list = await client.meshDevices(token);
@@ -442,11 +446,14 @@ class MeshController extends Notifier<MeshState> {
     final foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     if (!foreground || _token.isEmpty) return;
+    final now = DateTime.now();
     final at = state.devicesAt;
-    final statusStale = _statusAt == null || DateTime.now().difference(_statusAt!) > const Duration(minutes: 5);
+    final statusStale = _statusAt == null || now.difference(_statusAt!) > const Duration(minutes: 5);
+    // 问失败了（主控重启、网络切换中）隔 10 秒再问，别跟着页面 / 加速的节拍每秒打主控
+    bool cooled(DateTime? tried) => tried == null || now.difference(tried) >= const Duration(seconds: 10);
     if (statusStale || state.availability != MeshAvailability.available) {
-      await refresh();
-    } else if (at == null || DateTime.now().difference(at) >= devicesEvery) {
+      if (cooled(_statusTriedAt)) await refresh();
+    } else if ((at == null || now.difference(at) >= devicesEvery) && cooled(_devicesTriedAt)) {
       final client = ref.read(panelClientProvider);
       if (client != null) await _refreshDevices(client, _token);
     }
