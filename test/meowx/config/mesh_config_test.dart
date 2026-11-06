@@ -401,6 +401,13 @@ void main() {
       expect(meshPhase(enabled: true, running: true, state: failed), MeshPhase.failed);
       expect(meshPhaseText(MeshPhase.failed, failed), '失败：操作太频繁，请稍后再试');
 
+      // 问不到主控（App 自己的请求按订阅规则走到了连不上主控的节点上等）：已入网的不算失败，只是状态未知
+      const unreachable = MeshState(stateNodeId: 7, panelError: '无法连接主控');
+      expect(meshPhase(enabled: true, running: true, state: unreachable), MeshPhase.unreachable);
+      expect(meshPhaseText(MeshPhase.unreachable, unreachable), '已入网 · 问不到主控，状态未知');
+      expect(meshPhase(enabled: true, running: true, state: unreachable.copyWith(devices: devices)), MeshPhase.connected);
+      expect(meshPhase(enabled: true, running: true, state: const MeshState(panelError: 'x')), MeshPhase.joining);
+
       // 状态文件读不到时用记下的编号认本机
       const noFile = MeshState(devices: devices);
       expect(noFile.selfDevice(7)?.name, 'pixel');

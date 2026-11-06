@@ -171,6 +171,9 @@ enum MeshPhase {
   connecting,
   connected,
   failed,
+
+  /// 问不到主控：不知道本机在不在线
+  unreachable,
 }
 
 class MeshState {
@@ -186,6 +189,7 @@ class MeshState {
     this.busy = false,
     this.enrolling = false,
     this.error,
+    this.panelError,
   });
 
   final MeshAvailability availability;
@@ -207,8 +211,12 @@ class MeshState {
   final bool busy;
   final bool enrolling;
 
-  /// 最近一次出错（入网 / 问主控）
+  /// 最近一次出错（打开 / 入网 / 退出）
   final String? error;
+
+  /// 问主控失败（主控重启、App 自己的请求按订阅规则走到了连不上主控的节点上）：这时不知道本机在不在线，
+  /// 不当成喵窝失败（喵窝本身多半照常通）
+  final String? panelError;
 
   /// 本机这台（状态文件里的编号，拿不到时用上次记下的）
   MeshDevice? selfDevice(int? fallbackId) {
@@ -249,6 +257,8 @@ class MeshState {
     bool? enrolling,
     String? error,
     bool clearError = false,
+    String? panelError,
+    bool clearPanelError = false,
   }) => MeshState(
     availability: availability ?? this.availability,
     message: message ?? this.message,
@@ -261,6 +271,7 @@ class MeshState {
     busy: busy ?? this.busy,
     enrolling: enrolling ?? this.enrolling,
     error: clearError ? null : (error ?? this.error),
+    panelError: clearPanelError ? null : (panelError ?? this.panelError),
   );
 }
 
@@ -272,6 +283,7 @@ MeshPhase meshPhase({required bool enabled, required bool running, required Mesh
   final self = state.selfDevice(fallbackId);
   if (self != null && self.online) return MeshPhase.connected;
   if (state.error != null) return MeshPhase.failed;
+  if (state.panelError != null && state.stateNodeId != null) return MeshPhase.unreachable;
   if (state.stateNodeId == null) return MeshPhase.joining;
   return MeshPhase.connecting;
 }
@@ -290,6 +302,7 @@ String meshPhaseText(MeshPhase phase, MeshState state, {int? fallbackId}) => swi
     final n => '已连接 · $n 台在线',
   },
   MeshPhase.failed => '失败：${state.error}',
+  MeshPhase.unreachable => '已入网 · 问不到主控，状态未知',
 };
 
 /// 喵窝（Design/meshnet.md §8）：问主控能不能用（只给管理员）、开关、入网、设备与站点、退出。
@@ -377,11 +390,12 @@ class MeshController extends Notifier<MeshState> {
       status = await client.meshStatus(token);
     } catch (e) {
       commonPrint.log('喵窝：问主控失败 $e');
-      if (_mesh.enabled) state = state.copyWith(error: _message(e));
+      state = state.copyWith(panelError: _message(e));
       return;
     }
     if (_token != token) return;
     _statusAt = DateTime.now();
+    state = state.copyWith(clearPanelError: true);
     if (!status.available) {
       state = state.copyWith(
         availability: meshAvailabilityOf(status.reason),
@@ -417,10 +431,12 @@ class MeshController extends Notifier<MeshState> {
       list = await client.meshDevices(token);
     } catch (e) {
       commonPrint.log('喵窝：拉设备列表失败 $e');
+      state = state.copyWith(panelError: _message(e));
       return;
     }
     if (_token != token) return;
     state = state.copyWith(
+      clearPanelError: true,
       devices: list.devices,
       sites: list.sites,
       devicesComplete: list.complete,
