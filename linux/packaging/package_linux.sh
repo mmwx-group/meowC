@@ -69,14 +69,16 @@ desktop_entry "/usr/bin/meowx" > "$PKG/usr/share/applications/meowx.desktop"
 cp "$ICON" "$PKG/usr/share/icons/hicolor/256x256/apps/meowx.png"
 
 INSTALLED_KB="$(du -sk "$PKG/usr" | cut -f1)"
-# 运行时依赖：GTK 3（Ubuntu 24.04 起改名 libgtk-3-0t64）、托盘（ayatana appindicator）、全局快捷键（keybinder）
+# 运行时依赖：GTK 3（Ubuntu 24.04 起改名 libgtk-3-0t64）、托盘（ayatana appindicator）、全局快捷键（keybinder）、
+# EGL / GLES（Flutter 引擎启动时 dlopen，ldd 查不出来；最小化系统没有就直接 abort）。Mesa 的驱动桌面都有，写成推荐
 cat > "$PKG/DEBIAN/control" <<EOF
 Package: meowx
 Version: $VERSION
 Architecture: $ARCH
 Maintainer: MeowX <noreply@meowx.net>
 Installed-Size: $INSTALLED_KB
-Depends: libgtk-3-0t64 | libgtk-3-0, libayatana-appindicator3-1, libkeybinder-3.0-0
+Depends: libgtk-3-0t64 | libgtk-3-0, libayatana-appindicator3-1, libkeybinder-3.0-0, libegl1, libgles2
+Recommends: libgl1-mesa-dri
 Section: net
 Priority: optional
 Homepage: https://meowx.net

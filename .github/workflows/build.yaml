@@ -362,10 +362,12 @@ jobs:
               set -e
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
-              apt-get install -y -qq /dist/MeowX-*-linux-*.deb xvfb imagemagick procps >/dev/null
+              # 虚拟显示要 Mesa 的软件渲染；中文字体按普通桌面装上（App 另有随包的中文回落）
+              apt-get install -y -qq /dist/MeowX-*-linux-*.deb xvfb imagemagick procps libgl1-mesa-dri fonts-noto-cjk >/dev/null
               stat -c "%U:%G %A %n" /usr/share/meowx/MeowXCore | tee /smoke/$TAG-core.txt
               stat -c "%U:%A" /usr/share/meowx/MeowXCore | grep -q "^root:-rws" || { echo "内核没有 root setuid"; exit 1; }
-              missing=$(find /usr/share/meowx -type f \( -name "*.so*" -o -name MeowX \) -exec env LD_LIBRARY_PATH=/usr/share/meowx/lib ldd {} \; 2>/dev/null | grep "not found" || true)
+              # libdartjni.so：path_provider_android 依赖的 jni 包随所有平台编进来、只在 Android 上加载，它要的 libjvm 不用管
+              missing=$(find /usr/share/meowx -type f \( -name "*.so*" -o -name MeowX \) ! -name libdartjni.so -exec env LD_LIBRARY_PATH=/usr/share/meowx/lib ldd {} \; 2>/dev/null | grep "not found" || true)
               if [ -n "$missing" ]; then echo "缺库：$missing"; exit 1; fi
               xvfb-run -a -s "-screen 0 1440x900x24" bash -c "
                 meowx > /smoke/$TAG-run.log 2>&1 &

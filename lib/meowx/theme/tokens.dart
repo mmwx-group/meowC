@@ -1,9 +1,15 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
 
 import 'package:bett_box/models/meow.dart';
 import 'package:flutter/material.dart';
 
 import 'backdrop.dart';
+
+/// Linux 的中文回落：系统的 Noto Sans CJK（Ubuntu 等桌面自带，名字和 meowRounded 里的 Noto Sans SC 不一样），没有就用随包的
+/// HarmonyOS Sans（简体）。不加的话中文全是方框：干净的 Ubuntu 容器里装了 Noto CJK，Flutter 也没自己回落过去（2026-11 实测）。
+/// 其它平台为空，渲染不变。
+final linuxCjkFallback = Platform.isLinux ? const <String>['Noto Sans CJK SC', 'HarmonyOS_Sans'] : const <String>[];
 
 /// MeowX 颜色 token：与 iOS / iPad 改版同一套——奶白底、白卡片、樱粉主卡、墨色强调
 /// （设计稿 design/ui-redesign/boards 里的 --bg / --card / --card2 / --hero / --btnon / --ink / --ink2 / --soft / --rose …）。
@@ -868,7 +874,7 @@ class MeowFont {
   static const caption2 = 11.0;
 
   static const monoFamily = 'monospace';
-  static const monoFallback = ['Consolas', 'Menlo', 'Roboto Mono', 'monospace', 'Twemoji'];
+  static final monoFallback = ['Consolas', 'Menlo', 'Roboto Mono', 'monospace', ...linuxCjkFallback, 'Twemoji'];
 
   static TextStyle mono({
     double size = footnote,

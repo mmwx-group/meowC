@@ -672,4 +672,4 @@ class BrandHead extends StatelessWidget {
 }
 
 /// 圆角字体族：标题 / 大数字用（系统没有圆体时回落到默认字体）。
-const meowRounded = <String>['Google Sans', 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans SC'];
+final meowRounded = <String>['Google Sans', 'Segoe UI Variable Display', 'Segoe UI', 'Microsoft YaHei UI', 'Noto Sans SC', ...linuxCjkFallback];
