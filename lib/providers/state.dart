@@ -152,10 +152,17 @@ CoreState coreState(Ref ref) {
   );
   final currentProfile = ref.watch(currentProfileProvider);
   final onlyStatisticsProxy = ref.watch(appSettingProvider).onlyStatisticsProxy;
+  // MeowX：带上系统代理排除清单。以前这里没传，CoreState 缺省是空列表，一变化就把 getCoreState 设好的那份盖掉，
+  // 安卓 VPN 的系统代理实际一条都不排除；喵窝开着时收窄（同 getCoreState / proxyState，见 meshNarrowBypass）
+  final bypassDomain = ref.watch(
+    networkSettingProvider.select((state) => state.bypassDomain),
+  );
+  final meshRoutes = ref.watch(meshTunRoutesProvider);
   return CoreState(
     vpnProps: vpnProps.copyWith(bypassPrivateRoute: bypassPrivateRoute),
     onlyStatisticsProxy: onlyStatisticsProxy,
     currentProfileName: currentProfile?.label ?? currentProfile?.id ?? '',
+    bypassDomain: meshNarrowBypass(bypassDomain, meshRoutes),
   );
 }
 

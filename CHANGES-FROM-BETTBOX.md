@@ -245,6 +245,7 @@
 - `lib/providers/state.dart`：
   - `updateParams` 的 TUN 经 `meshAdjustTun` 调整路由（安卓「绕过私有网络」时把喵窝的站点网段补进路由，桌面从排除的私网段里挖掉，否则 Windows TUN 下访问不了家里的局域网）；
   - `proxyState` 的系统代理排除清单经 `meshNarrowBypass` 收窄：喵窝开着时，盖住站点网段（含映射段）的按段通配条目（`192.168.*`、`10.*` 这类）换成不含站点那一段的十进制前缀通配（如 `192.168.*` 去掉 192.168.1.0/24 → 19 条），站点网段经系统代理交给喵窝；只在设置系统代理那一刻算，不改存着的清单，喵窝关掉自然恢复；和本机局域网重叠的站点本来就不接入，不会把用户的局域网推进代理；
+  - `coreState` 带上系统代理排除清单（同样经 `meshNarrowBypass`）：Bettbox 这里原来没传 `bypassDomain`，`CoreState` 缺省是空列表，provider 一变化（ClashManager 监听后 `setState`）就把 `getCoreState` 设好的那份盖掉，安卓 VPN 的系统代理（`setHttpProxy` 的排除清单）实际一条都不排除、私网也走代理；喵窝关着时就是用户存着的清单（安卓上没有编辑入口，是缺省清单或备份恢复来的）；
   - `getVisibleGroups` 全局模式下 GLOBAL 不列 Tailscale 类型的节点（喵窝 / 订阅组网节点只被规则与 DNS 引用，选成全局出口就上不了网）。
 - `lib/models/meow.dart`：`MeowSettings` 加 `mesh`（`MeowMesh`：开关、控制地址、MagicDNS 后缀、站点网段、设备名、主控里的设备编号、上次主控的回答）与 `tailscaleNodes`（订阅组网节点开关，缺省开）。
 - `lib/enum/enum.dart` 的 `ActionMethod` 加 `meowTailscaleStatus`，`lib/models/generated/core.g.dart` 的枚举映射手动补一行（与 build_runner 输出一致）。
