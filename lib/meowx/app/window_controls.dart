@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:bett_box/common/common.dart';
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,7 +15,11 @@ import '../theme/tokens.dart';
 /// - 主页四个 Tab 的标题行右侧让出按钮的位置（[windowControlsReserve]），标题行本身可以拖动窗口（[WindowDragArea]）；
 /// - 从主页推出去的二级页（测速、设置子页、高级设置…）顶上照旧有一条可拖动的窗口栏（[WindowPageFrame]，
 ///   `BaseNavigator.push` 统一包），按钮落在那条栏里。
-bool get windowControlsMerged => system.isWindows || system.isLinux;
+/// Linux 桌面版（与 Windows 同用桌面版式、窗口按钮并进标题行）。单测跑在 Linux 构建机上（`flutter test` 会设 FLUTTER_TEST），
+/// 用例按非桌面形态写：别因为构建机是 Linux 就变了样
+final bool isLinuxDesktop = system.isLinux && !Platform.environment.containsKey('FLUTTER_TEST');
+
+bool get windowControlsMerged => system.isWindows || isLinuxDesktop;
 
 /// 只在 Android 模拟器上预览桌面布局时用（`--dart-define=MEOWX_PREVIEW_DESKTOP=true`）：画一排假的窗口按钮看对齐，正式包不带
 const _previewDesktop = bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
