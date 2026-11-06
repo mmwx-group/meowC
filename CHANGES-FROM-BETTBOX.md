@@ -238,3 +238,9 @@
 - `core/third_party/sing-tun`：移进内核仓库（`Clash.Meta/third_party/sing-tun`，OpenWrt 版也用上了这份补丁）；`core/go.mod` 的 replace 跟着改路径。
 - `v0.4.7` 相对原来的 `core/Clash.Meta` 多了：OpenWrt 原先以补丁形式加的两处（独立程序运行时由 ApplyConfig 起监听端口与 TUN，只在 `main` 里打开，库模式不变；`main` 包的 `panel` 子命令，库模式不编进去），以及 Miu 修复——下行换通道失败后上行再写时拿到空通道，整个内核崩溃。
 - `.github/workflows/build.yaml`：android / windows 两个作业检出时带上子模块。
+
+## 2026-11-06 · Linux 桌面版（先只在手动构建里出包）
+- `linux/CMakeLists.txt` / `linux/my_application.cc`：可执行文件 Bettbox → MeowX、GTK 应用 ID `com.appshub.bettbox` → `com.miaomiaowux.app`、窗口标题、单实例控制 socket（`MeowX.control.sock`，与 Dart 侧 `AppPath.controlSocketPath` 同名，以前对不上）、随包内核 `BettboxCore` → `MeowXCore`（`setup.dart` 早就按 MeowX 命名输出，CMake 没跟上）。
+- 新增 `linux/packaging/package_linux.sh`：把 `flutter build linux` 的产物打成 deb（程序目录 `/usr/share/meowx/`，内核 root 所有 + setuid，装完就能开 TUN）与 AppImage（只读镜像，只能用系统代理）。`linux/packaging/{deb,appimage,rpm}/make_config.yaml`（`setup.dart linux` 走 flutter_distributor 的旧路径，仍是 Bettbox 命名）没改、CI 不用。
+- `lib/meowx/state/connection.dart` / `lib/meowx/app/window_controls.dart`：Linux 与 Windows 同用桌面版式、窗口按钮并进标题行（两端都是无边框窗口）。`lib/meowx/panel/client.dart`：发给主控的 UA 写 Linux。`lib/common/request.dart`：检查更新认 `linux` 平台条目（latest.json 还没有时当作没有新版）。
+- `.github/workflows/build.yaml`：手动构建多一个 `linux` 选项，amd64（ubuntu-22.04）与 arm64（ubuntu-22.04-arm）各出 deb + AppImage，在干净的 Ubuntu 22.04 / 24.04 容器里装一遍、检查缺库、在虚拟显示里起一次截图；不进 release / CDN。

@@ -21,7 +21,7 @@ class PanelClient {
       _cache = cache ?? const PrefsCertCache();
 
   /// 发给主控的 User-Agent：主控日志与安全事件里认得出是 MeowX 客户端；启动后由 MeowRoot 补上版本号。
-  static String userAgent = 'MeowX (${Platform.isAndroid ? 'Android' : Platform.isWindows ? 'Windows' : Platform.operatingSystem})';
+  static String userAgent = 'MeowX (${Platform.isAndroid ? 'Android' : Platform.isWindows ? 'Windows' : Platform.isLinux ? 'Linux' : Platform.operatingSystem})';
 
   /// `https://host[:port]`，无尾斜杠
   final String base;

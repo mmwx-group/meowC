@@ -316,6 +316,8 @@ class Request {
           ? 'android'
           : system.isWindows
           ? 'windows'
+          : system.isLinux
+          ? 'linux'   // MeowX：latest.json 还没有 Linux 条目时取不到 → 当作没有新版
           : null;
       if (data is! Map || platform == null) return null;
       final entry = (data['platforms'] as Map?)?[platform];
