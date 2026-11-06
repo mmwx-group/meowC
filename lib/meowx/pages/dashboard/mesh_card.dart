@@ -71,14 +71,13 @@ class _HomeMeshCardState extends ConsumerState<HomeMeshCard> {
     final mesh = ref.watch(meowSettingProvider.select((s) => s.mesh));
     final running = ref.watch(isRunningProvider);
     final phase = meshPhase(enabled: mesh.enabled, running: running, state: state, fallbackId: mesh.nodeId);
-    final self = state.selfDevice(mesh.nodeId);
     final statusColor = switch (phase) {
       MeshPhase.connected => mm.good,
       MeshPhase.failed => mm.slow,
       _ => mm.t2,
     };
     // 第三行：本机地址（入网后才有；在线几台已经写在状态行里）
-    final detail = phase == MeshPhase.connected && self != null ? self.ipv4 : '';
+    final detail = phase == MeshPhase.connected ? state.selfAddress(mesh.nodeId) : '';
     final busy = _switching || state.busy || state.enrolling;
     return GlassCard(
       radius: 20,

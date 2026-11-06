@@ -5,12 +5,14 @@ import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../config/mesh_config.dart';
 import '../../state/format.dart';
 import '../../state/mesh.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
+import '../../state/tailscale_status.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
@@ -239,8 +241,8 @@ class MeshDetails extends ConsumerWidget {
                 ],
               ),
             ),
-            if (self != null && self.ipv4.isNotEmpty)
-              MeRow(label: '本机地址', value: self.ipv4, mono: true, onTap: () => _copy(self.ipv4)),
+            if (state.selfAddress(mesh.nodeId) case final ip when ip.isNotEmpty)
+              MeRow(label: '本机地址', value: ip, mono: true, onTap: () => _copy(ip)),
             if (mesh.hostname.isNotEmpty) MeRow(label: '设备名', value: mesh.hostname, mono: true),
           ],
         ),
@@ -249,7 +251,10 @@ class MeshDetails extends ConsumerWidget {
           MeSection(
             title: '我的设备',
             note: '点按复制地址',
-            children: [for (final d in state.devices) _DeviceRow(device: d, isSelf: d.id == self?.id, selfOnline: phase == MeshPhase.connected)],
+            children: [
+              for (final d in state.devices)
+                _DeviceRow(device: d, isSelf: d.id == self?.id, selfOnline: phase == MeshPhase.connected, path: state.pathOf(d)),
+            ],
           ),
         ],
         if (state.sites.isNotEmpty) ...[
@@ -274,11 +279,15 @@ void _copy(String text) {
   globalState.showNotifier('已复制 $text');
 }
 
+/// 一台设备：在线时写内核看到的路径（直连 / 中继 · 区域，拿不到内核状态时只写「在线」），离线写离线多久。
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({required this.device, required this.isSelf, required this.selfOnline});
+  const _DeviceRow({required this.device, required this.isSelf, required this.selfOnline, this.path});
   final MeshDevice device;
   final bool isSelf;
   final bool selfOnline;
+
+  /// 内核里这台对端的状态（直连地址 / 中继）
+  final TsPeer? path;
 
   @override
   Widget build(BuildContext context) {
@@ -288,7 +297,7 @@ class _DeviceRow extends StatelessWidget {
     final value = isSelf
         ? (online ? '在线' : '')
         : online
-        ? '在线'
+        ? (path?.pathText ?? '在线')
         : (seen == null ? '离线' : '离线 · ${fmtRelative(seen.toLocal())}');
     return MeRow(
       leading: StatusDot(color: online ? mm.good : mm.t3),
@@ -364,20 +373,90 @@ class _LeaveButton extends ConsumerWidget {
   }
 }
 
-/// 选了 Tailscale：订阅里的组网节点（内核不对外给它们的状态，只列名字）。
-class _TailscaleDetails extends ConsumerWidget {
+/// 选了 Tailscale：订阅里的组网节点，各自的状态（内核 meowTailscaleStatus；页面开着、代理在跑时每 3 秒问一次，
+/// 没启动的节点会被启动）、本机地址、需要登录时的链接、各设备直连还是中继。
+class _TailscaleDetails extends ConsumerStatefulWidget {
   const _TailscaleDetails();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_TailscaleDetails> createState() => _TailscaleDetailsState();
+}
+
+class _TailscaleDetailsState extends ConsumerState<_TailscaleDetails> {
+  Timer? _timer;
+  Map<String, TsStatus?> _status = const {};
+  bool _polling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_poll);
+    _timer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && TickerMode.getValuesNotifier(context).value.enabled) unawaited(_poll());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _poll() async {
+    if (_polling || !mounted || !ref.read(isRunningProvider)) return;
+    _polling = true;
+    try {
+      final next = <String, TsStatus?>{};
+      for (final n in ref.read(subscriptionTailscaleNodesProvider)) {
+        next[n] = (await fetchTailscaleStatus(n)).status;
+      }
+      if (mounted) setState(() => _status = next);
+    } finally {
+      _polling = false;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
     final nodes = ref.watch(subscriptionTailscaleNodesProvider);
+    final running = ref.watch(isRunningProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        MeSection(
-          title: '订阅里的组网节点',
-          children: [for (final n in nodes) MeRow(label: n)],
-        ),
+        for (final n in nodes) ...[
+          Builder(
+            builder: (context) {
+              final st = running ? _status[n] : null;
+              final self = st?.self?.addresses.where((a) => !a.contains(':')).firstOrNull;
+              return MeSection(
+                title: n,
+                children: [
+                  MeRow(
+                    label: '状态',
+                    value: !running ? '连接后启动' : (st?.stateText ?? '…'),
+                  ),
+                  if (self != null) MeRow(label: '本机地址', value: self, mono: true, onTap: () => _copy(self)),
+                  if (st != null && st.needsLogin && st.authUrl.isNotEmpty)
+                    MeRow(
+                      label: '在浏览器里登录',
+                      subtitle: '这个节点没有 auth key，登录一次后设备一直保留在 tailnet 里',
+                      chevron: true,
+                      onTap: () => launchUrl(Uri.parse(st.authUrl), mode: LaunchMode.externalApplication),
+                    ),
+                  for (final p in st?.peers ?? const <TsPeer>[])
+                    MeRow(
+                      leading: StatusDot(color: p.online ? mm.good : mm.t3),
+                      label: p.name,
+                      subtitle: p.addresses.where((a) => !a.contains(':')).join(' · '),
+                      value: p.online ? p.pathText : '离线',
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
         const MeCaption('组网节点由订阅下发（规则把 tailnet 的地址与 MagicDNS 名字交给它）。没有 auth key 的节点要在浏览器里登录一次，之后设备一直保留在 tailnet 里。'),
       ],
     );

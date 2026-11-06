@@ -4,6 +4,7 @@ import 'package:bett_box/meowx/config/mesh_config.dart';
 import 'package:bett_box/meowx/config/meow_patch.dart';
 import 'package:bett_box/meowx/panel/mesh.dart';
 import 'package:bett_box/meowx/state/mesh.dart';
+import 'package:bett_box/meowx/state/tailscale_status.dart';
 import 'package:bett_box/models/meow.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -412,6 +413,45 @@ void main() {
       const noFile = MeshState(devices: devices);
       expect(noFile.selfDevice(7)?.name, 'pixel');
       expect(noFile.onlineOthers(7), 1);
+    });
+
+    test('内核状态（meowTailscaleStatus 的回包）', () {
+      final r = parseTsStatusResponse(json.encode({
+        'status': {
+          'state': 'Running',
+          'self': {'id': '15', 'name': 'pixel', 'addresses': ['100.69.123.58', 'fd7a::1'], 'online': true},
+          'peers': [
+            {'id': '3', 'name': 'openwrt', 'addresses': ['100.124.214.252'], 'online': true, 'curAddr': '203.0.113.7:41641', 'relay': 'meowx-1'},
+            {'id': '5', 'name': 'mac', 'addresses': ['100.81.135.22'], 'relay': 'meowx-1', 'lastSeen': '2026-11-06T08:00:00Z'},
+          ],
+        },
+      }));
+      final st = r.status!;
+      expect(r.error, isNull);
+      expect((st.running, st.self!.id, st.peers.length), (true, 15, 2));
+      expect(st.peerFor(id: 3)!.pathText, '直连');
+      expect(st.peerFor(ip: '100.81.135.22')!.pathText, '中继 · meowx-1');
+      expect(st.peerFor(id: 99), isNull);
+      // 没有这个出站 / 出错 / 旧核心回空 / 回包坏了
+      expect(parseTsStatusResponse('{"status":null}').status, isNull);
+      expect(parseTsStatusResponse('{"status":null,"error":"context deadline exceeded"}').error, 'context deadline exceeded');
+      expect(parseTsStatusResponse(null).status, isNull);
+      expect(parseTsStatusResponse('oops').status, isNull);
+
+      // 阶段以内核为准；本机地址取内核的 IPv4；在线几台没有主控列表时数内核对端
+      final s = MeshState(engine: st, stateNodeId: 15);
+      expect(meshPhase(enabled: true, running: true, state: s), MeshPhase.connected);
+      expect(s.selfAddress(null), '100.69.123.58');
+      expect(s.onlineOthers(15), 1);
+      expect(s.pathOf(const MeshDevice(id: 3, name: 'openwrt'))!.direct, isTrue);
+      const login = TsStatus(state: 'NeedsLogin');
+      expect(meshPhase(enabled: true, running: true, state: const MeshState(engine: login)), MeshPhase.joining);
+      expect(meshPhase(enabled: true, running: true, state: const MeshState(engine: TsStatus(state: 'Starting'))), MeshPhase.connecting);
+      // 内核说没上线时，主控列表里还挂着「在线」也不算已连接
+      expect(
+        meshPhase(enabled: true, running: true, state: const MeshState(engine: login, devices: [MeshDevice(id: 15, name: 'x', online: true)], stateNodeId: 15)),
+        MeshPhase.joining,
+      );
     });
 
     test('主控不可用的原因', () {

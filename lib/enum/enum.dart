@@ -271,6 +271,9 @@ enum ActionMethod {
   /// MeowX：测速榜上传 / 删除（经测速用的同一个出站发 HTTPS 请求，见 core/meow_speedtest.go）
   meowSpeedTestBoard,
 
+  /// MeowX：tailscale 出站（喵窝 / 组网节点）的状态，见 core/meow_tailscale.go
+  meowTailscaleStatus,
+
   ///Android,
   setState,
   startTun,

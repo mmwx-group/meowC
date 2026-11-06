@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -19,9 +18,11 @@ import '../panel/client.dart';
 import '../panel/mesh.dart';
 import 'meow_settings.dart';
 import 'status.dart';
+import 'tailscale_status.dart';
 
 export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName;
 export '../panel/mesh.dart' show MeshDevice, MeshSite;
+export 'tailscale_status.dart' show TsStatus, TsPeer;
 
 /// 喵窝的运行时数据（不落盘）。生成运行配置的 `patchRawConfig` 在 globalState 里跑、拿不到 Riverpod，经这里取。
 ///
@@ -190,6 +191,7 @@ class MeshState {
     this.enrolling = false,
     this.error,
     this.panelError,
+    this.engine,
   });
 
   final MeshAvailability availability;
@@ -218,6 +220,10 @@ class MeshState {
   /// 不当成喵窝失败（喵窝本身多半照常通）
   final String? panelError;
 
+  /// 内核里喵窝节点的状态（本机状态 / 地址、各对端直连还是中继）；拿不到（代理没在跑、旧内核）为 null，
+  /// 这时退回主控设备列表判断
+  final TsStatus? engine;
+
   /// 本机这台（状态文件里的编号，拿不到时用上次记下的）
   MeshDevice? selfDevice(int? fallbackId) {
     final id = stateNodeId ?? fallbackId;
@@ -231,8 +237,18 @@ class MeshState {
   /// 除本机外在线的设备数
   int onlineOthers(int? fallbackId) {
     final self = selfDevice(fallbackId);
+    if (devices.isEmpty && engine != null) return engine!.peers.where((p) => p.online).length;
     return devices.where((d) => d.online && d.id != self?.id).length;
   }
+
+  /// 本机在喵窝里的地址：内核说的优先，拿不到用主控设备列表里本机那一条
+  String selfAddress(int? fallbackId) {
+    final fromEngine = engine?.self?.addresses.where((a) => !a.contains(':')).firstOrNull;
+    return fromEngine ?? selfDevice(fallbackId)?.ipv4 ?? '';
+  }
+
+  /// 主控设备列表里这台在内核看来走直连还是中继（本机、拿不到内核状态、对端不在 netmap 里时为 null）
+  TsPeer? pathOf(MeshDevice device) => engine?.peerFor(id: device.id, ip: device.ipv4);
 
   /// 状态文件里的设备在主控里已经没有了（被删了）：要重新入网。要设备列表是在看到这个编号 5 秒以后、完整拿到的才算，
   /// 免得刚登记、列表还是旧的时候误判（误判会让主控删掉刚登记的设备）
@@ -259,6 +275,8 @@ class MeshState {
     bool clearError = false,
     String? panelError,
     bool clearPanelError = false,
+    TsStatus? engine,
+    bool clearEngine = false,
   }) => MeshState(
     availability: availability ?? this.availability,
     message: message ?? this.message,
@@ -272,6 +290,7 @@ class MeshState {
     enrolling: enrolling ?? this.enrolling,
     error: clearError ? null : (error ?? this.error),
     panelError: clearPanelError ? null : (panelError ?? this.panelError),
+    engine: clearEngine ? null : (engine ?? this.engine),
   );
 }
 
@@ -280,6 +299,14 @@ MeshPhase meshPhase({required bool enabled, required bool running, required Mesh
   if (!enabled) return MeshPhase.off;
   if (!running) return MeshPhase.idle;
   if (state.enrolling) return MeshPhase.enrolling;
+  // 内核的真实状态优先；拿不到时退回主控设备列表与状态文件
+  final engine = state.engine;
+  if (engine != null) {
+    if (engine.running) return MeshPhase.connected;
+    if (state.error != null) return MeshPhase.failed;
+    if (engine.needsLogin) return MeshPhase.joining;
+    return MeshPhase.connecting;
+  }
   final self = state.selfDevice(fallbackId);
   if (self != null && self.online) return MeshPhase.connected;
   if (state.error != null) return MeshPhase.failed;
@@ -311,13 +338,10 @@ String meshPhaseText(MeshPhase phase, MeshState state, {int? fallbackId}) => swi
 ///   开 / 关、站点网段变了都要重新应用配置（代理在跑时）。
 /// - 入网 key：这台设备还没登记（状态目录里没有设备编号）或在主控被删了时，经加密通道现签一把一次性 key，
 ///   放进下一份运行配置；登记成功就丢。登记过的设备重连只靠状态目录里的设备密钥。
-/// - 内核的 tailscale 出站懒启动：每份带喵窝的配置生效后叫醒它一次（拿它测一次延迟），设备才上线。
-/// - 状态：内核不对外给 tailnet 状态，「已连接」看主控设备列表里本机在不在线，本机编号从 tsnet 的状态文件读。
-///   只在页面 / 首页卡片看得见、App 在前台时问主控（[tick]），不在后台定时联网。
+/// - 内核的 tailscale 出站懒启动：每份带喵窝的配置生效后叫醒它一次（问一次它的状态，内核会先启动它），设备才上线。
+/// - 状态：「已连接」与各设备直连 / 中继看内核的真实状态（核心 meowTailscaleStatus）；拿不到时（旧内核）退回主控设备列表
+///   里本机在不在线，本机编号从 tsnet 的状态文件读。只在页面 / 首页卡片看得见、App 在前台时问（[tick]），不在后台定时联网。
 class MeshController extends Notifier<MeshState> {
-  /// 叫醒用的地址：随便一个喵窝里的地址（结果不重要，tailscale 出站收到连接就会启动）
-  static const _wakeUrl = 'http://100.100.100.100/';
-
   /// 配置生效、旧节点被回收（内核按 GC 关掉过期的出站）之后再叫醒，免得新旧两个节点同时拿着同一份设备密钥上线
   static const _wakeDelay = Duration(seconds: 5);
 
@@ -459,6 +483,7 @@ class MeshController extends Notifier<MeshState> {
   /// App 在后台时不问主控。
   Future<void> tick({Duration devicesEvery = const Duration(seconds: 30)}) async {
     await _readStateFile();
+    await _pollEngine();
     final foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     if (!foreground || _token.isEmpty) return;
@@ -604,10 +629,56 @@ class MeshController extends Notifier<MeshState> {
   Future<void> _maybeEnroll() async {
     if (!_mesh.enabled || _mesh.controlUrl.isEmpty || !_running || state.busy) return;
     if (meshRuntime.authKey != null) return;
-    final deleted = state.stateNodeDeleted;
-    if (state.stateNodeId != null && !deleted) return;
-    final ok = await _enroll(hostname: _mesh.hostname.isEmpty ? await _deviceHostname() : _mesh.hostname, previous: deleted ? state.stateNodeId : _mesh.nodeId);
+    final int? previous;
+    final since = _needsLoginSince;
+    if (state.engine != null) {
+      // 内核说要登录（没登记过、在主控被删了）且持续了 5 秒（刚启动时可能一闪而过）：要 key
+      if (since == null || DateTime.now().difference(since) < const Duration(seconds: 5)) return;
+      previous = state.stateNodeId ?? _mesh.nodeId;
+    } else {
+      // 拿不到内核状态（旧内核）：按状态文件与主控设备列表判断
+      final deleted = state.stateNodeDeleted;
+      if (state.stateNodeId != null && !deleted) return;
+      previous = deleted ? state.stateNodeId : _mesh.nodeId;
+    }
+    final ok = await _enroll(hostname: _mesh.hostname.isEmpty ? await _deviceHostname() : _mesh.hostname, previous: previous);
     if (ok) await _apply();
+  }
+
+  /// 内核从什么时候起一直说要登录（[_maybeEnroll] 用）
+  DateTime? _needsLoginSince;
+
+  /// 问内核里喵窝节点的状态（本机状态 / 地址、各对端直连还是中继）。没启动的会先启动——配置生效后也拿它叫醒节点。
+  /// 喵窝关着、代理没在跑时不问（清掉旧的）。
+  Future<void> _pollEngine({Duration timeout = const Duration(seconds: 5)}) async {
+    if (!_mesh.enabled || !_running) {
+      if (state.engine != null) state = state.copyWith(clearEngine: true);
+      _needsLoginSince = null;
+      return;
+    }
+    final r = await fetchTailscaleStatus(meshOutboundName, timeout: timeout);
+    final st = r.status;
+    if (st == null) {
+      // 旧内核 / 配置里还没有喵窝节点：退回主控设备列表判断
+      if (state.engine != null) state = state.copyWith(clearEngine: true);
+      if (r.error != null) commonPrint.log('喵窝：取内核状态失败 ${r.error}');
+      return;
+    }
+    if (st.needsLogin) {
+      _needsLoginSince ??= DateTime.now();
+    } else {
+      _needsLoginSince = null;
+    }
+    state = state.copyWith(engine: st, clearError: st.running && state.error != null);
+    final id = st.self?.id;
+    if (st.running) {
+      // 登记成功：key 用过了，之后的配置不再带它
+      if (meshRuntime.authKey != null) {
+        meshRuntime.setAuthKey(null);
+        commonPrint.log('喵窝：这台设备已上线（${id ?? '-'}）');
+      }
+      if (id != null && id != _mesh.nodeId) _updateMesh((m) => m.copyWith(nodeId: id));
+    }
   }
 
   /// 向主控要一把一次性入网 key（自动的 30 秒内最多一次，用户点的 10 秒；主控那边每个账号每分钟限 5 次）
@@ -676,12 +747,8 @@ class MeshController extends Notifier<MeshState> {
 
   Future<void> _wake() async {
     if (!_mesh.enabled || !_running) return;
-    try {
-      final d = await clashCore.getDelay(_wakeUrl, meshOutboundName);
-      commonPrint.log('喵窝：叫醒节点（${d.value}）');
-    } catch (e) {
-      commonPrint.log('喵窝：叫醒节点失败 $e');
-    }
+    await _pollEngine(timeout: const Duration(seconds: 10));
+    commonPrint.log('喵窝：叫醒节点（${state.engine?.state ?? '拿不到内核状态'}）');
     _startFast();
   }
 

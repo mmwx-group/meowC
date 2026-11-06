@@ -4,6 +4,7 @@ import 'package:bett_box/meowx/pages/settings/networking_page.dart';
 import 'package:bett_box/meowx/state/mesh.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
+import 'package:bett_box/meowx/state/tailscale_status.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
@@ -85,7 +86,21 @@ Future<void> _pump(
 }
 
 void main() {
-  tearDown(() => meshRuntime.subscriptionNodes.value = const []);
+  setUp(() {
+    // 订阅组网节点的状态：家里已连接、能直连到 nas
+    debugFetchTailscaleStatus = (name) async => (
+      status: const TsStatus(
+        state: 'Running',
+        self: TsPeer(id: 1, name: 'pixel', addresses: ['100.101.1.2'], online: true),
+        peers: [TsPeer(id: 2, name: 'nas', addresses: ['100.101.1.3'], online: true, relay: 'tok')],
+      ),
+      error: null,
+    );
+  });
+  tearDown(() {
+    meshRuntime.subscriptionNodes.value = const [];
+    debugFetchTailscaleStatus = null;
+  });
 
   testWidgets('组网页：管理员看得到喵窝；订阅里没有组网节点时 Tailscale 画灰、点了说原因', (tester) async {
     final calls = <NetworkingMode>[];
@@ -113,9 +128,12 @@ void main() {
     meshRuntime.subscriptionNodes.value = const ['家里'];
     final calls = <NetworkingMode>[];
     await _pump(tester, const NetworkingPage(), running: true, calls: calls);
-    // 订阅里有组网节点、开关缺省开 → 现在是 Tailscale，列出节点名
-    expect(find.text('订阅里的组网节点'), findsOneWidget);
+    // 订阅里有组网节点、开关缺省开 → 现在是 Tailscale：列出节点与内核给的状态、各设备直连还是中继
+    await tester.pump();
     expect(find.text('家里'), findsOneWidget);
+    expect(find.text('已连接'), findsOneWidget);
+    expect(find.text('100.101.1.2'), findsOneWidget);
+    expect(find.text('中继 · tok'), findsOneWidget);
     await tester.tap(find.text('喵窝'));
     await tester.pumpAndSettle();
     expect(find.text('切换到「喵窝」'), findsOneWidget);
@@ -150,8 +168,14 @@ void main() {
         devicesAt: DateTime.now(),
         stateNodeId: 7,
         stateNodeIdAt: DateTime.now(),
+        engine: const TsStatus(
+          state: 'Running',
+          self: TsPeer(id: 7, name: 'pixel-8', addresses: ['100.64.0.7'], online: true),
+          peers: [TsPeer(id: 3, name: 'openwrt', addresses: ['100.64.0.3'], online: true, curAddr: '203.0.113.7:41641', relay: 'meowx-1')],
+        ),
       ),
     );
+    expect(find.text('直连'), findsOneWidget);   // openwrt：内核说打通了直连
     expect(find.text('已连接 · 1 台在线'), findsOneWidget);
     expect(find.widgetWithText(MeRow, '本机地址'), findsOneWidget);
     expect(find.text('100.64.0.7'), findsNWidgets(2));   // 本机地址一行 + 设备列表里本机的副标题

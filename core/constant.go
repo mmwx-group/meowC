@@ -140,6 +140,8 @@ const (
 	meowSpeedTestStatusMethod             Method = "meowSpeedTestStatus"
 	meowSpeedTestStopMethod               Method = "meowSpeedTestStop"
 	meowSpeedTestBoardMethod              Method = "meowSpeedTestBoard"
+	// MeowX：tailscale 出站（喵窝 / 组网节点）的状态（见 meow_tailscale.go）
+	meowTailscaleStatusMethod Method = "meowTailscaleStatus"
 	parseExternalProviderContentMethod    Method = "parseExternalProviderContent"
 	getCoreStatusMethod                   Method = "getCoreStatus"
 )
