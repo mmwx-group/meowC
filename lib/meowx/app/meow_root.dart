@@ -51,7 +51,6 @@ class MeowRoot extends ConsumerStatefulWidget {
 class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<PageLabel> _pageSub;
   late final ProviderSubscription<String?> _profileSub;
-  late final ProviderSubscription<bool> _meshModeSub;
   late final ProviderSubscription<bool> _initSub;
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
@@ -134,10 +133,6 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     // 喵窝：建出控制器（登录 / 启动后问主控能不能用；配置生效后叫醒内核里的喵窝节点）
     ref.read(meshProvider);
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
-    _meshModeSub = ref.listenManual(
-      meowSettingProvider.select((s) => s.mesh.enabled),
-      (prev, next) => _syncDirectMode(ref.read(currentProfileIdProvider)),
-    );
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {
       if (next) unawaited(_ensureDirect());
@@ -188,7 +183,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     );
   }
 
-  /// 切到内置直连档 → mode=direct（喵窝开着时是 rule，见下）；不在直连档上而 direct 是当初自动设的 → 恢复 rule。
+  /// 切到内置直连档 → mode=direct；不在直连档上而 direct 是当初自动设的 → 恢复 rule。
   /// 按状态对账（启动时也跑一次），不依赖「恰好监听到从直连档切走的那一下」——漏一次就会一直停在直连、所有规则看起来都走 DIRECT。
   void _syncDirectMode(String? profileId) {
     final c = globalState.appController;
@@ -199,10 +194,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
       if (!ref.read(meowSettingProvider).autoDirectMode) {
         settings.updateState((s) => s.copyWith(autoDirectMode: true));
       }
-      // 喵窝开着时用规则模式：直连档的规则只有 MATCH,DIRECT，效果仍是全部直连，而喵窝的规则排在它前面才生效
-      // （直连模式下内核不看规则，喵窝里的地址也走直连、访问不了）。没有订阅的管理员账号就是这种情况
-      final want = ref.read(meowSettingProvider).mesh.enabled ? Mode.rule : Mode.direct;
-      if (mode != want) c.changeMode(want);
+      if (mode != Mode.direct) c.changeMode(Mode.direct);
     } else if (profileId != null && ref.read(meowSettingProvider).autoDirectMode) {
       settings.updateState((s) => s.copyWith(autoDirectMode: false));
       if (mode == Mode.direct) c.changeMode(Mode.rule);
@@ -235,7 +227,6 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   void dispose() {
     _pageSub.close();
     _profileSub.close();
-    _meshModeSub.close();
     _initSub.close();
     _realtimeSub.close();
     _po0Sub.close();

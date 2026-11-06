@@ -217,7 +217,8 @@ class MeshInjection {
     if (authKey != null && authKey!.isNotEmpty) 'auth-key': authKey,
   };
 
-  /// 排在全部规则之前的规则：设备地址段 → MagicDNS 后缀 → 站点网段
+  /// 喵窝的规则：设备地址段 → MagicDNS 后缀 → 站点网段。写进内核的 `priority-rules`（先于出站模式匹配，
+  /// 规则 / 全局 / 直连三种模式下都交给喵窝，同 iOS）
   List<String> rules() => [
     'IP-CIDR,$meshDeviceCidr,$meshOutboundName,no-resolve',
     if (magicDns.isNotEmpty) 'DOMAIN-SUFFIX,$magicDns,$meshOutboundName',
@@ -230,16 +231,12 @@ class MeshInjection {
 class NetworkingPatch {
   const NetworkingPatch({
     required this.rules,
-    this.prependRules = const [],
     this.subscriptionTailscaleNodes = const [],
     this.removed = const [],
   });
 
   /// 改写后的订阅规则（指向去掉的节点的已改成 DIRECT；新列表，不动传进来的那份）
   final List<dynamic> rules;
-
-  /// 要排在整张规则表最前面的（喵窝的规则；先于阻止 QUIC，否则喵窝里的 UDP 443 被拦）
-  final List<String> prependRules;
 
   /// 订阅里原本有的 Tailscale 组网节点（去掉之前记下的，「组网」页据此判断 Tailscale 那一项可不可选）
   final List<String> subscriptionTailscaleNodes;
@@ -264,8 +261,9 @@ List<String> tailscaleNodeNames(Map<String, dynamic> rawConfig) {
 /// [rules] 是订阅规则（写回规则表之前那份），改写后的在返回值里：
 /// - [stripTailscale]：去掉订阅里的 Tailscale 组网节点，指向它们的规则改成 DIRECT、代理组里的引用去掉、
 ///   `ts://<节点>` 的 DNS 策略去掉——配置照样合法（见 [removeProxies]）；
-/// - [mesh] 不为 null：注入喵窝节点（订阅里同名的节点先去掉）、MagicDNS 后缀交给喵窝（nameserver-policy，fake-ip 时
-///   再加进 fake-ip-filter）、TUN 路由放行喵窝网段，返回要排在最前面的规则。
+/// - [mesh] 不为 null：注入喵窝节点（订阅里同名的节点先去掉）、喵窝的规则写进内核的 `priority-rules`（先于出站模式、
+///   先于全部规则含阻止 QUIC，三种模式下都生效）、MagicDNS 后缀交给喵窝（nameserver-policy，fake-ip 时再加进
+///   fake-ip-filter）、TUN 路由放行喵窝网段。
 NetworkingPatch applyMeowNetworking(
   Map<String, dynamic> rawConfig,
   List<dynamic> rules, {
@@ -287,6 +285,7 @@ NetworkingPatch applyMeowNetworking(
 
   final proxies = rawConfig['proxies'] is List ? rawConfig['proxies'] as List : <dynamic>[];
   rawConfig['proxies'] = [...proxies, mesh.node()];
+  rawConfig['priority-rules'] = mesh.rules();
 
   if (mesh.magicDns.isNotEmpty) {
     final dns = switch (rawConfig['dns']) {
@@ -321,7 +320,6 @@ NetworkingPatch applyMeowNetworking(
 
   return NetworkingPatch(
     rules: newRules,
-    prependRules: mesh.rules(),
     subscriptionTailscaleNodes: subscriptionNodes,
     removed: remove.toList(),
   );

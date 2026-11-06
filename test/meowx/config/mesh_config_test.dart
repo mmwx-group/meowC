@@ -229,7 +229,7 @@ void main() {
       final patch = applyMeowNetworking(raw, List<dynamic>.of(_rules), stripTailscale: true);
       expect(patch.subscriptionTailscaleNodes, ['家里']);
       expect(patch.removed, ['家里']);
-      expect(patch.prependRules, isEmpty);
+      expect(raw.containsKey('priority-rules'), isFalse);
       expect(tailscaleNodeNames(raw), isEmpty);
       expect(patch.rules, [
         'IP-CIDR,100.64.0.0/10,DIRECT,no-resolve',
@@ -257,7 +257,7 @@ void main() {
       final patch = applyMeowNetworking(raw, List<dynamic>.of(_rules), stripTailscale: false);
       expect(tailscaleNodeNames(raw), ['家里']);
       expect(patch.rules, _rules);
-      expect(patch.prependRules, isEmpty);
+      expect(raw.containsKey('priority-rules'), isFalse);
       expect((raw['proxies'] as List).any((p) => p['name'] == meshOutboundName), isFalse);
       _expectValid(raw, patch.rules);
     });
@@ -286,7 +286,8 @@ void main() {
         'udp': true,
         'auth-key': 'hskey-auth-once',
       });
-      expect(patch.prependRules, [
+      // 喵窝的规则进内核的 priority-rules（先于出站模式），订阅规则表里不再重复
+      expect(raw['priority-rules'], [
         'IP-CIDR,100.64.0.0/10,喵窝,no-resolve',
         'DOMAIN-SUFFIX,meowx.internal,喵窝',
         'IP-CIDR,192.168.1.0/24,喵窝,no-resolve',
@@ -296,32 +297,31 @@ void main() {
       expect((dns['nameserver-policy'] as Map)['+.meowx.internal'], 'ts://喵窝');
       expect(dns['fake-ip-filter'], ['*.lan', '+.meowx.internal']);
       // 安卓「绕过私有网络」时的路由表：站点网段补进去
-      _expectValid(raw, [...patch.prependRules, ...patch.rules]);
+      expect(patch.rules.any((r) => r.toString().contains(meshOutboundName)), isFalse);
+      _expectValid(raw, [...raw['priority-rules'] as List, ...patch.rules]);
     });
 
     test('喵窝：登记过的设备不带 key；redir-host 不加 fake-ip-filter；TUN 排除段挖掉站点', () {
       final raw = _subscription();
       (raw['tun'] as Map)['route-exclude-address'] = ['192.168.0.0/16', '10.0.0.0/8'];
       const mesh = MeshInjection(controlUrl: 'https://x', hostname: 'h', sites: ['192.168.1.0/24']);
-      final patch = applyMeowNetworking(raw, List<dynamic>.of(_rules), stripTailscale: true, mesh: mesh);
+      applyMeowNetworking(raw, List<dynamic>.of(_rules), stripTailscale: true, mesh: mesh);
       expect((raw['proxies'] as List).last.containsKey('auth-key'), isFalse);
       expect((raw['dns'] as Map).containsKey('fake-ip-filter'), isFalse);
-      expect(patch.prependRules, ['IP-CIDR,100.64.0.0/10,喵窝,no-resolve', 'IP-CIDR,192.168.1.0/24,喵窝,no-resolve']);
+      expect(raw['priority-rules'], ['IP-CIDR,100.64.0.0/10,喵窝,no-resolve', 'IP-CIDR,192.168.1.0/24,喵窝,no-resolve']);
       final exclude = (raw['tun'] as Map)['route-exclude-address'] as List;
       expect(exclude, isNot(contains('192.168.0.0/16')));
       expect(exclude, contains('10.0.0.0/8'));
     });
 
-    test('整张规则表：喵窝 → 阻止 QUIC → MeowX 前置规则 → 订阅规则', () {
+    test('整张规则表：阻止 QUIC → MeowX 前置规则 → 订阅规则（喵窝的不在这里，在 priority-rules）', () {
       final table = meowRuleTable(
         const MeowSettings(bypassDomains: ['x.com']),
-        networkingRules: const ['IP-CIDR,100.64.0.0/10,喵窝,no-resolve'],
         quicRules: const ['AND,((NETWORK,UDP),(DST-PORT,443)),REJECT'],
         rules: const ['MATCH,DIRECT'],
         debugPo0: false,
       );
       expect(table, [
-        'IP-CIDR,100.64.0.0/10,喵窝,no-resolve',
         'AND,((NETWORK,UDP),(DST-PORT,443)),REJECT',
         'DOMAIN,x.com,DIRECT',
         'MATCH,DIRECT',

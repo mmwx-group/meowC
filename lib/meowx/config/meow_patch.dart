@@ -104,21 +104,18 @@ List<String> meowPrependRules(
   if (meow.customRules.isNotEmpty) ...customRuleLines(meow.customRules, resolveMainProxyGroup(proxyGroups, rules)),
 ];
 
-/// 写回 `rawConfig['rules']` 的整张规则表：喵窝 → 阻止 QUIC → MeowX 前置规则（[meowPrependRules]）→ 订阅规则（Bettbox 处理过的）。
-/// 喵窝的规则（[networkingRules]：设备地址段 / MagicDNS 后缀 / 站点网段，见 mesh_config.dart）排在一切之前，
-/// 否则喵窝里的 UDP 443 会被阻止 QUIC 拦掉、绕过表与自定义规则也可能抢先命中这些地址（同 iOS：喵窝先于一切规则判断）。
+/// 写回 `rawConfig['rules']` 的整张规则表：阻止 QUIC → MeowX 前置规则（[meowPrependRules]）→ 订阅规则（Bettbox 处理过的）。
+/// 喵窝的规则不在这张表里：它们在内核的 priority-rules，先于出站模式与这整张表（见 mesh_config.dart）。
 /// 阻止 QUIC 排在其余 MeowX 前置规则之前，自定义规则命中的域名也照样丢 UDP 443（同 iOS：QUIC 在收包处就丢、先于一切规则）；
 /// 副作用是绕过代理 / 推送直连 / po0 直连的 UDP 443 也被丢（po0 的上报走 TCP，不受影响）。
 /// [rules] 也用来推断自定义规则「代理」的主代理组（不含阻止 QUIC 的规则）。在 Bettbox 的 `patchRawConfig` 末尾调用。
 List<dynamic> meowRuleTable(
   MeowSettings meow, {
-  List<String> networkingRules = const [],
   List<String> quicRules = const [],
   required List<dynamic> rules,
   Object? proxyGroups,
   bool? debugPo0,
 }) => [
-  ...networkingRules,
   ...quicRules,
   ...meowPrependRules(meow, debugPo0: debugPo0, proxyGroups: proxyGroups, rules: rules),
   ...rules,

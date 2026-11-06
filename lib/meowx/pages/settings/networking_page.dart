@@ -1,8 +1,6 @@
 import 'dart:async';
 
-import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/l10n/l10n.dart';
-import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -211,7 +209,6 @@ class MeshDetails extends ConsumerWidget {
     final running = ref.watch(isRunningProvider);
     final phase = meshPhase(enabled: mesh.enabled, running: running, state: state, fallbackId: mesh.nodeId);
     final self = state.selfDevice(mesh.nodeId);
-    final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final statusColor = switch (phase) {
       MeshPhase.connected => mm.good,
       MeshPhase.failed => mm.slow,
@@ -247,10 +244,6 @@ class MeshDetails extends ConsumerWidget {
             if (mesh.hostname.isNotEmpty) MeRow(label: '设备名', value: mesh.hostname, mono: true),
           ],
         ),
-        if (mode != Mode.rule && mesh.enabled) ...[
-          const SizedBox(height: 4),
-          MeCaption('现在是${mode == Mode.global ? '全局' : '直连'}模式：内核不看规则，访问不了$name里的地址。切回规则模式后可用。'),
-        ],
         if (state.devices.isNotEmpty) ...[
           const SizedBox(height: 12),
           MeSection(

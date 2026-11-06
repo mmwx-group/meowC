@@ -74,8 +74,8 @@ String get _fallbackHostname => Platform.isAndroid ? 'meowx-android' : 'meowx-wi
 final meshRuntime = MeshRuntime();
 
 /// `patchRawConfig`（lib/state.dart）末尾调：按「组网」改写运行配置——去掉订阅里的组网节点（喵窝开着 / 选了关闭时）、
-/// 注入喵窝节点。返回改写后的订阅规则与要排在整张规则表最前面的规则。[current] = 生成的是当前订阅（不是导出 / 预览别的档）。
-({List<dynamic> rules, List<String> prepend}) applyNetworkingToConfig(
+/// 注入喵窝节点与它的 priority-rules。返回改写后的订阅规则。[current] = 生成的是当前订阅（不是导出 / 预览别的档）。
+List<dynamic> applyNetworkingToConfig(
   Map<String, dynamic> rawConfig,
   List<dynamic> rules,
   MeowSettings meow, {
@@ -90,7 +90,7 @@ final meshRuntime = MeshRuntime();
     if (mesh != null) meshRuntime.epoch.value++;
   }
   if (patch.removed.isNotEmpty) commonPrint.log('组网：运行配置去掉了节点 ${patch.removed.join(', ')}');
-  return (rules: patch.rules, prepend: patch.prependRules);
+  return patch.rules;
 }
 
 /// 当前订阅里的 Tailscale 组网节点名（应用配置时记下的）。
