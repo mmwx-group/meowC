@@ -432,10 +432,7 @@ class MeshController extends Notifier<MeshState> {
     }
     final self = state.selfDevice(null);
     if (self != null && self.id != _mesh.nodeId) _updateMesh((m) => m.copyWith(nodeId: self.id));
-    if (changed && _mesh.enabled && _running) {
-      commonPrint.log('喵窝：控制地址 / 站点网段有变化，重新应用配置');
-      globalState.appController.applyProfileDebounce(silence: true);
-    }
+    if (changed && _mesh.enabled) _reapplyLater('控制地址 / 站点网段有变化');
   }
 
   /// 页面 / 首页卡片看得见时定期调：读状态文件；离上次问主控超过 [devicesEvery] 就再问一次；该入网就入网。
@@ -574,7 +571,7 @@ class MeshController extends Notifier<MeshState> {
     _statusAt = null;
     _lastStatus = null;
     _updateMesh((m) => m.copyWith(enabled: false, panelReason: null, panelMessage: ''));
-    if (wasOn && _running) globalState.appController.applyProfileDebounce(silence: true);
+    if (wasOn) _reapplyLater('退出登录，关掉喵窝');
   }
 
   // ---------------------------------------------------------------------------------------------------------------
@@ -630,14 +627,22 @@ class MeshController extends Notifier<MeshState> {
     }
   }
 
+  /// 重新应用配置。代理没在跑时也要应用：Bettbox 点连接时只在订阅档改过时才重新生成配置，
+  /// 不应用的话下次连接用的还是打开喵窝之前的那份（没有喵窝节点）
   Future<void> _apply() async {
-    if (!_running) return;
     try {
       await globalState.appController.applyProfile(silence: true);
     } catch (e) {
       commonPrint.log('喵窝：重新应用配置失败 $e');
     }
-    _startFast();
+    if (_running) _startFast();
+  }
+
+  /// 设置变了、要重新生成配置（合并成一次；App 还没初始化完时不动，初始化时自己会生成）
+  void _reapplyLater(String why) {
+    if (!ref.read(initProvider)) return;
+    commonPrint.log('喵窝：$why，重新应用配置');
+    globalState.appController.applyProfileDebounce(silence: true);
   }
 
   void _scheduleWake() {
@@ -649,8 +654,11 @@ class MeshController extends Notifier<MeshState> {
   Future<void> _wake() async {
     if (!_mesh.enabled || !_running) return;
     try {
-      await clashCore.getDelay(_wakeUrl, meshOutboundName);
-    } catch (_) {}
+      final d = await clashCore.getDelay(_wakeUrl, meshOutboundName);
+      commonPrint.log('喵窝：叫醒节点（${d.value}）');
+    } catch (e) {
+      commonPrint.log('喵窝：叫醒节点失败 $e');
+    }
     _startFast();
   }
 
@@ -747,10 +755,7 @@ class MeshController extends Notifier<MeshState> {
     meshRuntime.localIPv4s = ips;
     ref.read(meshLocalIPv4sProvider.notifier).state = ips;
     final after = meshActiveSites(_mesh.routes, ips);
-    if (!listEquals(before, after) && _running) {
-      commonPrint.log('喵窝：接入的站点网段变了（${after.join(', ')}），重新应用配置');
-      globalState.appController.applyProfileDebounce(silence: true);
-    }
+    if (!listEquals(before, after)) _reapplyLater('接入的站点网段变了（${after.join(', ')}）');
   }
 
   // ---------------------------------------------------------------------------------------------------------------

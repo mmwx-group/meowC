@@ -340,8 +340,10 @@ void main() {
       String b64(String s) => base64.encode(utf8.encode(s));
       return json.encode({
         '_machinekey': b64('privkey:abc'),
-        '_current-profile': b64('a1b2'),
+        // 实际文件里当前档写的是状态键（profile-xxxx），_profiles 按档 ID 列（2026-11 模拟器上抓的 tsnet 状态文件就是这样）
+        '_current-profile': b64('profile-a1b2'),
         '_profiles': b64(json.encode({
+          'ffff': {'ID': 'ffff', 'Name': 'u9', 'Key': 'profile-ffff', 'NodeID': '99', 'ControlURL': 'https://y'},
           'a1b2': {'ID': 'a1b2', 'Name': 'u12', 'Key': 'profile-a1b2', 'NodeID': ?nodeId, 'ControlURL': 'https://x'},
         })),
       });

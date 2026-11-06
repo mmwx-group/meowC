@@ -175,7 +175,7 @@ void main() {
     );
     expect(find.text('喵窝'), findsOneWidget);
     expect(find.text('已连接 · 1 台在线'), findsOneWidget);
-    expect(find.text('100.64.0.7 · 1 台在线'), findsOneWidget);
+    expect(find.text('100.64.0.7'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
   });
 

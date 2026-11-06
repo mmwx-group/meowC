@@ -72,17 +72,13 @@ class _HomeMeshCardState extends ConsumerState<HomeMeshCard> {
     final running = ref.watch(isRunningProvider);
     final phase = meshPhase(enabled: mesh.enabled, running: running, state: state, fallbackId: mesh.nodeId);
     final self = state.selfDevice(mesh.nodeId);
-    final online = state.onlineOthers(mesh.nodeId);
     final statusColor = switch (phase) {
       MeshPhase.connected => mm.good,
       MeshPhase.failed => mm.slow,
       _ => mm.t2,
     };
-    // 第二行：本机地址 · 在线几台（入网后才有）
-    final detail = [
-      if (phase == MeshPhase.connected && self != null && self.ipv4.isNotEmpty) self.ipv4,
-      if (phase == MeshPhase.connected) '$online 台在线',
-    ].join(' · ');
+    // 第三行：本机地址（入网后才有；在线几台已经写在状态行里）
+    final detail = phase == MeshPhase.connected && self != null ? self.ipv4 : '';
     final busy = _switching || state.busy || state.enrolling;
     return GlassCard(
       radius: 20,

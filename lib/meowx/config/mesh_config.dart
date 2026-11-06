@@ -435,8 +435,8 @@ Map<String, dynamic> _withoutMembers(Map<dynamic, dynamic> g, Set<String> names)
 // tsnet 状态文件
 
 /// 从 tsnet 的状态文件（`<state-dir>/tailscaled.state`，JSON：键 → base64 的值）里取当前登录档在控制服务器上的设备编号：
-/// `_current-profile` 是档 ID，`_profiles` 里那一档的 `NodeID` 是 Headscale 的 StableID（就是数字编号）。
-/// 没登记过 / 文件坏了 → null。
+/// `_current-profile` 是当前档的状态键（`profile-xxxx`），`_profiles` 按档 ID 列出各档（每档带自己的 `Key`），
+/// 那一档的 `NodeID` 是 Headscale 的 StableID（就是数字编号）。没登记过 / 文件坏了 → null。
 int? meshNodeIdFromState(String content) {
   try {
     final root = json.decode(content);
@@ -445,9 +445,14 @@ int? meshNodeIdFromState(String content) {
     final current = decode(root['_current-profile'])?.trim();
     final profiles = json.decode(decode(root['_profiles']) ?? 'null');
     if (current == null || current.isEmpty || profiles is! Map) return null;
-    final profile = profiles[current];
-    if (profile is! Map) return null;
-    return int.tryParse(profile['NodeID']?.toString() ?? '');
+    for (final e in profiles.entries) {
+      final p = e.value;
+      if (p is! Map) continue;
+      final id = (p['ID'] ?? e.key).toString();
+      if (p['Key'] != current && id != current && 'profile-$id' != current) continue;
+      return int.tryParse(p['NodeID']?.toString() ?? '');
+    }
+    return null;
   } catch (_) {
     return null;
   }
