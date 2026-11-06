@@ -663,9 +663,9 @@ packages:
     dependency: "direct overridden"
     description:
       path: "packages/hotkey_manager_linux"
-      ref: fix-build-failure
+      ref: "1b31e3ca4ab017ee72f54a7065b2073a88403d61"
       resolved-ref: "1b31e3ca4ab017ee72f54a7065b2073a88403d61"
-      url: "https://github.com/gepbird/hotkey_manager.git"
+      url: "https://github.com/leanflutter/hotkey_manager.git"
     source: git
     version: "0.2.0"
   hotkey_manager_macos:

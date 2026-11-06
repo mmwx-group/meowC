@@ -338,6 +338,20 @@ jobs:
           echo "DEB=$(ls dist/*.deb)" >> "$GITHUB_ENV"
           echo "APPIMAGE=$(ls dist/*.AppImage)" >> "$GITHUB_ENV"
 
+      - name: Upload deb
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.DEB }}
+          archive: false
+          overwrite: true
+
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.APPIMAGE }}
+          archive: false
+          overwrite: true
+
       # 干净系统里只靠 deb 声明的依赖装一遍：内核要是 root 所有 + setuid、不能有找不到的库；再在虚拟显示里起一次截图
       - name: Smoke Test
         run: |
@@ -351,7 +365,7 @@ jobs:
               apt-get install -y -qq /dist/MeowX-*-linux-*.deb xvfb imagemagick procps >/dev/null
               stat -c "%U:%G %A %n" /usr/share/meowx/MeowXCore | tee /smoke/$TAG-core.txt
               stat -c "%U:%A" /usr/share/meowx/MeowXCore | grep -q "^root:-rws" || { echo "内核没有 root setuid"; exit 1; }
-              missing=$(find /usr/share/meowx -type f \( -name "*.so*" -o -name MeowX \) -exec ldd {} \; 2>/dev/null | grep "not found" || true)
+              missing=$(find /usr/share/meowx -type f \( -name "*.so*" -o -name MeowX \) -exec env LD_LIBRARY_PATH=/usr/share/meowx/lib ldd {} \; 2>/dev/null | grep "not found" || true)
               if [ -n "$missing" ]; then echo "缺库：$missing"; exit 1; fi
               xvfb-run -a -s "-screen 0 1440x900x24" bash -c "
                 meowx > /smoke/$TAG-run.log 2>&1 &
@@ -372,20 +386,6 @@ jobs:
           name: MeowX-linux-${{ env.ARCH }}-smoke
           path: ./smoke/*
           if-no-files-found: ignore
-
-      - name: Upload deb
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ env.DEB }}
-          archive: false
-          overwrite: true
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ env.APPIMAGE }}
-          archive: false
-          overwrite: true
 
   release:
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
