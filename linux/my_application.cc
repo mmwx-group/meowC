@@ -151,7 +151,7 @@ static gboolean my_application_local_command_line(GApplication* application, gch
   // 已经有一个 MeowX 开着、这次是被深链拉起的：把网址交给开着的那个。
   // 返回 FALSE 让 g_application_run 经 D-Bus 把命令行转过去（那边的 gtk 插件交给 app_links），等它处理完再退出；
   // 只转网址这一个参数（app_links 的 Linux 实现取第一个）。
-  // 没开着时网址随启动参数进 Dart（main 里 linkManager.setLaunchArgs）
+  // 没开着时网址随启动参数进 Dart（main 里 linkManager.initLinux）
   const gchar* link = _find_deep_link(self->dart_entrypoint_arguments);
   if (link != nullptr && g_application_get_is_remote(application)) {
     gchar* forward[] = {(*arguments)[0], const_cast<gchar*>(link), nullptr};

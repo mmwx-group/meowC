@@ -37,8 +37,8 @@ Future<void> main(List<String> args) async {
     exit(0);
   }
 
-  // MeowX：Linux 被深链拉起（App 没开着）时网址在启动参数里
-  if (system.isLinux) linkManager.setLaunchArgs(args);
+  // MeowX：Linux 被深链拉起（App 没开着）时网址在启动参数里；app_links 的接收端也趁早挂上
+  if (system.isLinux) linkManager.initLinux(args);
 
   if (system.isMacOS) {
     final acquire = await singleInstanceLock.acquire();

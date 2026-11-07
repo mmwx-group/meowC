@@ -22,9 +22,12 @@ class LinkManager {
     _appLinks = AppLinks();
   }
 
-  /// MeowX：从启动参数里取深链（Linux 用，main 里调）
-  void setLaunchArgs(List<String> args) {
+  /// MeowX（Linux，main 里调）：从启动参数里取深链；并让 app_links 先挂上接收端——它的 Linux 实现
+  /// 第一次用到才注册，之前别的进程转来的深链（启动中、首次启动的免责声明还没同意时）会丢，
+  /// 挂上之后收到的第一条留到 initAppLinksListen 时交出
+  void initLinux(List<String> args) {
     _launchLink = linuxLaunchLink(args);
+    _appLinks.getLatestLink();
   }
 
   Future<void> initAppLinksListen(

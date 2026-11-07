@@ -251,7 +251,7 @@
 
 ## 2026-11-06 · Linux 深链
 - `linux/my_application.cc`：GTK 应用带上 `G_APPLICATION_HANDLES_COMMAND_LINE`；被深链（`miaomiaowu:` / `clash:` / `clashmeta:`）拉起而已经有一个 MeowX 开着时，`local_command_line` 只留网址这一个参数、返回 FALSE，由 GApplication 经 D-Bus 转给开着的那个（那边 `gtk` 插件交给 app_links 的 Linux 实现），转完就退出、不开第二个窗口；其余照旧走 activate。补一个 `command_line` 兜底（插件没接上时把窗口叫出来、返回 0）。
-- `lib/common/link.dart` / `lib/main.dart`：App 没开着、被深链拉起时网址在启动参数里（app_links 的 Linux 实现只收别的进程转来的），`linkManager.setLaunchArgs` 记下、`initAppLinksListen` 时处理；Linux 上收到别的进程转来的深链先把窗口叫到前面（Windows 由 app_links 自己做）。
+- `lib/common/link.dart` / `lib/main.dart`：App 没开着、被深链拉起时网址在启动参数里（app_links 的 Linux 实现只收别的进程转来的），`linkManager.initLinux` 记下、`initAppLinksListen` 时处理；app_links 的 Linux 接收端也在 main 里就挂上（它第一次用到才注册，首次启动免责声明没同意前 `initLink` 还没跑，转来的深链会丢）；Linux 上收到别的进程转来的深链先把窗口叫到前面（Windows 由 app_links 自己做）。
 - `linux/packaging/package_linux.sh`：桌面入口 `Exec=… %u` + `MimeType=x-scheme-handler/miaomiaowu;…/clash;…/clashmeta;`（deb 装完由 update-desktop-database 登记）。
 - 新增 `lib/meowx/app/linux_url_scheme.dart`：AppImage 没有安装步骤，每次启动（`Window.init`）写 `~/.local/share/applications/meowx-appimage.desktop`（只管深链、`NoDisplay`、带 `TryExec`：AppImage 删了桌面环境自己忽略），挪了位置下次启动跟着改。
 - `lib/meowx/pages/me/account_card.dart`：Linux 未登录时的说明改回与 Windows 相同（网页「登录客户端」唤起 App）。

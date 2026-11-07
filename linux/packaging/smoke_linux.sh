@@ -26,11 +26,15 @@ if [[ "${2:-}" == "--display" ]]; then
   kill -0 "$pid" 2>/dev/null || fail "MeowX 没起来或中途退出：" "$OUT/$TAG-run.log"
   echo alive > "$OUT/$TAG-alive.txt"
 
-  # 2. 开着时点深链：桌面入口登记了 scheme，第二个进程把网址转给开着的这个后退出（不开第二个窗口）
+  # 2. 开着时点深链：桌面入口登记了 scheme，第二个进程把网址转给开着的这个后退出（不开第二个窗口）。
+  #    首次启动停在免责声明上、App 还没开始收深链：转来的这条要留到点了「同意」之后交出
   handler="$(xdg-mime query default x-scheme-handler/clash)"
   [[ "$handler" == meowx.desktop ]] || fail "clash:// 的处理程序是「$handler」，不是 meowx.desktop"
   timeout 20 xdg-open "clash://install-config?url=https%3A%2F%2Fexample.com%2Fsmoke.yaml" > "$OUT/$TAG-forward.log" 2>&1 \
     || fail "转交深链的进程没正常退出" "$OUT/$TAG-forward.log"
+  sleep 2
+  # 「同意」按钮：1440×900 的屏上窗口居中、对话框在正中，按钮在中心右下 (+121, +77)
+  xdotool mousemove 841 527 click 1
   sleep 5
   import -window root "$OUT/$TAG-link.png"
   grep -q "onAppLink: clash://install-config" "$OUT/$TAG-run.log" \
@@ -44,6 +48,11 @@ if [[ "${2:-}" == "--display" ]]; then
   # 3. 没开着时点深链：拉起 App（xdg-open 等程序退出才返回，放后台）
   xdg-open "miaomiaowu://login?host=127.0.0.1%3A9&code=smoke" > "$OUT/$TAG-cold.log" 2>&1 &
   sleep 30
+  # 上一步点的「同意」要是没来得及落盘，这里又停在免责声明上：再点一次
+  if ! grep -q "launchLink:" "$OUT/$TAG-cold.log"; then
+    xdotool mousemove 841 527 click 1
+    sleep 5
+  fi
   import -window root "$OUT/$TAG-cold.png"
   grep -q "launchLink: miaomiaowu://login" "$OUT/$TAG-cold.log" \
     || fail "深链拉起的 MeowX 没拿到网址" "$OUT/$TAG-cold.log"
@@ -65,9 +74,10 @@ fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 # 虚拟显示要 Mesa 的软件渲染；中文字体按普通桌面装上（App 另有随包的中文回落）；
-# 深链要会话总线（GApplication 靠它认出已经开着的实例）、xdg-open 与 mimeinfo.cache（desktop-file-utils）
+# 深链要会话总线（GApplication 靠它认出已经开着的实例）、xdg-open 与 mimeinfo.cache（desktop-file-utils）；
+# xdotool 点免责声明的「同意」
 apt-get install -y -qq /dist/MeowX-*-linux-*.deb xvfb imagemagick procps libgl1-mesa-dri fonts-noto-cjk \
-  dbus xdg-utils desktop-file-utils >/dev/null
+  dbus xdg-utils desktop-file-utils xdotool >/dev/null
 stat -c "%U:%G %A %n" /usr/share/meowx/MeowXCore | tee "$OUT/$TAG-core.txt"
 stat -c "%U:%A" /usr/share/meowx/MeowXCore | grep -q "^root:-rws" || fail "内核没有 root setuid"
 # libdartjni.so：path_provider_android 依赖的 jni 包随所有平台编进来、只在 Android 上加载，它要的 libjvm 不用管
