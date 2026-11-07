@@ -20,7 +20,9 @@ Uri? linuxLaunchLink(List<String> args) {
 /// 入口带 TryExec：AppImage 删掉之后桌面环境自己忽略它，不会把深链交给不存在的文件。
 Future<void> registerAppImageUrlSchemes() async {
   final appImage = Platform.environment['APPIMAGE'];
-  if (appImage == null || appImage.isEmpty || appImage.contains('\n')) return;
+  if (appImage == null || appImage.isEmpty) return;
+  final content = appImageUrlHandlerEntry(appImage);
+  if (content == null) return;
   final home = Platform.environment['HOME'];
   final dataHome = Platform.environment['XDG_DATA_HOME'];
   final base = (dataHome != null && dataHome.isNotEmpty) ? dataHome : (home == null ? null : '$home/.local/share');
@@ -28,7 +30,6 @@ Future<void> registerAppImageUrlSchemes() async {
   try {
     final dir = Directory('$base/applications');
     final file = File('${dir.path}/meowx-appimage.desktop');
-    final content = appImageUrlHandlerEntry(appImage);
     if (await file.exists() && await file.readAsString() == content) return;
     await dir.create(recursive: true);
     await file.writeAsString(content);
@@ -42,8 +43,10 @@ Future<void> registerAppImageUrlSchemes() async {
   }
 }
 
-/// 深链处理程序的桌面入口（纯函数，有单测）。
-String appImageUrlHandlerEntry(String appImage) {
+/// 深链处理程序的桌面入口（纯函数，有单测）。路径里有 % 或换行时给 null、不登记：
+/// GLib 加载入口时拿还没展开 %% 的 Exec 去找程序，找不到就整个入口不认（2.72 实测）。
+String? appImageUrlHandlerEntry(String appImage) {
+  if (appImage.contains('%') || appImage.contains('\n')) return null;
   final mime = linuxUrlSchemes.map((s) => 'x-scheme-handler/$s;').join();
   return '[Desktop Entry]\n'
       'Type=Application\n'
@@ -58,10 +61,10 @@ String appImageUrlHandlerEntry(String appImage) {
       'StartupWMClass=com.miaomiaowux.app\n';
 }
 
-/// Exec 里的一个参数：整个加双引号，引号里的 " ` $ \ 前面加反斜杠，% 写成 %%（Desktop Entry 规范「The Exec key」）。
+/// Exec 里的一个参数：整个加双引号，引号里的 " ` $ \ 前面加反斜杠（Desktop Entry 规范「The Exec key」）。
 String _quoteExecArg(String arg) {
   final escaped = arg.replaceAllMapped(RegExp(r'["`$\\]'), (m) => '\\${m[0]}');
-  return '"$escaped"'.replaceAll('%', '%%');
+  return '"$escaped"';
 }
 
 /// string 类型的值：读的时候先解反斜杠转义，所以字面的反斜杠要写成两个。

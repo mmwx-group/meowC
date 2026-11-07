@@ -12,10 +12,16 @@ void main() {
       expect(entry, startsWith('[Desktop Entry]\n'));
     });
 
-    test('特殊字符：引号里 " ` \$ \\ 加反斜杠、% 写成 %%，字面反斜杠在文件里是四个', () {
-      final entry = appImageUrlHandlerEntry(r'/home/u/My Apps/a$b%c"d`e\f.AppImage');
-      expect(entry, contains(r'Exec="/home/u/My Apps/a\\$b%%c\\"d\\`e\\\\f.AppImage" %u' '\n'));
-      expect(entry, contains(r'TryExec=/home/u/My Apps/a$b%c"d`e\\f.AppImage' '\n'));
+    // 这两条的写法在 Ubuntu 22.04 的 GLib 2.72 上用 gio launch 实测过：能拉起、参数对；文件删掉后入口不再被认
+    test('特殊字符：引号里 " ` \$ \\ 加反斜杠，字面反斜杠在文件里是四个', () {
+      final entry = appImageUrlHandlerEntry(r'/home/u/My Apps/a$b"d`e\f.AppImage');
+      expect(entry, contains(r'Exec="/home/u/My Apps/a\\$b\\"d\\`e\\\\f.AppImage" %u' '\n'));
+      expect(entry, contains(r'TryExec=/home/u/My Apps/a$b"d`e\\f.AppImage' '\n'));
+    });
+
+    test('路径里有 % 或换行：不登记（GLib 拿没展开 %% 的 Exec 找程序，入口会整个不认）', () {
+      expect(appImageUrlHandlerEntry('/home/u/MeowX%20(1).AppImage'), isNull);
+      expect(appImageUrlHandlerEntry('/home/u/a\nb.AppImage'), isNull);
     });
   });
 
