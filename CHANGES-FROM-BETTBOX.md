@@ -249,6 +249,14 @@
 - 正式发布接上 Linux：`build.yaml` 的 linux 作业在打 tag、手动选 all / linux 时都跑，`release` 与 `publish-cdn` 等它（冒烟结果改名 `smoke-linux-*`，不进 Release / CDN）；`scripts/publish_cdn.py` 认 `MeowX-<ver>-linux-<arch>.deb|.AppImage`（latest.json 的 `linux` 段，kind `deb` / `appimage`）；Release 模板加 Linux 四个包与安装说明；`lib/common/request.dart` 检查更新时 AppImage（运行时有 `APPIMAGE` 环境变量）挑 AppImage 包。
 - `lib/meowx/pages/me/account_card.dart`：Linux 上未登录时的说明改成「用主控地址、用户名和密码登录 / 导入订阅」——Linux 还没注册 `miaomiaowu://` 深链，网页上的「登录客户端」唤不起 App（以前照搬 Windows 的说法）。
 
+## 2026-11-06 · Linux 深链
+- `linux/my_application.cc`：GTK 应用带上 `G_APPLICATION_HANDLES_COMMAND_LINE`；被深链（`miaomiaowu:` / `clash:` / `clashmeta:`）拉起而已经有一个 MeowX 开着时，`local_command_line` 只留网址这一个参数、返回 FALSE，由 GApplication 经 D-Bus 转给开着的那个（那边 `gtk` 插件交给 app_links 的 Linux 实现），转完就退出、不开第二个窗口；其余照旧走 activate。补一个 `command_line` 兜底（插件没接上时把窗口叫出来、返回 0）。
+- `lib/common/link.dart` / `lib/main.dart`：App 没开着、被深链拉起时网址在启动参数里（app_links 的 Linux 实现只收别的进程转来的），`linkManager.initLinux` 记下、`initAppLinksListen` 时处理；app_links 的 Linux 接收端也在 main 里就挂上（它第一次用到才注册，首次启动免责声明没同意前 `initLink` 还没跑，转来的深链会丢）；Linux 上收到别的进程转来的深链先把窗口叫到前面（Windows 由 app_links 自己做）。
+- `linux/packaging/package_linux.sh`：桌面入口 `Exec=… %u` + `MimeType=x-scheme-handler/miaomiaowu;…/clash;…/clashmeta;`（deb 装完由 update-desktop-database 登记）。
+- 新增 `lib/meowx/app/linux_url_scheme.dart`：AppImage 没有安装步骤，每次启动（`Window.init`）写 `~/.local/share/applications/meowx-appimage.desktop`（只管深链、`NoDisplay`、带 `TryExec`：AppImage 删了桌面环境自己忽略），挪了位置下次启动跟着改。
+- `lib/meowx/pages/me/account_card.dart`：Linux 未登录时的说明改回与 Windows 相同（网页「登录客户端」唤起 App）。
+- 冒烟测试挪进 `linux/packaging/smoke_linux.sh`，多验三项：开着时 `xdg-open clash://…` 由第二个进程转交、开着的实例收到；没开着时 `xdg-open miaomiaowu://login…` 拉起 App 并拿到网址；AppImage 启动后登记了 `miaomiaowu://` 处理程序。
+
 ## 2026-11-06 · 喵窝 / MeowNest（主控内置的组网）与「组网」三选一（同 MeowX iOS / macOS）
 - `lib/state.dart patchRawConfig`：写回规则表之前调 `applyNetworkingToConfig`（`lib/meowx/state/mesh.dart`）——喵窝开着或「组网」选了关闭时去掉订阅里 `type: tailscale` 的组网节点（指向它们的规则改 DIRECT、代理组里的引用去掉、删空的组补 DIRECT、`ts://<节点>` 的 DNS 策略去掉，配置照样合法）；喵窝开着时注入「喵窝」节点（`type: tailscale`，控制地址用主控 `mesh/status` 回的 `control_url`，`state-dir: meowx-mesh`，`accept-routes: true`；入网 key 只在这台设备还没登记时带、只在内存里）、喵窝的规则（100.64.0.0/10、MagicDNS 后缀、本账号站点网段）写进内核的 `priority-rules`（先于出站模式匹配，见下）、MagicDNS 后缀的 `ts://喵窝` 策略（fake-ip 时加进 fake-ip-filter）、TUN 路由放行喵窝网段。
 - `lib/state.dart getCoreState`：安卓 VPN 的代理排除清单经 `meshNarrowBypass` 收窄（见下一条）。
@@ -260,7 +268,7 @@
 - `lib/models/meow.dart`：`MeowSettings` 加 `mesh`（`MeowMesh`：开关、控制地址、MagicDNS 后缀、站点网段、设备名、主控里的设备编号、上次主控的回答）与 `tailscaleNodes`（订阅组网节点开关，缺省开）。
 - `lib/enum/enum.dart` 的 `ActionMethod` 加 `meowTailscaleStatus`，`lib/models/generated/core.g.dart` 的枚举映射手动补一行（与 build_runner 输出一致）。
 - 桥层：`core/constant.go` 加 `meowTailscaleStatusMethod`、`core/action.go` 加一个 case（goroutine 里取完回调），实现在 `core/meow_tailscale.go`：按出站名取内核里 tailscale 出站的状态（没启动的会先启动）。
-- 内核子模块 `core/Clash.Meta`（meowx-core 分支 `feat/meowx-mesh`，已推分支、未合 main）：
+- 内核子模块 `core/Clash.Meta`（已合进 meowx-core main 1bed399）：
   - 顶层可选 `priority-rules`（写法同 rules）：规则 / 全局 / 直连三种模式下都在 `resolveMetadata` 里先匹配，命中就用它的出站，没命中照旧按模式走；不写时行为不变（OpenWrt 版同样）。新文件 `tunnel/priority_rules.go`，`tunnel.go` 只多一处调用，`config.go` 多一个字段与解析，`executor.go` 多一处更新。
   - `outbound.TailscaleStatusByName`（`adapter/outbound/tailscale_status*.go`）：本机状态 / 地址、各对端（编号、地址、在线、直连地址 `CurAddr`、中继 `Relay`）；`tailscale.go` 只多登记 / 注销一行。不带 tailscale 的构建有空实现。
 - `arb/*.arb` + `lib/l10n/`（`intl_utils:generate` 重新生成）：加 `meowNest`（简体「喵窝」、繁体「喵窩」、其它语言「MeowNest」）。
