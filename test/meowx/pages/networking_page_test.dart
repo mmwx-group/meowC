@@ -92,7 +92,7 @@ void main() {
       status: const TsStatus(
         state: 'Running',
         self: TsPeer(id: 1, name: 'pixel', addresses: ['100.101.1.2'], online: true),
-        peers: [TsPeer(id: 2, name: 'nas', addresses: ['100.101.1.3'], online: true, relay: 'tok')],
+        peers: [TsPeer(id: 2, name: 'nas', addresses: ['100.101.1.3'], online: true, active: true, relay: 'tok')],
       ),
       error: null,
     );

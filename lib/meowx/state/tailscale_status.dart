@@ -82,8 +82,13 @@ class TsPeer {
 
   bool get direct => curAddr.isNotEmpty;
 
-  /// 「直连」/「中继 · 区域」（MeowX 同一写法）
-  String get pathText => direct ? '直连' : (relay.isEmpty ? '中继' : '中继 · $relay');
+  /// 「直连」/「中继 · 区域」/「空闲」（MeowX 同一写法）。设备之间按需打通：最近没流量、也没有直连地址的
+  /// 还没真正连过（relay 只是对方的家中继），以前一律写成「中继」，要访问一次才变「直连」，看着像没打通
+  String get pathText {
+    if (direct) return '直连';
+    if (!active) return '空闲';
+    return relay.isEmpty ? '中继' : '中继 · $relay';
+  }
 
   static TsPeer? parse(Object? o) {
     if (o is! Map) return null;

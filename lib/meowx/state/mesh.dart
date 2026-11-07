@@ -361,6 +361,7 @@ class MeshController extends Notifier<MeshState> {
   Timer? _fastTimer;
   DateTime? _fastUntil;
   Timer? _localDebounce;
+  Timer? _vpnRestart;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
 
   MeowMesh get _mesh => ref.read(meowSettingProvider).mesh;
@@ -390,12 +391,20 @@ class MeshController extends Notifier<MeshState> {
       if (next && prev != true && _token.isNotEmpty) unawaited(refresh());
     });
     ref.listen<bool>(meowSettingProvider.select((s) => s.mesh.enabled), (_, on) => _syncWatchers(on));
+    // 安卓 VPN 的路由只在建立时定一次：喵窝要进隧道的网段变了（开 / 关、站点网段变了、换网后接入的站点变了），
+    // 只重新应用配置不够，要重连 VPN（同 MeowX 开关喵窝时重连）。以前先连上再开喵窝，「绕过私有网络」排除的
+    // 10.0.0.0/8 这类站点网段一直没进路由，站点里的设备（如 10.10.1.1）打不开
+    ref.listen<List<String>>(meshTunRoutesProvider, (prev, next) {
+      if (prev == null || listEquals(prev, next) || !Platform.isAndroid) return;
+      _restartVpnLater(next);
+    });
     meshRuntime.epoch.addListener(_scheduleWake);
     ref.onDispose(() {
       meshRuntime.epoch.removeListener(_scheduleWake);
       _wakeTimer?.cancel();
       _fastTimer?.cancel();
       _localDebounce?.cancel();
+      _vpnRestart?.cancel();
       unawaited(_connSub?.cancel());
     });
     Future.microtask(() => _syncWatchers(_mesh.enabled));
@@ -737,6 +746,20 @@ class MeshController extends Notifier<MeshState> {
       commonPrint.log('喵窝：重新应用配置失败 $e');
     }
     if (_running) _startFast();
+  }
+
+  /// 安卓：隧道网段变了时重连 VPN（合并成一次；没在跑、没开 VPN 时不动，下次连接自然带上新路由）
+  void _restartVpnLater(List<String> routes) {
+    _vpnRestart?.cancel();
+    _vpnRestart = Timer(const Duration(seconds: 2), () {
+      if (!ref.read(isRunningProvider) || !ref.read(vpnSettingProvider).enable) return;
+      commonPrint.log('喵窝：隧道网段变了（${routes.isEmpty ? '无' : routes.join(', ')}），重连 VPN');
+      unawaited(
+        globalState.appController.restartCore().catchError((Object e) {
+          commonPrint.log('喵窝：重连 VPN 失败 $e');
+        }),
+      );
+    });
   }
 
   /// 设置变了、要重新生成配置（合并成一次；App 还没初始化完时不动，初始化时自己会生成）

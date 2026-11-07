@@ -465,15 +465,18 @@ void main() {
           'self': {'id': '15', 'name': 'pixel', 'addresses': ['100.69.123.58', 'fd7a::1'], 'online': true},
           'peers': [
             {'id': '3', 'name': 'openwrt', 'addresses': ['100.124.214.252'], 'online': true, 'curAddr': '203.0.113.7:41641', 'relay': 'meowx-1'},
-            {'id': '5', 'name': 'mac', 'addresses': ['100.81.135.22'], 'relay': 'meowx-1', 'lastSeen': '2026-11-06T08:00:00Z'},
+            {'id': '5', 'name': 'mac', 'addresses': ['100.81.135.22'], 'online': true, 'active': true, 'relay': 'meowx-1'},
+            {'id': '6', 'name': 'nas', 'addresses': ['100.68.183.116'], 'online': true, 'relay': 'meowx-1'},
           ],
         },
       }));
       final st = r.status!;
       expect(r.error, isNull);
-      expect((st.running, st.self!.id, st.peers.length), (true, 15, 2));
+      expect((st.running, st.self!.id, st.peers.length), (true, 15, 3));
       expect(st.peerFor(id: 3)!.pathText, '直连');
       expect(st.peerFor(ip: '100.81.135.22')!.pathText, '中继 · meowx-1');
+      // 在线但最近没流量、也没有直连地址：还没真正连过，relay 只是对方的家中继，不算「中继」
+      expect(st.peerFor(id: 6)!.pathText, '空闲');
       expect(st.peerFor(id: 99), isNull);
       // 没有这个出站 / 出错 / 旧核心回空 / 回包坏了
       expect(parseTsStatusResponse('{"status":null}').status, isNull);
@@ -485,7 +488,7 @@ void main() {
       final s = MeshState(engine: st, stateNodeId: 15);
       expect(meshPhase(enabled: true, running: true, state: s), MeshPhase.connected);
       expect(s.selfAddress(null), '100.69.123.58');
-      expect(s.onlineOthers(15), 1);
+      expect(s.onlineOthers(15), 3);
       expect(s.pathOf(const MeshDevice(id: 3, name: 'openwrt'))!.direct, isTrue);
       const login = TsStatus(state: 'NeedsLogin');
       expect(meshPhase(enabled: true, running: true, state: const MeshState(engine: login)), MeshPhase.joining);
