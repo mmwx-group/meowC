@@ -45,6 +45,20 @@ static void _send_control_command(const char* command) {
   close(client_fd);
 }
 
+// MeowX 深链：网页「登录客户端」(miaomiaowu://login) 与 clash://install-config。
+// 桌面入口写的是 Exec=meowx %u，网址是第一个参数；这里不限位置，取第一个认得的
+static const gchar* _find_deep_link(gchar** args) {
+  static const char* const schemes[] = {"miaomiaowu:", "clash:", "clashmeta:"};
+  for (gchar** arg = args; arg && *arg; arg++) {
+    for (const char* scheme : schemes) {
+      if (g_ascii_strncasecmp(*arg, scheme, strlen(scheme)) == 0) {
+        return *arg;
+      }
+    }
+  }
+  return nullptr;
+}
+
 static GtkWindow* main_window = nullptr;
 
 struct _MyApplication {
@@ -134,10 +148,31 @@ static gboolean my_application_local_command_line(GApplication* application, gch
     return TRUE;
   }
 
+  // 已经有一个 MeowX 开着、这次是被深链拉起的：把网址交给开着的那个。
+  // 返回 FALSE 让 g_application_run 经 D-Bus 把命令行转过去（那边的 gtk 插件交给 app_links），等它处理完再退出；
+  // 只转网址这一个参数（app_links 的 Linux 实现取第一个）。
+  // 没开着时网址随启动参数进 Dart（main 里 linkManager.setLaunchArgs）
+  const gchar* link = _find_deep_link(self->dart_entrypoint_arguments);
+  if (link != nullptr && g_application_get_is_remote(application)) {
+    gchar* forward[] = {(*arguments)[0], const_cast<gchar*>(link), nullptr};
+    gchar** replaced = g_strdupv(forward);
+    g_strfreev(*arguments);
+    *arguments = replaced;
+    return FALSE;
+  }
+
   g_application_activate(application);
   *exit_status = 0;
 
   return TRUE;
+}
+
+// Implements GApplication::command_line：别的进程转来的深链（见 local_command_line）。
+// gtk 插件连在这个信号上、先于这里跑，它把参数交给 Dart 后信号就停了（first-wins）；
+// 插件还没接上时（不该发生）至少把窗口叫出来，返回 0 免得 GLib 报「声称处理命令行却什么都没做」
+static int my_application_command_line(GApplication* application, GApplicationCommandLine* command_line) {
+  g_application_activate(application);
+  return 0;
 }
 
 // Implements GApplication::startup.
@@ -160,6 +195,7 @@ static void my_application_dispose(GObject* object) {
 static void my_application_class_init(MyApplicationClass* klass) {
   G_APPLICATION_CLASS(klass)->activate = my_application_activate;
   G_APPLICATION_CLASS(klass)->local_command_line = my_application_local_command_line;
+  G_APPLICATION_CLASS(klass)->command_line = my_application_command_line;
   G_APPLICATION_CLASS(klass)->startup = my_application_startup;
   G_APPLICATION_CLASS(klass)->shutdown = my_application_shutdown;
   G_OBJECT_CLASS(klass)->dispose = my_application_dispose;
@@ -174,7 +210,9 @@ MyApplication* my_application_new() {
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
 
+  // HANDLES_COMMAND_LINE：开着的实例才收得到别的进程转来的深链（只用在深链上，其余照旧走 activate）
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID,
+                                     "flags", G_APPLICATION_HANDLES_COMMAND_LINE,
                                      nullptr));
 }

@@ -248,3 +248,11 @@
 - Linux 首轮实测（干净 Ubuntu 22.04 / 24.04 容器 + 虚拟显示）补的：deb 依赖加 `libegl1`、`libgles2`（Flutter 引擎启动时 dlopen，没有就 abort）；`lib/meowx/theme/tokens.dart` 的 `linuxCjkFallback`（系统 Noto Sans CJK SC → 随包 HarmonyOS Sans），主题与 `meowRounded` / `MeowFont.monoFallback` 在 Linux 上接上它（以前中文全是方框：linux-arm64 的 Flutter 不会自己回落到系统字体，amd64 会；其它平台不变，`meowRounded` / `monoFallback` 因此从 const 改成 final）；`MeowSegment` 与变形菜单里另起一份、不继承主题的文字样式也带上 `linuxTextFallback`。
 - 正式发布接上 Linux：`build.yaml` 的 linux 作业在打 tag、手动选 all / linux 时都跑，`release` 与 `publish-cdn` 等它（冒烟结果改名 `smoke-linux-*`，不进 Release / CDN）；`scripts/publish_cdn.py` 认 `MeowX-<ver>-linux-<arch>.deb|.AppImage`（latest.json 的 `linux` 段，kind `deb` / `appimage`）；Release 模板加 Linux 四个包与安装说明；`lib/common/request.dart` 检查更新时 AppImage（运行时有 `APPIMAGE` 环境变量）挑 AppImage 包。
 - `lib/meowx/pages/me/account_card.dart`：Linux 上未登录时的说明改成「用主控地址、用户名和密码登录 / 导入订阅」——Linux 还没注册 `miaomiaowu://` 深链，网页上的「登录客户端」唤不起 App（以前照搬 Windows 的说法）。
+
+## 2026-11-06 · Linux 深链
+- `linux/my_application.cc`：GTK 应用带上 `G_APPLICATION_HANDLES_COMMAND_LINE`；被深链（`miaomiaowu:` / `clash:` / `clashmeta:`）拉起而已经有一个 MeowX 开着时，`local_command_line` 只留网址这一个参数、返回 FALSE，由 GApplication 经 D-Bus 转给开着的那个（那边 `gtk` 插件交给 app_links 的 Linux 实现），转完就退出、不开第二个窗口；其余照旧走 activate。补一个 `command_line` 兜底（插件没接上时把窗口叫出来、返回 0）。
+- `lib/common/link.dart` / `lib/main.dart`：App 没开着、被深链拉起时网址在启动参数里（app_links 的 Linux 实现只收别的进程转来的），`linkManager.setLaunchArgs` 记下、`initAppLinksListen` 时处理；Linux 上收到别的进程转来的深链先把窗口叫到前面（Windows 由 app_links 自己做）。
+- `linux/packaging/package_linux.sh`：桌面入口 `Exec=… %u` + `MimeType=x-scheme-handler/miaomiaowu;…/clash;…/clashmeta;`（deb 装完由 update-desktop-database 登记）。
+- 新增 `lib/meowx/app/linux_url_scheme.dart`：AppImage 没有安装步骤，每次启动（`Window.init`）写 `~/.local/share/applications/meowx-appimage.desktop`（只管深链、`NoDisplay`、带 `TryExec`：AppImage 删了桌面环境自己忽略），挪了位置下次启动跟着改。
+- `lib/meowx/pages/me/account_card.dart`：Linux 未登录时的说明改回与 Windows 相同（网页「登录客户端」唤起 App）。
+- 冒烟测试挪进 `linux/packaging/smoke_linux.sh`，多验三项：开着时 `xdg-open clash://…` 由第二个进程转交、开着的实例收到；没开着时 `xdg-open miaomiaowu://login…` 拉起 App 并拿到网址；AppImage 启动后登记了 `miaomiaowu://` 处理程序。

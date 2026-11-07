@@ -38,7 +38,10 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$DIST"
 
-# 桌面入口：Exec 由调用方给（deb 写 /usr/bin/meowx，AppImage 写主程序名）
+# 桌面入口：Exec 由调用方给（deb 写 /usr/bin/meowx，AppImage 写主程序名）。
+# MimeType 登记深链（网页「登录客户端」miaomiaowu://、订阅一键导入 clash:// / clashmeta://），网址经 %u 交给程序；
+# 已经开着时由 GApplication 转给开着的那个（linux/my_application.cc）。
+# AppImage 里这份只给 AppImageLauncher 之类集成工具用，平时由程序启动时自己登记（lib/meowx/app/linux_url_scheme.dart）
 desktop_entry() {
   cat <<EOF
 [Desktop Entry]
@@ -48,13 +51,14 @@ GenericName=Proxy Client
 GenericName[zh_CN]=代理客户端
 Comment=MeowX proxy client
 Comment[zh_CN]=MeowX 代理客户端
-Exec=$1
+Exec=$1 %u
 Icon=meowx
 Terminal=false
 Categories=Network;
 Keywords=proxy;vpn;clash;mihomo;
 StartupNotify=true
 StartupWMClass=$APP_ID
+MimeType=x-scheme-handler/miaomiaowu;x-scheme-handler/clash;x-scheme-handler/clashmeta;
 EOF
 }
 

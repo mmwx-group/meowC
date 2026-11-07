@@ -156,10 +156,7 @@ class AccountCard extends ConsumerWidget {
             Text(
               system.isAndroid
                   ? '在桌面端「个人菜单 → 扫码登录手机」出示二维码，用手机扫一扫即可登录'
-                  // Linux 还没注册 miaomiaowu:// 深链（网页上的「登录客户端」唤不起本 App）：只给账号密码登录
-                  : system.isLinux
-                  ? '用主控地址、用户名和密码登录；也可以点「导入订阅」粘贴订阅链接'
-                  // Windows 没有扫码：网页「扫码登录手机」对话框里的「登录客户端」按钮用 miaomiaowu:// 深链唤起本 App 完成登录。
+                  // Windows / Linux 没有扫码：网页「扫码登录手机」对话框里的「登录客户端」按钮用 miaomiaowu:// 深链唤起本 App 完成登录。
                   // 菜单名要和网页 user-menu.tsx 的一字不差（#970）
                   : '在网页端「个人菜单 → 扫码登录手机」里点「登录客户端」，MeowX 会自动打开并完成登录',
               style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2),

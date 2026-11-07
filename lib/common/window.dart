@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/meowx/app/linux_url_scheme.dart';
 import 'package:bett_box/meowx/state/window_placement.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +17,8 @@ class Window {
       protocol.register('clashmeta');
       protocol.register('miaomiaowu');
     }
+    // MeowX：AppImage 版启动时把自己登记成深链处理程序（deb 由包里的桌面入口登记）
+    if (system.isLinux) registerAppImageUrlSchemes();
     await windowManager.ensureInitialized();
     WindowOptions windowOptions = WindowOptions(
       size: Size(props.width, props.height),
