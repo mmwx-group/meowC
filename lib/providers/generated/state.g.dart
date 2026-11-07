@@ -80,7 +80,7 @@ final currentNavigationItemsStateProvider =
 // ignore: unused_element
 typedef CurrentNavigationItemsStateRef =
     AutoDisposeProviderRef<NavigationItemsState>;
-String _$coreStateHash() => r'0fec30a6b2b78e720d08824a11e1cc945c1873bb';
+String _$coreStateHash() => r'afef27222866868f8a0fb7bf2706084d695af7b8';
 
 /// See also [coreState].
 @ProviderFor(coreState)
@@ -97,7 +97,7 @@ final coreStateProvider = AutoDisposeProvider<CoreState>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CoreStateRef = AutoDisposeProviderRef<CoreState>;
-String _$updateParamsHash() => r'b8f29f135c32ce73f1541d8c6b8e94b2c254d666';
+String _$updateParamsHash() => r'165e50fef37c0719968bc109abd41412405759f6';
 
 /// See also [updateParams].
 @ProviderFor(updateParams)
@@ -114,7 +114,7 @@ final updateParamsProvider = AutoDisposeProvider<UpdateParams>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef UpdateParamsRef = AutoDisposeProviderRef<UpdateParams>;
-String _$proxyStateHash() => r'c854ca2b6bdbf095b7db3ee01ec1591e9bda9247';
+String _$proxyStateHash() => r'bbdb26f56366c6537f5bf1de57a089e21e6b2244';
 
 /// See also [proxyState].
 @ProviderFor(proxyState)
