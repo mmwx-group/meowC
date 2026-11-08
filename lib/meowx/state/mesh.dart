@@ -157,7 +157,7 @@ String meshReasonText(String reason, String message) {
   return switch (reason) {
     'disabled' => '主控没有开启喵窝',
     'starting' => '主控的喵窝正在启动',
-    'not_admin' => '只有管理员账号可以使用',
+    'not_admin' => '喵窝没有对这个账号开放，请联系管理员',
     _ => '主控暂不可用（$reason）',
   };
 }
