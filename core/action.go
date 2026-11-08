@@ -280,6 +280,11 @@ func handleAction(action *Action, result ActionResult) {
 			result.success(value)
 		})
 		return
+	case meowAkileMethod:
+		handleMeowAkile(action.Data.(string), func(value string) {
+			result.success(value)
+		})
+		return
 	case crashMethod:
 		result.success(true)
 		handleCrash()

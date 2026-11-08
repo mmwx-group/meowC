@@ -166,6 +166,36 @@ void main() {
     expect(find.text('关闭这条连接'), findsOneWidget);
   });
 
+  testWidgets('TUN + redir-host：DNS 映射的域名与嗅探到的 SNI 不同时，主机与「这个域名走」都用 SNI（内核按它匹配规则）', (tester) async {
+    // 同一个 CDN IP 上最近被查的是 b.cdn.example.net，浏览器实际连的是 www.bilibili.com（force-dns-mapping 嗅探出来、不改写目标）
+    final conn = TrackerInfo(
+      id: 'm',
+      upload: 0,
+      download: 0,
+      start: DateTime.now(),
+      metadata: const Metadata(
+        network: 'tcp',
+        host: 'b.cdn.example.net',
+        sniffHost: 'www.bilibili.com',
+        destinationIP: '198.51.100.7',
+        destinationPort: '443',
+        type: 'Tun',
+        inboundName: 'DEFAULT-TUN',
+      ),
+      chains: const ['DIRECT', '🎯 全球直连'],
+      rule: 'GeoSite',
+      rulePayload: 'cn',
+    );
+    await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1, fetch: () async => [conn]);
+    expect(find.text('www.bilibili.com:443'), findsOneWidget);
+    await tester.tap(find.text('www.bilibili.com:443'));
+    await tester.pumpAndSettle();
+    expect(find.text('这个域名走'), findsOneWidget);
+    expect(find.text('www.bilibili.com'), findsOneWidget);   // 卡片里要加规则的域名
+    expect(find.text('b.cdn.example.net'), findsOneWidget);  // 「DNS 映射」那一行
+    expect(find.text('DNS 映射'), findsOneWidget);
+  });
+
   testWidgets('搜索按主机 / 出站 / 规则筛选；切分段清空搜索', (tester) async {
     await _pump(tester, size: const Size(412, 892), wide: false, twoPane: false, textScale: 1);
 

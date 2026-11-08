@@ -17,6 +17,7 @@ import '../../theme/two_pane.dart';
 import '../../theme/widgets.dart';
 import '../../update/update_state.dart';
 import '../../state/mesh.dart';
+import '../settings/assist_page.dart';
 import '../settings/networking_page.dart';
 import '../settings/proxy_apps_page.dart';
 import '../settings/wifi_switch_page.dart';
@@ -115,6 +116,8 @@ class _MePageState extends ConsumerState<MePage> {
       // 组网（喵窝 / Tailscale 三选一）：管理员账号、订阅里有组网节点或开着一个时才列
       if (ref.watch(networkingEntryVisibleProvider)) const MeSection(title: '组网', children: [NetworkingRow()]),
       const MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
+      // 辅助功能：po0 / GGY / AkileCDN 加白（说明收在标题的 ⓘ 里）
+      const MeSection(title: '辅助功能 · $whitelistGroupTitle', info: whitelistInfo, children: [AssistRows()]),
       const MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
     ];
     // Windows：第 2 列全是专属分组，通用分组都在第 3 列；平板没有那么多专属项，通用分组两列对半分
@@ -196,6 +199,8 @@ enum _Glyph {
   keyboard('M3 7h18v10H3zM7 11h.01M11 11h.01M15 11h.01M8 14h8'),
   server('M4 6h16v5H4zM4 13h16v5H4zM7 8.5h.01M7 15.5h.01'),
   sync('M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5'),
+  // 扳手（Feather「tool」，MIT）
+  assist('M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'),
   log('M6 3h9l4 4v14H6zM14 3v5h5M9 13h7M9 17h5'),
   appearance('M12 3a9 9 0 1 0 0 18zM12 3a9 9 0 0 1 0 18'),
   advanced('M4 7h10M18 7h2M4 17h2M10 17h10M16 5v4M8 15v4'),
@@ -316,9 +321,10 @@ class _EntryList extends ConsumerWidget {
         entry(
           _Glyph.sync,
           '订阅同步',
-          '${syncIntervalLabels[meow.syncIntervalHours] ?? syncIntervalLabels[24]}${meow.po0Enabled ? ' · po0 加白' : ''}${meow.ggyEnabled ? ' · GGY 加白' : ''}',
+          syncIntervalLabels[meow.syncIntervalHours] ?? syncIntervalLabels[24],
           page('订阅同步', const SyncRows()),
         ),
+        entry(_Glyph.assist, '辅助功能', assistSummary(meow), () => showMeSheet(context, const AssistPage())),
         // 只有一个开关，直接放在列表里，不进二级页
         LogSwitchRow(leading: icon(_Glyph.log)),
         entry(

@@ -142,6 +142,8 @@ const (
 	meowSpeedTestBoardMethod              Method = "meowSpeedTestBoard"
 	// MeowX：tailscale 出站（喵窝 / 组网节点）的状态（见 meow_tailscale.go）
 	meowTailscaleStatusMethod Method = "meowTailscaleStatus"
+	// MeowX：AkileCDN 白名单（查规则 / 一轮上报，见 meow_akile.go）
+	meowAkileMethod Method = "meowAkile"
 	parseExternalProviderContentMethod    Method = "parseExternalProviderContent"
 	getCoreStatusMethod                   Method = "getCoreStatus"
 )

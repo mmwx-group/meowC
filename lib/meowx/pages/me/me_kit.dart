@@ -212,11 +212,13 @@ Future<void> mePush(BuildContext context, Widget page) async {
 }
 
 /// 白卡分组：可选标题行（[accent] = 平台专属分组的粉色标题，[note] 是标题右侧的小字）+ 若干块，块之间 1px 分隔线。
+/// [info] 不为 null 时标题旁画一个 ⓘ，点了弹出这段说明（固定不变的说明收进这里，行里只留开关与入口）。
 class MeSection extends StatelessWidget {
-  const MeSection({super.key, this.title, this.note, this.accent = false, required this.children});
+  const MeSection({super.key, this.title, this.note, this.info, this.accent = false, required this.children});
 
   final String? title;
   final String? note;
+  final String? info;
   final bool accent;
   final List<Widget> children;
 
@@ -247,6 +249,7 @@ class MeSection extends StatelessWidget {
                         color: accent ? mm.accent : mm.t2,
                       ),
                     ),
+                    if (info != null) MeInfoButton(title: title!, text: info!),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -270,6 +273,38 @@ class MeSection extends StatelessWidget {
       return Material(color: mm.glassPanel, borderRadius: radius, clipBehavior: Clip.antiAlias, child: content);
     }
     return MeowCardMaterial(borderRadius: radius, clipBehavior: Clip.antiAlias, child: content);
+  }
+}
+
+/// 标题旁的 ⓘ：点了弹出一段说明。
+class MeInfoButton extends StatelessWidget {
+  const MeInfoButton({super.key, required this.title, required this.text});
+
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    return InkResponse(
+      radius: 16,
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          scrollable: true,
+          title: Text(title),
+          content: Text(text, style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t1, height: 1.5)),
+          actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('好'))],
+        ),
+      ),
+      child: Tooltip(
+        message: '说明',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Icon(Icons.info_outline_rounded, size: 14, color: mm.t2),
+        ),
+      ),
+    );
   }
 }
 

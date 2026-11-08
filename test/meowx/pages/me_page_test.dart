@@ -5,24 +5,28 @@ import 'package:bett_box/meowx/pages/me/me_page.dart';
 import 'package:bett_box/meowx/pages/me/me_sheet.dart';
 import 'package:bett_box/meowx/pages/me/platform_rows.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
+import 'package:bett_box/meowx/pages/settings/akile_nodes_page.dart';
+import 'package:bett_box/meowx/pages/settings/assist_page.dart';
 import 'package:bett_box/meowx/pages/settings/overrides_pages.dart';
 import 'package:bett_box/meowx/pages/settings/ggy_tokens_page.dart';
 import 'package:bett_box/meowx/pages/settings/po0_servers_page.dart';
+import 'package:bett_box/meowx/panel/akile.dart';
 import 'package:bett_box/meowx/panel/ggy.dart';
 import 'package:bett_box/meowx/panel/po0.dart';
 import 'package:bett_box/meowx/pages/settings/sys_proxy_bypass_page.dart';
 import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/connection.dart';
+import 'package:bett_box/meowx/state/akile_reporter.dart';
 import 'package:bett_box/meowx/state/ggy_reporter.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
+import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -261,7 +265,7 @@ void main() {
     expect(find.text('账号登录'), findsOneWidget);
     expect(find.text('导入订阅'), findsOneWidget);
     expect(find.textContaining('还没有订阅'), findsOneWidget);
-    for (final label in ['代理与测速', '流量控制', '本地代理', '订阅同步', '记录日志', '外观', '高级', '关于']) {
+    for (final label in ['代理与测速', '流量控制', '本地代理', '订阅同步', '辅助功能', '记录日志', '外观', '高级', '关于']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(find.text('跟随订阅 · HTTPS 延迟'), findsOneWidget);
@@ -297,7 +301,9 @@ void main() {
     expect(find.text('账户下的订阅'), findsOneWidget);
     expect(find.text('主力订阅（主控上的名字）'), findsOneWidget);   // 已下载的也列（点了直接切过去）
     expect(find.text('还没导入的订阅'), findsOneWidget);
-    expect(find.text('每天 · po0 加白'), findsOneWidget);
+    // 订阅同步只写间隔；加白挪进「辅助功能」，入口行写开着哪几项
+    expect(find.text('每天'), findsOneWidget);
+    expect(find.text('po0 加白'), findsOneWidget);
 
     // 点别的档 = 设为当前
     await tester.tap(find.text('备用订阅'));
@@ -583,10 +589,10 @@ void main() {
           remote: _remote,
         ),
       );
-      for (final label in ['高级设置', '代理与测速', '流量控制', '本地代理 · 订阅', '外观 · 关于']) {
+      for (final label in ['高级设置', '代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观 · 关于']) {
         expect(find.text(label), findsOneWidget, reason: '$label @ $size');
       }
-      for (final label in ['DNS 模式', '测速方式', '测速地址', '阻止 QUIC', '代理推送服务', 'DNS 劫持', '绕过代理', '端口', '允许局域网', '用户名', '密码', '订阅同步间隔', 'po0 加白', '主题', '记录日志', '版本', '检查更新', '开源许可']) {
+      for (final label in ['DNS 模式', '测速方式', '测速地址', '阻止 QUIC', '代理推送服务', 'DNS 劫持', '绕过代理', '端口', '允许局域网', '用户名', '密码', '订阅同步间隔', 'po0 加白', 'GGY 加白', 'AkileCDN 白名单', 'AkileCDN 节点', '主题', '记录日志', '版本', '检查更新', '开源许可']) {
         expect(find.text(label), findsOneWidget, reason: '$label @ $size');
       }
     }
@@ -678,7 +684,7 @@ void main() {
       po0Enabled: true,
       po0Custom: [Po0CustomServer(address: 'fw.example.com:8443', token: 'pgnfw_abcd1234wxyz@2')],
     );
-    await _pump(tester, const SingleChildScrollView(child: SyncRows()), size: const Size(320, 900), overrides: _overrides(meow: meow));
+    await _pump(tester, const SingleChildScrollView(child: AssistRows()), size: const Size(320, 900), overrides: _overrides(meow: meow));
     expect(find.text('自定义 po0 服务器'), findsOneWidget);
     expect(find.text('1 条'), findsOneWidget);
     await tester.tap(find.text('自定义 po0 服务器'));
@@ -725,14 +731,14 @@ void main() {
     expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.map((c) => c.address), ['[2001:db8::1]']);
   });
 
-  testWidgets('GGY 加白：开关在 po0 后面、带说明；token 页只出现脱敏写法与上次结果；添加时解析整条链接、校验、去重；点 × 删除', (tester) async {
+  testWidgets('GGY 加白：开关在 po0 后面、说明收在 ⓘ 里；token 页只出现脱敏写法与上次结果；添加时解析整条链接、校验、去重；点 × 删除', (tester) async {
     // 只用假 token
     const a = 'ctecsfw_TESTtoken0000000000AAAA';
     const b = 'ctecsfw_TESTtoken0000000000BBBB';
     const meow = MeowSettings(ggyTokens: [a]);
     await _pump(
       tester,
-      const SingleChildScrollView(child: SyncRows()),
+      const SingleChildScrollView(child: AssistRows()),
       size: const Size(320, 1400),
       overrides: [
         ..._overrides(meow: meow),
@@ -741,16 +747,13 @@ void main() {
         ),
       ],
     );
-    expect(find.text(ggyDescription), findsOneWidget);
-    // 说明整句显示：不像 po0 那行那样截到 3 行
-    final desc = tester.renderObject<RenderParagraph>(find.text(ggyDescription));
-    expect(desc.didExceedMaxLines, isFalse);
-    expect(desc.size.height, greaterThan(tester.renderObject<RenderParagraph>(find.textContaining('上报到 po0')).size.height));
+    // 行里只留开关与入口：说明不再写在开关下面（收在「辅助功能」组标题的 ⓘ 里）
+    expect(find.text(ggyDescription), findsNothing);
     expect(tester.getTopLeft(find.text('GGY 加白')).dy, greaterThan(tester.getTopLeft(find.text('自定义 po0 服务器')).dy));
     expect(find.text('1 个'), findsOneWidget);
     await tester.tap(find.text('GGY 加白'));
     await tester.pump();
-    expect(_container(tester, SyncRows).read(meowSettingProvider).ggyEnabled, isTrue);
+    expect(_container(tester, AssistRows).read(meowSettingProvider).ggyEnabled, isTrue);
 
     await tester.tap(find.text('GGY token'));
     await tester.pumpAndSettle();
@@ -789,5 +792,209 @@ void main() {
     await tester.tap(find.byTooltip('删除').first);
     await tester.pump();
     expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [b]);
+  });
+
+  testWidgets('辅助功能：手机入口点开设置卡片，「加白」组标题旁 ⓘ 弹出三项说明；行里只有开关与入口', (tester) async {
+    await _pump(
+      tester,
+      const MePage(),
+      size: _phone,
+      overrides: _overrides(meow: const MeowSettings(ggyEnabled: true, akileEnabled: true, akileNodes: [MeowAkileNode(ruleId: 1)])),
+      textScale: 1,
+    );
+    expect(find.text('GGY · AkileCDN 加白'), findsOneWidget);
+    await _openSheet(tester, '辅助功能');
+    expect(find.byType(AssistPage), findsOneWidget);
+    final labels = ['po0 加白', '自定义 po0 服务器', 'GGY 加白', 'GGY token', akileTitle, akileNodesTitle];
+    for (final (i, l) in labels.indexed) {
+      expect(find.text(l), findsOneWidget, reason: l);
+      if (i > 0) expect(tester.getTopLeft(find.text(l)).dy, greaterThan(tester.getTopLeft(find.text(labels[i - 1])).dy), reason: l);
+    }
+    expect(find.text('1 个'), findsOneWidget);
+    expect(find.text(akileDescription), findsNothing);
+    await tester.tap(find.byTooltip('说明'));
+    await tester.pumpAndSettle();
+    expect(find.text(whitelistInfo), findsOneWidget);
+    expect(whitelistInfo, allOf(contains(po0Description), contains(ggyDescription), contains(akileDescription)));
+    await tester.tap(find.text('好'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(akileTitle));
+    await tester.pump();
+    expect(_container(tester, AssistRows).read(meowSettingProvider).akileEnabled, isFalse);
+  });
+
+  testWidgets('AkileCDN 节点：没有 Key 时是密码框 + 保存（不合法提示、带前缀的也认）；有了只显示脱敏写法，可更换 / 删除', (tester) async {
+    // 只用假 Key
+    const key = 'ak_TESTkey0000000000AAAA';
+    const key2 = 'ak_TESTkey0000000000BBBB';
+    await _pump(tester, const AkileNodesPage(), size: const Size(320, 1200), overrides: _overrides());
+    expect(find.text(akileKeyHint), findsOneWidget);
+    expect(find.text(akileNeedKeyMessage), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, akileAddButton)).onPressed, isNull);
+    expect(find.text(akileDisabledHint), findsOneWidget);
+    final field = find.byType(TextField);
+    expect(tester.widget<TextField>(field).obscureText, isTrue);
+    await tester.enterText(field, 'sk_nope');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pump();
+    expect(find.text(akileKeyInvalidMessage), findsOneWidget);
+    await tester.enterText(field, '  X-API-Key: $key ');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(_container(tester, AkileNodesPage).read(meowSettingProvider).akileKey, key);
+    expect(find.text('ak_••••AAAA'), findsOneWidget);
+    expect(find.textContaining('TESTkey'), findsNothing);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, akileAddButton)).onPressed, isNotNull);
+
+    await tester.tap(find.text('更换'));
+    await tester.pumpAndSettle();
+    final dialogField = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    expect(tester.widget<TextField>(dialogField).obscureText, isTrue);
+    await tester.enterText(dialogField, 'Bearer $key2');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(_container(tester, AkileNodesPage).read(meowSettingProvider).akileKey, key2);
+    expect(find.text('ak_••••BBBB'), findsOneWidget);
+
+    await tester.tap(find.text('删除'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+    expect(_container(tester, AkileNodesPage).read(meowSettingProvider).akileKey, '');
+    expect(find.text(akileKeyHint), findsOneWidget);
+  });
+
+  testWidgets('AkileCDN 节点：列表写规则 / 端口与上一次结果（成功绿、失败红、没报过灰）；点 × 删除', (tester) async {
+    const key = 'ak_TESTkey0000000000AAAA';
+    const meow = MeowSettings(
+      akileEnabled: true,
+      akileKey: key,
+      akileNodes: [
+        MeowAkileNode(name: '香港 01', port: 443, ruleId: 7, label: '香港入口'),
+        MeowAkileNode(name: '日本 02', port: 8443, ruleId: 8),
+        MeowAkileNode(name: '新加坡', port: 2053, ruleId: 9),
+      ],
+    );
+    final at = DateTime(2026, 11, 8, 9, 5);
+    await _pump(
+      tester,
+      const AkileNodesPage(),
+      size: const Size(320, 1400),
+      overrides: [
+        ..._overrides(meow: meow),
+        akileResultsProvider.overrideWith(
+          (ref) => {
+            7: AkileResult(kind: AkileResultKind.updated, ip: '203.0.113.10', previous: '198.51.100.1', at: at),
+            8: AkileResult(kind: AkileResultKind.invalidKey, error: 'API Key 无效或已删除', at: at),
+          },
+        ),
+      ],
+    );
+    expect(find.text('规则 #7 · 香港入口 · 端口 443'), findsOneWidget);
+    expect(find.text('规则 #8 · 端口 8443'), findsOneWidget);
+    final mm = tester.element(find.byType(AkileNodesPage)).mm;
+    expect(tester.widget<Text>(find.text('已更新为 203.0.113.10 · 09:05')).style!.color, mm.good);
+    expect(tester.widget<Text>(find.text('API Key 无效或已删除 · 09:05')).style!.color, mm.slow);
+    expect(tester.widget<Text>(find.text(akileNeverReported)).style!.color, mm.t2);
+    expect(find.text(akileDescription), findsOneWidget);
+    await tester.tap(find.byTooltip('删除').at(1));
+    await tester.pump();
+    expect(_container(tester, AkileNodesPage).read(meowSettingProvider).akileNodes.map((n) => n.ruleId), [7, 9]);
+  });
+
+  testWidgets('从订阅添加节点：列出节点（名字 + 地址，可搜索）；一条规则直接加、多条弹选择、没有 / 出错 / 重复弹提示', (tester) async {
+    const key = 'ak_TESTkey0000000000AAAA';
+    const meow = MeowSettings(akileEnabled: true, akileKey: key, akileNodes: [MeowAkileNode(name: '旧的', port: 1, ruleId: 5)]);
+    final queried = <(String, int)>[];
+    final rulesByPort = <int, AkileRulesLookup>{
+      443: const AkileRulesLookup(rules: [AkileRule(id: 7, summary: '香港入口', entryWhitelist: '198.51.100.1/32')]),
+      8443: const AkileRulesLookup(
+        rules: [AkileRule(id: 8, summary: '日本 A', nodeId: '3'), AkileRule(id: 10, summary: '日本 B', entryWhitelist: '1.2.3.4/32')],
+      ),
+      2053: const AkileRulesLookup(),
+      2083: const AkileRulesLookup(error: 'API Key 无效或已删除'),
+      2096: const AkileRulesLookup(rules: [AkileRule(id: 5)]),
+    };
+    await _pump(
+      tester,
+      const AkileNodesPage(),
+      size: const Size(360, 1400),
+      overrides: [
+        ..._overrides(meow: meow),
+        akileCandidatesProvider.overrideWithValue(const [
+          AkileCandidate(name: '香港 01', type: 'vless', server: 'hk.example.com', port: 443),
+          AkileCandidate(name: '日本 02', type: 'trojan', server: 'jp.example.com', port: 8443),
+          AkileCandidate(name: '新加坡', type: 'ss', server: '2001:db8::1', port: 2053),
+          AkileCandidate(name: '美国', type: 'ss', server: 'us.example.com', port: 2083),
+          AkileCandidate(name: '重复', type: 'ss', server: 'dup.example.com', port: 2096),
+        ]),
+        akileRulesLookupProvider.overrideWithValue((k, port) async {
+          queried.add((k, port));
+          return rulesByPort[port]!;
+        }),
+      ],
+    );
+    Future<void> openPicker() async {
+      await tester.tap(find.widgetWithText(FilledButton, akileAddButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(AkileNodePickerPage), findsOneWidget);
+    }
+
+    await openPicker();
+    expect(find.text('hk.example.com:443'), findsOneWidget);
+    expect(find.text('[2001:db8::1]:2053'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'jp');
+    await tester.pump();
+    expect(find.text('香港 01'), findsNothing);
+    expect(find.text('日本 02'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pump();
+
+    // 0 条 / 出错 / 重复：弹提示，不加
+    for (final (name, message) in [('新加坡', akileNoRulesMessage(2053)), ('美国', 'API Key 无效或已删除'), ('重复', akileDuplicateMessage)]) {
+      await tester.tap(find.text(name));
+      await tester.pumpAndSettle();
+      expect(find.text(message), findsOneWidget, reason: name);
+      await tester.tap(find.text('好'));
+      await tester.pumpAndSettle();
+    }
+    expect(_container(tester, AkileNodePickerPage).read(meowSettingProvider).akileNodes, hasLength(1));
+
+    // 一条：直接加入，回到节点页
+    await tester.tap(find.text('香港 01'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AkileNodePickerPage), findsNothing);
+    expect(
+      _container(tester, AkileNodesPage).read(meowSettingProvider).akileNodes.last,
+      const MeowAkileNode(name: '香港 01', port: 443, ruleId: 7, label: '香港入口'),
+    );
+    expect(find.text('规则 #7 · 香港入口 · 端口 443'), findsOneWidget);
+
+    // 多条：弹选择，点一条
+    await openPicker();
+    await tester.tap(find.text('日本 02'));
+    await tester.pumpAndSettle();
+    expect(find.text(akilePickRuleTitle), findsOneWidget);
+    expect(find.text('规则 #8 · 日本 A · 节点 3 · 当前白名单 未设置'), findsOneWidget);
+    await tester.tap(find.text('规则 #10 · 日本 B · 当前白名单 1.2.3.4/32'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AkileNodePickerPage), findsNothing);
+    expect(_container(tester, AkileNodesPage).read(meowSettingProvider).akileNodes.map((n) => n.ruleId), [5, 7, 10]);
+    expect(queried.every((q) => q.$1 == key), isTrue);
+    expect(queried.map((q) => q.$2), [2053, 2083, 2096, 443, 8443]);
+  });
+
+  testWidgets('从订阅添加节点：当前订阅里没有可选的节点', (tester) async {
+    await _pump(
+      tester,
+      const AkileNodePickerPage(),
+      size: _phone,
+      overrides: [
+        ..._overrides(meow: const MeowSettings(akileKey: 'ak_TESTkey0000000000AAAA')),
+        akileCandidatesProvider.overrideWithValue(const []),
+      ],
+    );
+    expect(find.text(akileNoCandidatesMessage), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
   });
 }

@@ -20,6 +20,7 @@ import '../panel/account.dart';
 import '../panel/client.dart';
 import '../panel/po0.dart';
 import '../panel/realtime.dart';
+import '../state/akile_reporter.dart';
 import '../state/battery_prompt.dart';
 import '../state/connection.dart';
 import '../state/ggy_reporter.dart';
@@ -55,6 +56,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
   late final ProviderSubscription<(bool, String, bool)> _ggySub;
+  late final ProviderSubscription<(bool, String, String, bool)> _akileSub;
   late final ProviderSubscription<bool> _batterySub;
   final List<ProviderSubscription<Object?>> _wifiSubs = [];
   RealtimeClient? _realtime;
@@ -119,6 +121,34 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
         final added =
             prev == null || !prev.$3 || (enabled && !prev.$1) || tokens.split('\n').any((t) => !prev.$2.split('\n').contains(t));
         unawaited(ref.read(ggyReporterProvider).sync(reportNow: added));
+      },
+      fireImmediately: true,
+    );
+    // AkileCDN 白名单：同 GGY，以设置开关为准、不跟账号走。开着、Key 合法且有节点时，启动（核心 init 完）、开关刚打开、
+    // 换 Key 时把全部节点报一次；新加的节点只报它自己；只删了节点不报；关掉 / Key 删掉 / 节点删光就停。
+    // 网络变化、回前台、10 分钟定时轮由 AkileReporter 自己管
+    _akileSub = ref.listenManual(
+      Provider<(bool, String, String, bool)>((r) {
+        // 节点列表拼成规则 ID 串比较：freezed 列表的 == 只认同一个实例
+        final s = r.watch(
+          meowSettingProvider.select((s) => (s.akileEnabled, s.akileKey, s.akileNodes.map((n) => n.ruleId).join(','))),
+        );
+        return (s.$1, s.$2, s.$3, r.watch(initProvider));
+      }),
+      (prev, next) {
+        final (enabled, key, ids, inited) = next;
+        if (!inited) return;
+        final reporter = ref.read(akileReporterProvider);
+        if (prev == null || !prev.$4 || (enabled && !prev.$1) || key != prev.$2) {
+          unawaited(reporter.sync(reportNow: true));
+          return;
+        }
+        final before = prev.$3.split(',').toSet();
+        final added = {
+          for (final id in ids.split(','))
+            if (id.isNotEmpty && !before.contains(id)) int.parse(id),
+        };
+        unawaited(reporter.sync(reportNow: added.isNotEmpty, only: added));
       },
       fireImmediately: true,
     );
@@ -231,6 +261,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _realtimeSub.close();
     _po0Sub.close();
     _ggySub.close();
+    _akileSub.close();
     _batterySub.close();
     for (final sub in _wifiSubs) {
       sub.close();
