@@ -265,6 +265,21 @@ abstract class Po0CustomServer with _$Po0CustomServer {
       _$Po0CustomServerFromJson(json);
 }
 
+/// AkileCDN 白名单里的一个节点（五端同一份规格：MeowX 仓库 `Design/akile-whitelist.md`）。本机偏好，退出登录不清。
+/// 上报只用 [ruleId]；[name] / [label] 只用来显示（订阅改名不影响上报），[port] 是选节点时订阅里的端口（= 查规则用的
+/// listen_port）。落盘的键名与 iOS / macOS 的 App Group 写法相同：`{name, port, rule_id, label}`。
+@freezed
+abstract class MeowAkileNode with _$MeowAkileNode {
+  const factory MeowAkileNode({
+    @Default('') String name,
+    @Default(0) int port,
+    @JsonKey(name: 'rule_id') @Default(0) int ruleId,
+    @Default('') String label,
+  }) = _MeowAkileNode;
+
+  factory MeowAkileNode.fromJson(Map<String, Object?> json) => _$MeowAkileNodeFromJson(json);
+}
+
 /// 喵窝（主控内置的组网，设计 MeowX 仓库 `Design/meshnet.md` §8）的本机设置：开关、主控 `mesh/status` 给的控制地址与
 /// MagicDNS 后缀、本账号的站点网段（OpenWrt 开放的局域网，原样或映射段）、本机的设备名与它在主控里的编号。
 /// 入网 key **不落盘**（只在内存里，见 `lib/meowx/state/mesh.dart`）。生成运行配置时按它注入「喵窝」节点与最前面的规则。
@@ -357,6 +372,16 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// GGY 白名单分享链接里的 token（规范化后的原文，去重，最多 20 个）；界面 / 日志里一律用 `maskGgyToken` 的脱敏写法
     @Default([]) List<String> ggyTokens,
+
+    /// AkileCDN 白名单：打开后启动 / 网络变化 / 回前台 / 每 10 分钟查本机直连出口 IPv4，写进 [akileNodes] 各条规则的
+    /// 入口白名单（定时那一轮 IP 没变就不写）。本机偏好，退出登录不清，没登录也报
+    @Default(false) bool akileEnabled,
+
+    /// AkileCDN 开放接口的 API Key（`ak_` 开头，规范化后的原文）；界面 / 日志里一律用 `maskAkileKey` 的脱敏写法
+    @Default('') String akileKey,
+
+    /// 要加白的节点（按规则去重，最多 20 个）
+    @Default([]) List<MeowAkileNode> akileNodes,
 
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,

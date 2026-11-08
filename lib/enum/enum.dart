@@ -274,6 +274,9 @@ enum ActionMethod {
   /// MeowX：tailscale 出站（喵窝 / 组网节点）的状态，见 core/meow_tailscale.go
   meowTailscaleStatus,
 
+  /// MeowX：AkileCDN 白名单（查规则 / 一轮上报：直连查出口 IPv4、PUT 入口白名单），见 core/meow_akile.go
+  meowAkile,
+
   ///Android,
   setState,
   startTun,

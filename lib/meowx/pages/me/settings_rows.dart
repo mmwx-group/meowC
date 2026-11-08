@@ -10,16 +10,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../config/meow_patch.dart';
-import '../../panel/ggy.dart';
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
 import '../../update/update_state.dart';
 import '../settings/custom_rules_page.dart';
-import '../settings/ggy_tokens_page.dart';
 import '../settings/overrides_pages.dart';
-import '../settings/po0_servers_page.dart';
 import '../settings/proxy_apps_page.dart';
 import 'appearance_parts.dart';
 import 'me_kit.dart';
@@ -255,17 +252,13 @@ class LocalProxyRows extends ConsumerWidget {
   }
 }
 
-/// 订阅同步：同步间隔 / po0 加白 / 自定义 po0 服务器 / GGY 加白 / GGY token。
+/// 订阅同步：同步间隔（po0 / GGY 加白挪到了「辅助功能」，见 pages/settings/assist_page.dart）。
 class SyncRows extends ConsumerWidget {
   const SyncRows({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final hours = ref.watch(meowSettingProvider.select((s) => s.syncIntervalHours));
-    final po0 = ref.watch(meowSettingProvider.select((s) => s.po0Enabled));
-    final po0Custom = ref.watch(meowSettingProvider.select((s) => s.po0Custom.length));
-    final ggy = ref.watch(meowSettingProvider.select((s) => s.ggyEnabled));
-    final ggyTokens = ref.watch(meowSettingProvider.select((s) => s.ggyTokens.length));
     return MeRows(
       footer: '到期后下次进入 App 自动重拉当前订阅。',
       children: [
@@ -284,34 +277,6 @@ class SyncRows extends ConsumerWidget {
               );
             }
           },
-        ),
-        // 开关与自定义条目的变化由 MeowRoot 统一处理：打开 / 增删立刻拉列表上报，关闭停表清空
-        MeSwitchRow(
-          label: 'po0 加白',
-          subtitle: '把本机出口 IP 上报到 po0 的加白服务器（主控登记的与自己添加的），每 10 分钟及网络变化时自动加白',
-          value: po0,
-          onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(po0Enabled: v)),
-        ),
-        MeRow(
-          label: '自定义 po0 服务器',
-          value: po0Custom == 0 ? null : '$po0Custom 条',
-          chevron: true,
-          onTap: () => mePush(context, const Po0ServersPage()),
-        ),
-        // 同上：打开 / 新增 token 立刻报，关闭或删光停表（MeowRoot 统一处理）；不跟账号走
-        MeSwitchRow(
-          label: 'GGY 加白',
-          subtitle: ggyDescription,
-          // 三端同一句说明，整句显示、不截断
-          subtitleMaxLines: null,
-          value: ggy,
-          onChanged: (v) => ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(ggyEnabled: v)),
-        ),
-        MeRow(
-          label: 'GGY token',
-          value: ggyTokens == 0 ? null : '$ggyTokens 个',
-          chevron: true,
-          onTap: () => mePush(context, const GgyTokensPage()),
         ),
       ],
     );
