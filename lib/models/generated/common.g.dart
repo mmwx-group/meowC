@@ -52,6 +52,7 @@ _Metadata _$MetadataFromJson(Map<String, dynamic> json) => _Metadata(
   specialProxy: json['specialProxy'] as String? ?? '',
   type: json['type'] as String? ?? '',
   inboundName: json['inboundName'] as String? ?? '',
+  sniffHost: json['sniffHost'] as String? ?? '',
 );
 
 Map<String, dynamic> _$MetadataToJson(_Metadata instance) => <String, dynamic>{
@@ -74,6 +75,7 @@ Map<String, dynamic> _$MetadataToJson(_Metadata instance) => <String, dynamic>{
   'specialProxy': instance.specialProxy,
   'type': instance.type,
   'inboundName': instance.inboundName,
+  'sniffHost': instance.sniffHost,
 };
 
 const _$DnsModeEnumMap = {

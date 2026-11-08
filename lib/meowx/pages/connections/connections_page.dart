@@ -17,6 +17,7 @@ import '../../app/window_controls.dart';
 import '../../app/strings.dart';
 import '../../state/closed_connections.dart';
 import '../../state/connection.dart';
+import '../../state/custom_rules.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
@@ -209,6 +210,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final q = query.toLowerCase();
     return conns.where((c) {
       return c.metadata.host.toLowerCase().contains(q) ||
+          c.metadata.sniffHost.toLowerCase().contains(q) ||
           c.metadata.destinationIP.contains(q) ||
           c.chains.any((s) => s.toLowerCase().contains(q)) ||
           c.rule.toLowerCase().contains(q) ||
@@ -573,7 +575,13 @@ TextScaler _auxScaler(BuildContext context) => MediaQuery.textScalerOf(context).
 double _auxWidth(BuildContext context, double width, {double font = 11}) =>
     width * _auxScaler(context).scale(font) / font;
 
-String _hostOf(TrackerInfo c) => c.metadata.host.isNotEmpty ? c.metadata.host : c.metadata.destinationIP;
+/// 连接过规则用的域名（有嗅探域名用它，见 [connRuleHost]），没有域名为空
+String _ruleHostOf(TrackerInfo c) => connRuleHost(host: c.metadata.host, sniffHost: c.metadata.sniffHost);
+
+String _hostOf(TrackerInfo c) {
+  final h = _ruleHostOf(c);
+  return h.isNotEmpty ? h : c.metadata.destinationIP;
+}
 String _targetOf(TrackerInfo c) => c.chains.isEmpty ? '—' : c.chains.first;
 String _ruleOf(TrackerInfo c) => ruleDisplay(c.rule, c.rulePayload);   // `GEOSITE,apple`（同 iOS / 配置文件的写法）
 bool _isUdp(TrackerInfo c) => c.metadata.network.toLowerCase() == 'udp';
@@ -1219,7 +1227,10 @@ class _ConnDetail extends StatelessWidget {
       ('网络', c.metadata.network.toUpperCase()),
       if (inbound.isNotEmpty) ('入站', '$inbound${c.metadata.inboundName.isEmpty ? '' : ' · ${c.metadata.inboundName}'}'),
       ('主机', '${_hostOf(c)}:${c.metadata.destinationPort}'),
-      if (c.metadata.destinationIP.isNotEmpty && c.metadata.host.isNotEmpty) ('目标 IP', c.metadata.destinationIP),
+      // 嗅探到的域名与 DNS 映射的域名不同时两个都列出来：规则按前者（主机）匹配
+      if (c.metadata.sniffHost.isNotEmpty && c.metadata.host.isNotEmpty && c.metadata.host != c.metadata.sniffHost)
+        ('DNS 映射', c.metadata.host),
+      if (c.metadata.destinationIP.isNotEmpty && _ruleHostOf(c).isNotEmpty) ('目标 IP', c.metadata.destinationIP),
       if (closedAt case final at?) ...[
         ('用时', fmtClosedDuration(ClosedConnection(c, at).duration)),
         ('关闭于', fmtClockTime(at)),
@@ -1268,7 +1279,7 @@ class _ConnDetail extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         // 按连接区分：换选中的连接时「仅此域名 / 含子域名」重新按那条连接定
-        ConnRuleCard(key: ValueKey(c.id), host: c.metadata.host, ip: c.metadata.destinationIP),
+        ConnRuleCard(key: ValueKey(c.id), host: _ruleHostOf(c), ip: c.metadata.destinationIP),
       ],
     );
   }

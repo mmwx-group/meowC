@@ -273,3 +273,7 @@
   - `outbound.TailscaleStatusByName`（`adapter/outbound/tailscale_status*.go`）：本机状态 / 地址、各对端（编号、地址、在线、直连地址 `CurAddr`、中继 `Relay`）；`tailscale.go` 只多登记 / 注销一行。不带 tailscale 的构建有空实现。
 - `arb/*.arb` + `lib/l10n/`（`intl_utils:generate` 重新生成）：加 `meowNest`（简体「喵窝」、繁体「喵窩」、其它语言「MeowNest」）。
 - 其余都在 `lib/meowx/`：主控接口（`panel/mesh.dart`：`mesh/status`、`mesh/enroll`、`mesh/devices`、`DELETE mesh/devices/{id}`，经加密通道）、配置改写 / 路由计算 / 排除清单收窄（`config/mesh_config.dart`，纯函数）、状态与入网（`state/mesh.dart`，内核状态 `state/tailscale_status.dart`）、「组网」页（`pages/settings/networking_page.dart`，含 Tailscale 组网节点的状态与直连 / 中继）、首页喵窝卡（`pages/dashboard/mesh_card.dart`）、「我的」入口、退出登录时关掉喵窝（`panel/account.dart`）。测试 `test/meowx/config/mesh_config_test.dart`、`test/meowx/pages/networking_page_test.dart`；内核测试 `tunnel/priority_rules_test.go`、`hub/executor/priority_rules_test.go`、`adapter/outbound/tailscale_status_test.go`。
+
+## 2026-11-08 · 连接详情按嗅探域名加自定义规则（2026-10-22 写的分支，这天合入）
+- `lib/models/common.dart Metadata`：多一个 `sniffHost`（内核 `/connections` 本来就带，旧模型丢掉了；生成文件 `common.freezed.dart` / `common.g.dart` 随之更新）。用户实报 Windows 上连接详情点「这个域名走 → 代理」后还是 DIRECT：TUN + redir-host 下 `host` 是按目标 IP 反查的 DNS 映射（同一 CDN IP 上最近被查的域名，浏览器自己走 DoH 时更对不上），默认嗅探（TLS 不改写目标、`force-dns-mapping` 开）把 SNI 记进 `sniffHost`，内核的域名规则只按它匹配（mihomo `RuleHost()`），照 `host` 加的规则永远不命中。
+- 其余在 `lib/meowx/`：`connRuleHost`（`state/custom_rules.dart`）；动态页连接的主机、搜索、详情的「这个域名走」改按嗅探域名，两者不同时详情多一行「DNS 映射」（`pages/connections/connections_page.dart`）。
