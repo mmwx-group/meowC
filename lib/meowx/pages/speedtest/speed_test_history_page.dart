@@ -19,6 +19,7 @@ import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
 import 'speed_board_views.dart';
 import 'speed_test_share.dart';
+import 'speed_test_wide.dart';
 
 /// 测速记录（测速页右上角「记录」进来；与 iOS 的 SpeedTestHistoryView 同一套）：樱粉汇总卡 + 按节点筛选 + 按日列表，
 /// 左滑删除、右上角清空。点一条进详情。
@@ -66,68 +67,120 @@ class _SpeedTestHistoryPageState extends State<SpeedTestHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return ListenableBuilder(
-      listenable: history,
-      builder: (context, _) {
-        final all = history.records;
-        final options = SpeedTestHistory.filterOptions(all);
-        // 筛选的节点记录被删光了就回到全部
-        final current = options.contains(_filter) ? _filter : null;
-        final rows = SpeedTestHistory.filtered(all, current);
-        final fastest = SpeedTestHistory.fastest(all);
-        return MeSubPage.list(
-          title: '测速记录',
-          actions: [if (all.isNotEmpty) MePill(label: '清空', onTap: _confirmClear)],
-          children: all.isEmpty
-              ? [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 60),
-                    child: Text(
-                      '还没有测速记录，测完一次会出现在这里',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: mm.t2),
-                    ),
-                  ),
-                ]
-              : [
-                  SpeedTestSummaryCard(records: rows, filter: current),
-                  _FilterChips(options: options, selection: current, onChanged: (v) => setState(() => _filter = v)),
-                  for (final (title, group) in SpeedTestHistory.groupedByDay(rows))
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(title, style: _groupStyle(mm))),
-                              Text('${group.length} 次', style: _groupStyle(mm)),
-                            ],
-                          ),
+    // 宽（横着、够放两栏，见 speedTestWide）：左边汇总卡 + 筛选、右边按日的记录列表，各自滚动；没有记录时照旧单列
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = speedTestWide(box.biggest);
+        return ListenableBuilder(
+          listenable: history,
+          builder: (context, _) {
+            final all = history.records;
+            final options = SpeedTestHistory.filterOptions(all);
+            // 筛选的节点记录被删光了就回到全部
+            final current = options.contains(_filter) ? _filter : null;
+            final rows = SpeedTestHistory.filtered(all, current);
+            final fastest = SpeedTestHistory.fastest(all);
+            final actions = [if (all.isNotEmpty) MePill(label: '清空', onTap: _confirmClear)];
+            final footer = '只存本机，最多保留 ${SpeedTestHistory.limit} 条 · 左滑删除单条';
+            final groups = [
+              for (final (title, group) in SpeedTestHistory.groupedByDay(rows)) _dayGroup(mm, title, group, fastest),
+            ];
+            if (wide && all.isNotEmpty) {
+              final bottom = 24 + MediaQuery.paddingOf(context).bottom;
+              return MeSubPage(
+                title: '测速记录',
+                actions: actions,
+                contentMaxWidth: speedTestWideMaxWidth,
+                body: Row(
+                  key: const ValueKey('speedtest-history-wide'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(16, 0, 8, bottom),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SpeedTestSummaryCard(records: rows, filter: current),
+                            const SizedBox(height: 12),
+                            // 左栏够高：节点多时折行排开，不横向滚动
+                            _FilterChips(
+                              options: options,
+                              selection: current,
+                              wrap: true,
+                              onChanged: (v) => setState(() => _filter = v),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(footer, style: TextStyle(fontSize: 12, color: mm.t2)),
+                          ],
                         ),
-                        for (final (i, r) in group.indexed) ...[
-                          if (i > 0) const SizedBox(height: 8),
-                          Dismissible(
-                            key: ValueKey(r.id),
-                            direction: DismissDirection.endToStart,
-                            background: _deleteBackground(mm),
-                            confirmDismiss: (_) => confirmDeleteUploadedRecord(context, r),
-                            onDismissed: (_) => history.delete(r.id),
-                            child: SpeedTestRecordRow(record: r, isFastest: r.id == fastest, onTap: () => _open(r)),
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
-                  Text(
-                    '只存本机，最多保留 ${SpeedTestHistory.limit} 条 · 左滑删除单条',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 12, color: mm.t2),
-                  ),
-                ],
+                    Expanded(
+                      child: ListView.separated(
+                        padding: EdgeInsets.fromLTRB(8, 0, 16, bottom),
+                        itemCount: groups.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) => groups[i],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+            return MeSubPage.list(
+              title: '测速记录',
+              actions: actions,
+              children: all.isEmpty
+                  ? [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 60),
+                        child: Text(
+                          '还没有测速记录，测完一次会出现在这里',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, color: mm.t2),
+                        ),
+                      ),
+                    ]
+                  : [
+                      SpeedTestSummaryCard(records: rows, filter: current),
+                      _FilterChips(options: options, selection: current, onChanged: (v) => setState(() => _filter = v)),
+                      ...groups,
+                      Text(footer, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: mm.t2)),
+                    ],
+            );
+          },
         );
       },
     );
   }
+
+  /// 一天的记录：日期 + 次数，下面一条条（左滑删除）
+  Widget _dayGroup(MeowTokens mm, String title, List<SpeedTestRecord> group, String? fastest) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+        child: Row(
+          children: [
+            Expanded(child: Text(title, style: _groupStyle(mm))),
+            Text('${group.length} 次', style: _groupStyle(mm)),
+          ],
+        ),
+      ),
+      for (final (i, r) in group.indexed) ...[
+        if (i > 0) const SizedBox(height: 8),
+        Dismissible(
+          key: ValueKey(r.id),
+          direction: DismissDirection.endToStart,
+          background: _deleteBackground(mm),
+          confirmDismiss: (_) => confirmDeleteUploadedRecord(context, r),
+          onDismissed: (_) => history.delete(r.id),
+          child: SpeedTestRecordRow(record: r, isFastest: r.id == fastest, onTap: () => _open(r)),
+        ),
+      ],
+    ],
+  );
 
   TextStyle _groupStyle(MeowTokens mm) => TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: mm.t2);
 
@@ -318,77 +371,106 @@ class SpeedTestRecordPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
-    return ListenableBuilder(
-      listenable: Listenable.merge([controller, controller.history]),
-      builder: (context, _) {
-        final record = controller.history.byId(id);
-        final running = controller.isRunning;
-        final action = SpeedTestShareAction(
-          saveFile: saveFile,
-          shareFile: shareFile,
-          systemShare: systemShare,
-          shareText: shareText,
-          copyText: copyText,
-        );
-        final open = openUrl ?? globalState.openUrl;
-        return MeSubPage.list(
-          title: '记录详情',
-          children: record == null
-              ? const []
-              : [
-                  SpeedTestRecordDetail(record: record),
-                  SpeedBoardRecordSection(
-                    record: record,
-                    boardPage: controller.board.endpoint.boardPage,
-                    consent: controller.boardConsent == true,
-                    busy: controller.boardBusy(record.id),
-                    onOpenUrl: open,
-                    onCopy: action.copyLink,
-                    onUpload: () => controller.uploadToBoard(record.id),
-                    onDelete: () async {
-                      final error = await controller.deleteFromBoard(record.id);
-                      globalState.showNotifier(error == null ? '已从测速榜删除' : '删除失败：$error');
+    // 宽（横着、够放两栏，见 speedTestWide）一屏放下：左边标题、两个大数、测速榜与按钮，右边速率曲线（撑满）与参数表
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = speedTestWide(box.biggest);
+        return ListenableBuilder(
+          listenable: Listenable.merge([controller, controller.history]),
+          builder: (context, _) {
+            final record = controller.history.byId(id);
+            final running = controller.isRunning;
+            final action = SpeedTestShareAction(
+              saveFile: saveFile,
+              shareFile: shareFile,
+              systemShare: systemShare,
+              shareText: shareText,
+              copyText: copyText,
+            );
+            final open = openUrl ?? globalState.openUrl;
+            if (record == null) return const MeSubPage.list(title: '记录详情', children: []);
+            final board = SpeedBoardRecordSection(
+              record: record,
+              boardPage: controller.board.endpoint.boardPage,
+              consent: controller.boardConsent == true,
+              busy: controller.boardBusy(record.id),
+              onOpenUrl: open,
+              onCopy: action.copyLink,
+              onUpload: () => controller.uploadToBoard(record.id),
+              onDelete: () async {
+                final error = await controller.deleteFromBoard(record.id);
+                globalState.showNotifier(error == null ? '已从测速榜删除' : '删除失败：$error');
+              },
+            );
+            final buttons = Row(
+              children: [
+                Expanded(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: running ? 0.45 : 1,
+                    child: _pillButton(
+                      mm,
+                      fill: MeowButtonFill.prominent,
+                      label: '用同样设置再测一次',
+                      textColor: mm.onProminent,
+                      onTap: running
+                          ? null
+                          : () {
+                              controller.prefill(record);
+                              Navigator.of(context).pop(true);
+                            },
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 96,
+                  child: _pillButton(
+                    mm,
+                    fill: MeowButtonFill.plain,
+                    label: '删除',
+                    textColor: mm.slow,
+                    onTap: () async {
+                      if (!await confirmDeleteUploadedRecord(context, record) || !context.mounted) return;
+                      Navigator.of(context).pop();
+                      controller.history.delete(record.id);
                     },
                   ),
-                  if (SpeedTestShareImage.canShare(record)) _ShareButton(record: record, action: action),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 150),
-                          opacity: running ? 0.45 : 1,
-                          child: _pillButton(
-                            mm,
-                            fill: MeowButtonFill.prominent,
-                            label: '用同样设置再测一次',
-                            textColor: mm.onProminent,
-                            onTap: running
-                                ? null
-                                : () {
-                                    controller.prefill(record);
-                                    Navigator.of(context).pop(true);
-                                  },
-                          ),
-                        ),
+                ),
+              ],
+            );
+            final share = SpeedTestShareImage.canShare(record) ? _ShareButton(record: record, action: action) : null;
+            if (wide) {
+              return MeSubPage(
+                title: '记录详情',
+                contentMaxWidth: speedTestWideMaxWidth,
+                body: SpeedTestTwoColumns(
+                  key: const ValueKey('speedtest-record-wide'),
+                  left: [
+                    SpeedTestRecordDetail(record: record, part: SpeedTestRecordPart.summary),
+                    board,
+                    ?share,
+                    buttons,
+                  ],
+                  right: [
+                    FillColumn.flex(
+                      min: 200,
+                      child: SpeedTestRecordDetail(
+                        key: const ValueKey('speedtest-record-chart'),
+                        record: record,
+                        part: SpeedTestRecordPart.chart,
                       ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 96,
-                        child: _pillButton(
-                          mm,
-                          fill: MeowButtonFill.plain,
-                          label: '删除',
-                          textColor: mm.slow,
-                          onTap: () async {
-                            if (!await confirmDeleteUploadedRecord(context, record) || !context.mounted) return;
-                            Navigator.of(context).pop();
-                            controller.history.delete(record.id);
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                    SpeedTestRecordDetail(record: record, part: SpeedTestRecordPart.table),
+                  ],
+                ),
+              );
+            }
+            return MeSubPage.list(
+              title: '记录详情',
+              children: [SpeedTestRecordDetail(record: record), board, ?share, buttons],
+            );
+          },
         );
       },
     );
@@ -604,13 +686,22 @@ TextStyle _numStyle(double size, Color color) => TextStyle(
 
 /// 筛选胶囊：全部 / 直连 / 各节点（横向滚动）；选中 = 墨色实底 + 奶白字（液态玻璃主题下是选中态那档静态半透明 + 强调色的字）。
 class _FilterChips extends StatelessWidget {
-  const _FilterChips({required this.options, required this.selection, required this.onChanged});
+  const _FilterChips({required this.options, required this.selection, required this.onChanged, this.wrap = false});
   final List<String> options;
   final String? selection;
   final ValueChanged<String?> onChanged;
 
+  /// 折行排开（宽版左栏），否则一行横向滚动
+  final bool wrap;
+
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
+  Widget build(BuildContext context) => wrap
+      ? Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [_chip(context, null, '全部'), for (final o in options) _chip(context, o, speedTestDisplayName(o))],
+        )
+      : SingleChildScrollView(
     scrollDirection: Axis.horizontal,
     child: Row(
       children: [
@@ -839,10 +930,17 @@ class SpeedTestExitLine extends StatelessWidget {
   }
 }
 
+/// [SpeedTestRecordDetail] 画哪一部分
+enum SpeedTestRecordPart { all, summary, chart, table }
+
 /// 详情：标题、平均 / 峰值大字、速率曲线、参数表（操作按钮在 [SpeedTestRecordPage] 里）。
+///
+/// [part]：整块（手机竖屏）；宽版两栏拆开放——左栏标题与两个大数（[SpeedTestRecordPart.summary]），
+/// 右栏速率曲线（[SpeedTestRecordPart.chart]，撑满父级给的高度）与参数表（[SpeedTestRecordPart.table]）。
 class SpeedTestRecordDetail extends StatelessWidget {
-  const SpeedTestRecordDetail({super.key, required this.record});
+  const SpeedTestRecordDetail({super.key, required this.record, this.part = SpeedTestRecordPart.all});
   final SpeedTestRecord record;
+  final SpeedTestRecordPart part;
 
   @override
   Widget build(BuildContext context) {
@@ -850,103 +948,126 @@ class SpeedTestRecordDetail extends StatelessWidget {
     final r = record;
     final hasChart = r.downloadSamples.length > 1 || r.uploadSamples.length > 1;
     final small = TextStyle(fontSize: 12, color: mm.t2);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Column(
-            children: [
-              Text(
-                r.isDirect ? '直连 · 本机网络' : r.outbound,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: mm.t1),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${r.dayTitle} ${r.timeTitle} · ${r.source.title} · ${r.threadsTitle}',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: mm.t2),
-              ),
-              if (r.exit != null) ...[
-                const SizedBox(height: 6),
-                SpeedTestExitLine(exit: r.exit, center: true),
-              ],
-            ],
+    final header = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        children: [
+          Text(
+            r.isDirect ? '直连 · 本机网络' : r.outbound,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: mm.t1),
           ),
-        ),
-        const SizedBox(height: 10),
-        if (r.error != null)
-          MeowCard(
-            padding: const EdgeInsets.all(16),
-            radius: BorderRadius.circular(18),
-            child: Text(
-              '测速失败：${r.error}',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.slow),
-            ),
-          )
-        else ...[
-          Row(
-            children: [
-              _big(mm, '下载', mm.down, r.downloadMbps, r.downloadPeakMbps),
-              const SizedBox(width: 8),
-              _big(mm, '上传', mm.accent, r.uploadMbps, r.uploadPeakMbps),
-            ],
+          const SizedBox(height: 3),
+          Text(
+            '${r.dayTitle} ${r.timeTitle} · ${r.source.title} · ${r.threadsTitle}',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: mm.t2),
           ),
-          if (hasChart) ...[
-            const SizedBox(height: 10),
-            MeowCard(
-              padding: const EdgeInsets.all(18),
-              radius: BorderRadius.circular(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text('速率曲线', style: small.copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 150,
-                    child: CustomPaint(
-                      painter: SpeedTestRecordChartPainter(r.downloadSamples, r.uploadSamples, mm.down, mm.accent, mm.line),
-                      size: Size.infinite,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      _legend('下载', mm.down, small),
-                      const SizedBox(width: 14),
-                      _legend('上传', mm.accent, small),
-                      const Spacer(),
-                      Text(
-                        '最高 ${fmtRecordMbps(_peak([...r.downloadSamples, ...r.uploadSamples]))} Mbps',
-                        style: small,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+          if (r.exit != null) ...[
+            const SizedBox(height: 6),
+            SpeedTestExitLine(exit: r.exit, center: true),
           ],
         ],
-        const SizedBox(height: 10),
-        MeowCard(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-          radius: BorderRadius.circular(24),
-          child: Column(
-            children: [
-              _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms'),
-              _kv(mm, '经由', r.isDirect ? '直连（DIRECT）' : (r.via ?? r.outbound)),
-              if (r.protocol != null) _kv(mm, '协议', r.protocol!),
-              _kv(mm, '测速服务器', r.server ?? '–'),
-              _kv(mm, '测速源 · 线程', '${r.source.title} · ${r.threadsTitle}'),
-              if (r.network != null) _kv(mm, '网络', r.network!),
-              _kv(mm, '用量', fmtSize(r.bytesUsed), last: true),
-            ],
-          ),
-        ),
+      ),
+    );
+    final errorBox = MeowCard(
+      padding: const EdgeInsets.all(16),
+      radius: BorderRadius.circular(18),
+      child: Text(
+        '测速失败：${r.error}',
+        textAlign: TextAlign.center,
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.slow),
+      ),
+    );
+    final bigNumbers = Row(
+      children: [
+        _big(mm, '下载', mm.down, r.downloadMbps, r.downloadPeakMbps),
+        const SizedBox(width: 8),
+        _big(mm, '上传', mm.accent, r.uploadMbps, r.uploadPeakMbps),
       ],
     );
+    // flexible：曲线撑满父级给的高度（宽版右栏）；没有采样时（失败 / 旧记录）写一句说明
+    Widget chartCard({required bool flexible}) {
+      final plot = CustomPaint(
+        painter: SpeedTestRecordChartPainter(r.downloadSamples, r.uploadSamples, mm.down, mm.accent, mm.line),
+        size: Size.infinite,
+      );
+      return MeowCard(
+        padding: const EdgeInsets.all(18),
+        radius: BorderRadius.circular(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('速率曲线', style: small.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            if (!hasChart)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    r.error != null ? '这次测速没有完成，没有速率曲线' : '这条记录没有采样',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 13, color: mm.t2),
+                  ),
+                ),
+              )
+            else ...[
+              if (flexible) Expanded(child: plot) else SizedBox(height: 150, child: plot),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _legend('下载', mm.down, small),
+                  const SizedBox(width: 14),
+                  _legend('上传', mm.accent, small),
+                  const Spacer(),
+                  Text('最高 ${fmtRecordMbps(_peak([...r.downloadSamples, ...r.uploadSamples]))} Mbps', style: small),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // 宽版右栏（曲线下面）行距收紧一点：七行照手机的行距，910×620 的窗口里曲线就只剩最小高度、还要滚一点
+    final dense = part == SpeedTestRecordPart.table;
+    final table = MeowCard(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      radius: BorderRadius.circular(24),
+      child: Column(
+        children: [
+          _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms', dense: dense),
+          _kv(mm, '经由', r.isDirect ? '直连（DIRECT）' : (r.via ?? r.outbound), dense: dense),
+          if (r.protocol != null) _kv(mm, '协议', r.protocol!, dense: dense),
+          _kv(mm, '测速服务器', r.server ?? '–', dense: dense),
+          _kv(mm, '测速源 · 线程', '${r.source.title} · ${r.threadsTitle}', dense: dense),
+          if (r.network != null) _kv(mm, '网络', r.network!, dense: dense),
+          _kv(mm, '用量', fmtSize(r.bytesUsed), last: true, dense: dense),
+        ],
+      ),
+    );
+    return switch (part) {
+      SpeedTestRecordPart.summary => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [header, const SizedBox(height: 10), r.error != null ? errorBox : bigNumbers],
+      ),
+      SpeedTestRecordPart.chart => chartCard(flexible: true),
+      SpeedTestRecordPart.table => table,
+      SpeedTestRecordPart.all => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          const SizedBox(height: 10),
+          if (r.error != null)
+            errorBox
+          else ...[
+            bigNumbers,
+            if (hasChart) ...[const SizedBox(height: 10), chartCard(flexible: false)],
+          ],
+          const SizedBox(height: 10),
+          table,
+        ],
+      ),
+    };
   }
 
   static double _peak(List<double> values) => values.isEmpty ? 0 : values.reduce((a, b) => a > b ? a : b);
@@ -994,8 +1115,8 @@ class SpeedTestRecordDetail extends StatelessWidget {
     ],
   );
 
-  Widget _kv(MeowTokens mm, String key, String value, {bool last = false}) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 11),
+  Widget _kv(MeowTokens mm, String key, String value, {bool last = false, bool dense = false}) => Container(
+    padding: EdgeInsets.symmetric(vertical: dense ? 8 : 11),
     decoration: last ? null : BoxDecoration(border: Border(bottom: BorderSide(color: mm.line))),
     child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
