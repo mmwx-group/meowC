@@ -146,6 +146,38 @@ void main() {
     expect(meshHostname('a' * 80).length, 63);
   });
 
+  group('自定义设备名', () {
+    test('规范化与校验：同 meshHostname；规范化后为空报错；留空 = 恢复自动名', () {
+      expect(parseMeshCustomHostname('My Pixel 8'), (name: 'my-pixel-8', error: null));
+      expect(parseMeshCustomHostname('  NAS__Home--'), (name: 'nas-home', error: null));
+      expect(parseMeshCustomHostname('a' * 80).name.length, 63);
+      expect(parseMeshCustomHostname(''), (name: '', error: null));
+      expect(parseMeshCustomHostname('   '), (name: '', error: null));
+      expect(parseMeshCustomHostname('小米手机'), (name: '', error: '设备名只能用英文字母、数字和横线'));
+      expect(parseMeshCustomHostname('---').error, isNotNull);
+    });
+
+    test('生效名字：自定义的优先，没有用自动名', () {
+      expect(meshEffectiveHostname(custom: 'living-room', auto: 'sm-s9180'), 'living-room');
+      expect(meshEffectiveHostname(custom: '', auto: 'sm-s9180'), 'sm-s9180');
+    });
+
+    test('预览的 DNS 名：没有后缀用 meowx.internal', () {
+      expect(meshDnsName('pixel', 'home.example'), 'pixel.home.example');
+      expect(meshDnsName('pixel', ''), 'pixel.meowx.internal');
+    });
+
+    test('注入的喵窝节点：自定义名优先于入网时记下的名字', () {
+      const base = MeowMesh(enabled: true, controlUrl: 'https://ctl.example', hostname: 'sm-s9180');
+      expect(meshRuntime.injection(const MeowSettings(mesh: base))!.node()['hostname'], 'sm-s9180');
+      expect(
+        meshRuntime.injection(MeowSettings(mesh: base.copyWith(customHostname: 'living-room')))!.node()['hostname'],
+        'living-room',
+      );
+      expect(meshRuntime.injection(const MeowSettings(mesh: MeowMesh(customHostname: 'x'))), isNull);
+    });
+  });
+
   group('IPv4 网段', () {
     test('解析与包含', () {
       final c = Ipv4Cidr.parse('192.168.1.77/24')!;

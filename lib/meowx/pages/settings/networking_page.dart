@@ -191,6 +191,13 @@ class _NetworkingPageState extends ConsumerState<NetworkingPage> {
           ],
         ),
         if (mode == NetworkingMode.mesh) ...const [MeshDetails()],
+        // 没开喵窝也能先把设备名设好（管理员、主控说可用时）
+        if (mode != NetworkingMode.mesh && meshState.availability == MeshAvailability.available)
+          MeSection(
+            title: '${meowNestName(context)}设备名',
+            note: '打开前可先设好',
+            children: const [MeshHostnameRow()],
+          ),
         if (mode == NetworkingMode.tailscale) const _TailscaleDetails(),
         MeCaption('${meowNestName(context)}与订阅里的 Tailscale 组网节点只能开一个：两边都用 100.64.0.0/10 的地址，同时开会互相抢路由。'),
       ],
@@ -243,7 +250,7 @@ class MeshDetails extends ConsumerWidget {
             ),
             if (state.selfAddress(mesh.nodeId) case final ip when ip.isNotEmpty)
               MeRow(label: '本机地址', value: ip, mono: true, onTap: () => _copy(ip)),
-            if (mesh.hostname.isNotEmpty) MeRow(label: '设备名', value: mesh.hostname, mono: true),
+            const MeshHostnameRow(),
           ],
         ),
         if (state.devices.isNotEmpty) ...[
@@ -270,6 +277,133 @@ class MeshDetails extends ConsumerWidget {
         ],
         MeCaption('$name由主控提供：同一账号的设备互相访问，OpenWrt 开放的局域网（家里的 NAS、路由器后台）在外面也能直接打开。设备之间端到端加密，主控与中继看不到内容。'),
       ],
+    );
+  }
+}
+
+/// 「设备名」：显示现在生效的名字（自定义的，或留空时的自动名：安卓机型 / 计算机名）+「修改」；
+/// 编辑时就地换成输入框 + 保存 / 取消，下面预览「将显示为 名字.MagicDNS 后缀」（同 iOS / macOS 的设备名一行）。
+/// 多台同型号设备默认同名，主控会给后来的加 -1、-2，用户可以自己起个好认的名字。
+class MeshHostnameRow extends ConsumerStatefulWidget {
+  const MeshHostnameRow({super.key});
+
+  @override
+  ConsumerState<MeshHostnameRow> createState() => _MeshHostnameRowState();
+}
+
+class _MeshHostnameRowState extends ConsumerState<MeshHostnameRow> {
+  final _controller = TextEditingController();
+  bool _editing = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _start() {
+    _controller.text = ref.read(meowSettingProvider).mesh.customHostname;
+    setState(() {
+      _editing = true;
+      _error = null;
+    });
+  }
+
+  void _cancel() => setState(() {
+    _editing = false;
+    _error = null;
+  });
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    final err = await ref.read(meshProvider.notifier).setCustomHostname(_controller.text);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _error = err;
+      if (err == null) _editing = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final mesh = ref.watch(meowSettingProvider.select((s) => s.mesh));
+    final auto = ref.watch(meshAutoHostnameProvider).valueOrNull ?? (mesh.customHostname.isEmpty ? mesh.hostname : '');
+    final effective = meshEffectiveHostname(custom: mesh.customHostname, auto: auto);
+    if (!_editing) {
+      return MeRow(
+        label: '设备名',
+        subtitle: mesh.customHostname.isEmpty ? '自动（本机型号 / 计算机名）' : null,
+        value: effective.isEmpty ? null : effective,
+        mono: true,
+        trailing: Text(
+          '修改',
+          style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: mm.accent),
+        ),
+        onTap: _start,
+      );
+    }
+    final magicDns = ref.watch(meshProvider.select((s) => s.magicDns));
+    final suffix = magicDns.isNotEmpty ? magicDns : mesh.magicDns;
+    final parsed = parseMeshCustomHostname(_controller.text);
+    final preview = parsed.error != null
+        ? parsed.error!
+        : '将显示为 ${meshDnsName(meshEffectiveHostname(custom: parsed.name, auto: auto), suffix)}';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('设备名', style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w500, color: mm.t1)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            keyboardType: TextInputType.visiblePassword,
+            maxLength: 63,
+            style: MeowFont.mono(size: MeowFont.footnote, color: mm.t1),
+            onChanged: (_) => setState(() => _error = null),
+            onSubmitted: (_) => unawaited(_save()),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: auto.isEmpty ? '留空用自动名' : auto,
+              counterText: '',
+              errorText: _error,
+              errorMaxLines: 2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            preview,
+            style: TextStyle(fontSize: MeowFont.caption, color: parsed.error != null ? mm.slow : mm.t2),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '留空用自动名；名字已被别的设备占用时，主控会自动在后面加 -1、-2。',
+            style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: _saving ? null : _cancel, child: const Text('取消')),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _saving ? null : () => unawaited(_save()),
+                child: _saving
+                    ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('保存'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

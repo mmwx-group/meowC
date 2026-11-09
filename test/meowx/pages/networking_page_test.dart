@@ -1,3 +1,4 @@
+import 'package:bett_box/meowx/config/mesh_config.dart';
 import 'package:bett_box/meowx/pages/dashboard/mesh_card.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
 import 'package:bett_box/meowx/pages/settings/networking_page.dart';
@@ -50,6 +51,15 @@ class _FakeMesh extends MeshController {
     calls.add(mode);
     return true;
   }
+
+  /// 只做规范化与存设置（真的那份开着时还要重新应用配置）
+  @override
+  Future<String?> setCustomHostname(String input) async {
+    final parsed = parseMeshCustomHostname(input);
+    if (parsed.error != null) return parsed.error;
+    ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(mesh: s.mesh.copyWith(customHostname: parsed.name)));
+    return null;
+  }
 }
 
 const _admin = MeowAccount(host: 'https://panel.example.com', token: 't');
@@ -67,8 +77,9 @@ Future<void> _pump(
   MeshState mesh = const MeshState(availability: MeshAvailability.available),
   bool running = false,
   List<NetworkingMode>? calls,
+  Size size = const Size(412, 892),
 }) async {
-  tester.view.physicalSize = const Size(412, 892);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -78,6 +89,7 @@ Future<void> _pump(
         meowSettingProvider.overrideWith(() => _Meow(meow)),
         patchClashConfigProvider.overrideWith(_Patch.new),
         meshProvider.overrideWith(() => _FakeMesh(mesh, calls ?? [])),
+        meshAutoHostnameProvider.overrideWith((ref) async => 'sm-s9180'),
       ],
       child: MaterialApp(home: Scaffold(body: child)),
     ),
@@ -184,6 +196,70 @@ void main() {
     expect(find.text('192.168.1.0/24 → 10.233.0.0/24'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('退出喵窝'), 200);
     expect(find.text('退出喵窝'), findsOneWidget);
+  });
+
+  testWidgets('组网页：没开喵窝也能先改设备名——显示自动名、编辑时预览 DNS 名、不合法不保存、留空恢复自动名', (tester) async {
+    await _pump(tester, const NetworkingPage(), mesh: const MeshState(availability: MeshAvailability.available, magicDns: 'home.example'));
+    await tester.pump();
+    expect(find.text('设备名'), findsOneWidget);
+    expect(find.text('sm-s9180'), findsOneWidget);
+    expect(find.text('自动（本机型号 / 计算机名）'), findsOneWidget);
+    await tester.tap(find.text('修改'));
+    await tester.pumpAndSettle();
+    expect(find.text('将显示为 sm-s9180.home.example'), findsOneWidget);   // 留空 = 自动名
+    await tester.enterText(find.byType(TextField), 'Living Room');
+    await tester.pump();
+    expect(find.text('将显示为 living-room.home.example'), findsOneWidget);
+    expect(find.textContaining('主控会自动在后面加 -1、-2'), findsOneWidget);
+    // 规范化后为空：预览换成错误，保存也不收
+    await tester.enterText(find.byType(TextField), '客厅');
+    await tester.pump();
+    expect(find.text('设备名只能用英文字母、数字和横线'), findsOneWidget);
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsOneWidget);
+    // 合法的：存下规范化后的名字，回到只读一行
+    await tester.enterText(find.byType(TextField), 'Living Room');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextField), findsNothing);
+    expect(find.text('living-room'), findsOneWidget);
+    expect(find.text('自动（本机型号 / 计算机名）'), findsNothing);
+    // 取消不改；留空保存 = 恢复自动名
+    await tester.tap(find.text('修改'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'living-room');
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('living-room'), findsOneWidget);
+    await tester.tap(find.text('修改'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '');
+    await tester.tap(find.text('保存'));
+    await tester.pumpAndSettle();
+    expect(find.text('sm-s9180'), findsOneWidget);
+  });
+
+  testWidgets('组网页：不是管理员（喵窝不可用）时没有设备名一行', (tester) async {
+    await _pump(tester, const NetworkingPage(), mesh: const MeshState(availability: MeshAvailability.notAdmin));
+    expect(find.text('设备名'), findsNothing);
+  });
+
+  testWidgets('组网页（宽屏）：喵窝开着时设备名在喵窝卡片里，后缀用设置里的 MagicDNS', (tester) async {
+    await _pump(
+      tester,
+      const NetworkingPage(),
+      size: const Size(1280, 800),
+      meow: const MeowSettings(
+        account: _admin,
+        tailscaleNodes: false,
+        mesh: MeowMesh(enabled: true, controlUrl: 'https://x', hostname: 'nas', customHostname: 'nas', magicDns: 'lan.example', panelReason: ''),
+      ),
+    );
+    expect(find.text('nas'), findsOneWidget);
+    await tester.tap(find.text('修改'));
+    await tester.pumpAndSettle();
+    expect(find.text('将显示为 nas.lan.example'), findsOneWidget);
   });
 
   testWidgets('首页喵窝卡：开关、状态、本机地址与在线几台', (tester) async {

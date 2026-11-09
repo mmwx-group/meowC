@@ -300,6 +300,10 @@ abstract class MeowMesh with _$MeowMesh {
     /// 入网时报给控制服务器的设备名（规范化过的，见 `meshHostname`）
     @Default('') String hostname,
 
+    /// 用户自定义的设备名（规范化过的；空 = 用自动名：安卓机型 / 计算机名）。本机偏好，退出登录 / 退出喵窝都不清。
+    /// 非空时入网与组网设备启动都用它（[hostname] 跟着写成它）
+    @Default('') String customHostname,
+
     /// 这台设备在主控里的编号：重新入网时带给主控（`previous_node_id`），主控先删掉旧的
     int? nodeId,
 

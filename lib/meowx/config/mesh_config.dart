@@ -44,6 +44,26 @@ String meshHostname(String raw, {String fallback = 'meowx'}) {
   return s.isEmpty ? fallback : s;
 }
 
+/// 主控没给 MagicDNS 后缀时的缺省（Headscale 在主控里的缺省配置）
+const meshDefaultMagicDns = 'meowx.internal';
+
+/// 校验用户输入的自定义设备名：留空（含只有空白）= 恢复自动名（name 为空、没有错误）；
+/// 否则按 [meshHostname] 规范化，什么都不剩时报错、不保存。
+({String name, String? error}) parseMeshCustomHostname(String input) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return (name: '', error: null);
+  final name = meshHostname(trimmed, fallback: '');
+  if (name.isEmpty) return (name: '', error: '设备名只能用英文字母、数字和横线');
+  return (name: name, error: null);
+}
+
+/// 报给主控的设备名：自定义的优先，没有就用自动名（安卓机型 / 计算机名规范化后）。
+String meshEffectiveHostname({required String custom, required String auto}) => custom.isNotEmpty ? custom : auto;
+
+/// 设备在喵窝里的 DNS 名（「将显示为 …」的预览）：后缀为空时用 [meshDefaultMagicDns]。
+String meshDnsName(String hostname, String magicDns) =>
+    '$hostname.${magicDns.isEmpty ? meshDefaultMagicDns : magicDns}';
+
 // ---------------------------------------------------------------------------------------------------------------
 // IPv4 网段
 

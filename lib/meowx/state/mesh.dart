@@ -62,7 +62,10 @@ class MeshRuntime {
     if (!m.enabled || m.controlUrl.isEmpty) return null;
     return MeshInjection(
       controlUrl: m.controlUrl,
-      hostname: m.hostname.isEmpty ? meshHostname('', fallback: _fallbackHostname) : m.hostname,
+      hostname: meshEffectiveHostname(
+        custom: m.customHostname,
+        auto: m.hostname.isEmpty ? meshHostname('', fallback: _fallbackHostname) : m.hostname,
+      ),
       magicDns: m.magicDns,
       sites: meshActiveSites(m.routes, localIPv4s),
       authKey: authKey,
@@ -188,6 +191,7 @@ class MeshState {
   const MeshState({
     this.availability = MeshAvailability.unknown,
     this.message = '',
+    this.magicDns = '',
     this.devices = const [],
     this.sites = const [],
     this.devicesComplete = false,
@@ -205,6 +209,9 @@ class MeshState {
 
   /// 不可用时主控的说明
   final String message;
+
+  /// 主控 `mesh/status` 回的 MagicDNS 后缀（喵窝没开时也有：「设备名」的预览用）
+  final String magicDns;
   final List<MeshDevice> devices;
   final List<MeshSite> sites;
 
@@ -269,6 +276,7 @@ class MeshState {
   MeshState copyWith({
     MeshAvailability? availability,
     String? message,
+    String? magicDns,
     List<MeshDevice>? devices,
     List<MeshSite>? sites,
     bool? devicesComplete,
@@ -287,6 +295,7 @@ class MeshState {
   }) => MeshState(
     availability: availability ?? this.availability,
     message: message ?? this.message,
+    magicDns: magicDns ?? this.magicDns,
     devices: devices ?? this.devices,
     sites: sites ?? this.sites,
     devicesComplete: devicesComplete ?? this.devicesComplete,
@@ -447,7 +456,7 @@ class MeshController extends Notifier<MeshState> {
       _updateMesh((m) => m.copyWith(panelReason: status.reason, panelMessage: status.message));
       return;
     }
-    state = state.copyWith(availability: MeshAvailability.available, message: '');
+    state = state.copyWith(availability: MeshAvailability.available, message: '', magicDns: status.magicDns);
     final before = _mesh;
     _updateMesh(
       (m) => m.copyWith(
@@ -544,7 +553,7 @@ class MeshController extends Notifier<MeshState> {
           await _deleteStateDir();
           state = state.copyWith(clearStateNodeId: true);
         }
-        final hostname = _mesh.hostname.isNotEmpty ? _mesh.hostname : await _deviceHostname();
+        final hostname = await _joinHostname();
         if (state.stateNodeId == null && meshRuntime.authKey == null) {
           final ok = await _enroll(hostname: hostname, previous: previous, force: true);
           if (!ok) return false;
@@ -639,6 +648,30 @@ class MeshController extends Notifier<MeshState> {
   }
 
   // ---------------------------------------------------------------------------------------------------------------
+  // 设备名
+
+  /// 改设备名：规范化后为空返回错误文字、不保存；留空 = 恢复自动名。没开喵窝也能先设好（下次入网用它）。
+  /// 喵窝开着时重新应用配置：内核按新配置重建喵窝节点（旧的随即回收），新节点启动时把新名字作为 Hostname
+  /// 报给控制服务器——Headscale 只要这台设备的名字不是管理员在主控里手动改的，就跟着改（撞名自动加 -1、-2），
+  /// 不用调主控的改名接口。返回 null = 保存好了（或没变）。
+  Future<String?> setCustomHostname(String input) async {
+    final parsed = parseMeshCustomHostname(input);
+    if (parsed.error != null) return parsed.error;
+    final before = _mesh;
+    if (parsed.name == before.customHostname) return null;
+    final effective = meshEffectiveHostname(custom: parsed.name, auto: await deviceHostname());
+    // 开着时 hostname（生成运行配置用的）跟着改；关着时等下次打开 / 入网再定
+    _updateMesh((m) => m.copyWith(customHostname: parsed.name, hostname: before.enabled ? effective : m.hostname));
+    commonPrint.log('喵窝：设备名改为 $effective${parsed.name.isEmpty ? '（自动）' : ''}');
+    if (before.enabled && effective != before.hostname) await _apply();
+    return null;
+  }
+
+  /// 入网 / 打开时用的设备名：自定义的优先，没有就用自动名
+  Future<String> _joinHostname() async =>
+      meshEffectiveHostname(custom: _mesh.customHostname, auto: await deviceHostname());
+
+  // ---------------------------------------------------------------------------------------------------------------
   // 入网与叫醒
 
   /// 开着、代理在跑、这台设备还没登记（或在主控被删了）、手上也没有 key：要一把，并重新应用配置
@@ -657,7 +690,7 @@ class MeshController extends Notifier<MeshState> {
       if (state.stateNodeId != null && !deleted) return;
       previous = deleted ? state.stateNodeId : _mesh.nodeId;
     }
-    final ok = await _enroll(hostname: _mesh.hostname.isEmpty ? await _deviceHostname() : _mesh.hostname, previous: previous);
+    final ok = await _enroll(hostname: await _joinHostname(), previous: previous);
     if (ok) await _apply();
   }
 
@@ -888,8 +921,8 @@ class MeshController extends Notifier<MeshState> {
     }
   }
 
-  /// 设备名：安卓取机型、Windows / Linux 取计算机名，规范化后报给控制服务器
-  static Future<String> _deviceHostname() async {
+  /// 自动设备名：安卓取机型、Windows / Linux 取计算机名，规范化后报给控制服务器（用户没自定义时）
+  static Future<String> deviceHostname() async {
     var raw = '';
     try {
       if (Platform.isAndroid) {
@@ -905,6 +938,9 @@ class MeshController extends Notifier<MeshState> {
 }
 
 final meshProvider = NotifierProvider<MeshController, MeshState>(MeshController.new);
+
+/// 自动设备名（「组网」页「设备名」在没自定义时显示它）。单测里覆盖掉，免得去读设备信息。
+final meshAutoHostnameProvider = FutureProvider<String>((ref) => MeshController.deviceHostname());
 
 /// 「组网」里显不显示喵窝：登录的是管理员（主控说过可用 / 没开），或者已经开着。
 final meshVisibleProvider = Provider<bool>((ref) {
