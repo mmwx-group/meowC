@@ -87,7 +87,7 @@ class _HomeMeshCardState extends ConsumerState<HomeMeshCard> {
         constraints: const BoxConstraints(minHeight: 40),
         child: Row(
           children: [
-            IconTile(icon: Icons.lan_rounded, tint: mesh.enabled ? null : mm.t2),
+            IconTile(mesh: true, tint: mesh.enabled ? null : mm.t2),
             const SizedBox(width: 12),
             Expanded(
               child: Column(

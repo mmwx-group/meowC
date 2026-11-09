@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'button_fill.dart';
 import 'glass.dart';
+import 'mesh_glyph.dart';
 import 'haptics.dart';
 import 'motion.dart';
 import 'svg_path.dart';
@@ -579,9 +580,11 @@ class RegionTag extends StatelessWidget {
 
 /// 行首的图标方块：柔粉底 + 玫红图标（[tint] 可换色，底取它的 14%）。
 class IconTile extends StatelessWidget {
-  const IconTile({super.key, this.icon, this.glyph, this.size = 32, this.tint});
+  const IconTile({super.key, this.icon, this.glyph, this.mesh = false, this.size = 32, this.tint});
   final IconData? icon;
   final MeowGlyph? glyph;
+  /// 喵窝的实心图标（[MeshGlyph]）
+  final bool mesh;
   final double size;
   final Color? tint;
 
@@ -597,7 +600,11 @@ class IconTile extends StatelessWidget {
         color: tint == null ? mm.soft : fg.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(size * 0.31),
       ),
-      child: glyph != null ? MeowIcon(glyph!, size: size * 0.53, color: fg) : Icon(icon, size: size * 0.56, color: fg),
+      child: mesh
+          ? MeshGlyph(size: size * 0.62, color: fg)
+          : glyph != null
+              ? MeowIcon(glyph!, size: size * 0.53, color: fg)
+              : Icon(icon, size: size * 0.56, color: fg),
     );
   }
 }
