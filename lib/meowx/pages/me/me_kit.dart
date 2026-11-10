@@ -27,16 +27,26 @@ class MeDense extends InheritedWidget {
 /// 二级页骨架（设计稿 AApps 的标题行）：返回 + 标题 + 操作钮；正文限宽居中，左右留白由正文自己留。
 /// 放在手机「我的」页的设置卡片里时（[MeSheetScope]）不画整页的标题栏与底色，改用卡片的页头（见 me_sheet.dart）。
 class MeSubPage extends StatelessWidget {
-  const MeSubPage({super.key, required this.title, this.actions = const [], required Widget this.body}) : children = null;
+  const MeSubPage({
+    super.key,
+    required this.title,
+    this.actions = const [],
+    required Widget this.body,
+    this.contentMaxWidth = maxWidth,
+  }) : children = null;
 
   /// 正文是一列卡片的二级页：整页可滚，卡片间距 12。
   const MeSubPage.list({super.key, required this.title, this.actions = const [], required List<Widget> this.children})
-    : body = null;
+    : body = null,
+      contentMaxWidth = maxWidth;
 
   final String title;
   final List<Widget> actions;
   final Widget? body;
   final List<Widget>? children;
+
+  /// 页头与正文最宽多少（缺省 [maxWidth]；测速页的两栏宽版放宽，见 speed_test_wide.dart）
+  final double contentMaxWidth;
 
   static const maxWidth = 720.0;
 
@@ -55,7 +65,7 @@ class MeSubPage extends StatelessWidget {
           bottom: false,
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: maxWidth),
+              constraints: BoxConstraints(maxWidth: contentMaxWidth),
               child: Column(
                 children: [
                   Padding(

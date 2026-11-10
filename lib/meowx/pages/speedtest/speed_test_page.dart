@@ -28,6 +28,7 @@ import '../proxies/proxies_page.dart' show allLeafProxies;
 import 'speed_board_views.dart';
 import 'speed_test_history_page.dart';
 import 'speed_test_share.dart';
+import 'speed_test_wide.dart';
 
 /// 网络测速（点首页网速卡打开；与 iOS / macOS 同一套）：选测速源、单 / 多线程、测速节点（节点或直连，不能选代理组），
 /// 测延迟 → 下载 → 上传。测完 / 失败记一条测速记录（右上角「记录」）。测在 Go 核心里跑、经所选节点直连测速服务器（不经分流规则），见 core/meow_speedtest.go。
@@ -142,67 +143,57 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     // 节点 → 协议（开测时记进记录、「已用」那一行前面显示）
     final protocols = {for (final p in leaves) p.name: p.type};
     final exitLeaf = ref.watch(currentNodeProvider)?.leaf ?? '';
-    return ListenableBuilder(
-      listenable: Listenable.merge([c, c.history]),
-      builder: (context, _) {
-        // 选过的节点换订阅后不在了就回到缺省：首页当前出口实际在用的节点；直连总有效
-        final node = (c.node != null && (c.node == kSpeedTestDirect || nodes.contains(c.node)))
-            ? c.node
-            : (nodes.contains(exitLeaf) ? exitLeaf : nodes.firstOrNull);
-        final running = c.isRunning;
-        // 测的时候节点行写实际在测的节点（核心回的 via）：主组是 url-test / fallback 时测速中途组可能换了节点，缺省推算的会跟着变
-        final shown = running ? (c.progress.via ?? node) : node;
-        final canStart = connected && node != null;
-        final last = c.history.records.firstOrNull;
-        // 这次刚测完的那条（还没测过 / 在测 / 停掉 / 失败 / 被删了都没有）：不画，不画成禁用
-        final shareable = c.shareableRecord;
-        return MeSubPage.list(
-          title: '网络测速',
-          actions: [
-            if (shareable != null && SpeedTestShareImage.canShare(shareable))
-              Builder(
-                builder: (button) => RoundGlassButton(
-                  icon: share.iconFor(shareable),
-                  tooltip: share.labelFor(shareable),
-                  busy: _sharing,
-                  onTap: () => _share(button, shareable),
-                ),
-              ),
-            RoundGlassButton(
-              icon: Icons.history_rounded,
-              tooltip: '测速记录',
-              onTap: () => BaseNavigator.push(context, SpeedTestHistoryPage(controller: c)),
-            ),
-          ],
-          children: [
-            MeowCard(
-              padding: const EdgeInsets.all(18),
-              radius: BorderRadius.circular(24),
-              child: Column(
-                children: [
-                  // 测速节点 + 出口（ASN · 运营商 · IP）；测的时候不能换
-                  _NodePicker(
-                    node: shown,
-                    nodes: nodes,
-                    onPicked: c.setNode,
-                    enabled: !running,
-                    exit: c.progress.via == shown ? c.progress : null,
+    // 宽（横着、够放两栏，见 speedTestWide）：两栏一屏放下；否则原来的单列
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = speedTestWide(box.biggest);
+        return ListenableBuilder(
+          listenable: Listenable.merge([c, c.history]),
+          builder: (context, _) {
+            // 选过的节点换订阅后不在了就回到缺省：首页当前出口实际在用的节点；直连总有效
+            final node = (c.node != null && (c.node == kSpeedTestDirect || nodes.contains(c.node)))
+                ? c.node
+                : (nodes.contains(exitLeaf) ? exitLeaf : nodes.firstOrNull);
+            final running = c.isRunning;
+            // 测的时候节点行写实际在测的节点（核心回的 via）：主组是 url-test / fallback 时测速中途组可能换了节点，缺省推算的会跟着变
+            final shown = running ? (c.progress.via ?? node) : node;
+            final canStart = connected && node != null;
+            final last = c.history.records.firstOrNull;
+            // 这次刚测完的那条（还没测过 / 在测 / 停掉 / 失败 / 被删了都没有）：不画，不画成禁用
+            final shareable = c.shareableRecord;
+            final actions = [
+              if (shareable != null && SpeedTestShareImage.canShare(shareable))
+                Builder(
+                  builder: (button) => RoundGlassButton(
+                    icon: share.iconFor(shareable),
+                    tooltip: share.labelFor(shareable),
+                    busy: _sharing,
+                    onTap: () => _share(button, shareable),
                   ),
-                  const SizedBox(height: 6),
-                  SpeedTestGauge(progress: c.progress),
-                  const SizedBox(height: 10),
-                  _infoLine(mm),
-                ],
+                ),
+              RoundGlassButton(
+                icon: Icons.history_rounded,
+                tooltip: '测速记录',
+                onTap: () => BaseNavigator.push(context, SpeedTestHistoryPage(controller: c)),
               ),
-            ),
+            ];
+            // 测速节点 + 出口（ASN · 运营商 · IP）；测的时候不能换
+            final nodePicker = _NodePicker(
+              node: shown,
+              nodes: nodes,
+              onPicked: c.setNode,
+              enabled: !running,
+              exit: c.progress.via == shown ? c.progress : null,
+            );
             // 测完、上传了（或在传 / 传失败）才有这一条
-            if (!running && shareable?.board != null)
-              SpeedBoardStrip(
-                entry: shareable!.board,
-                onOpenBoard: () => _open(c.board.endpoint.boardPage),
-                onRetry: () => c.uploadToBoard(shareable.id),
-              ),
-            Column(
+            final boardStrip = (!running && shareable?.board != null)
+                ? SpeedBoardStrip(
+                    entry: shareable!.board,
+                    onOpenBoard: () => _open(c.board.endpoint.boardPage),
+                    onRetry: () => c.uploadToBoard(shareable.id),
+                  )
+                : null;
+            final start = Column(
               children: [
                 _StartButton(
                   running: running,
@@ -226,71 +217,206 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                   Text('先连接，测的是经节点出去的速度', style: TextStyle(fontSize: 12, color: mm.t2)),
                 ],
               ],
-            ),
-            if (!running && last != null) _LastResult(controller: c, record: last),
-            IgnorePointer(
-              ignoring: running,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: running ? 0.5 : 1,
-                child: MeowCard(
-                  padding: const EdgeInsets.all(16),
-                  radius: BorderRadius.circular(18),
+            );
+            if (wide) {
+              return MeSubPage(
+                title: '网络测速',
+                actions: actions,
+                contentMaxWidth: speedTestWideMaxWidth,
+                body: SpeedTestTwoColumns(
+                  key: const ValueKey('speedtest-wide'),
+                  // 左：节点行 + 码表（吃满剩下的高度，码表按它等比缩放）、测速榜那一条、开始按钮、上次结果、网页测速
+                  left: [
+                    FillColumn.flex(
+                      // 节点行（测速中带出口两行约 80）+ 卡片内边距 + 码表至少约 120 高：手机横屏这么矮时码表和开始按钮仍在第一屏
+                      min: 240,
+                      child: MeowCard(
+                        key: const ValueKey('speedtest-dial-card'),
+                        padding: const EdgeInsets.all(16),
+                        radius: BorderRadius.circular(24),
+                        child: FillColumn(
+                          spacing: 6,
+                          children: [
+                            nodePicker,
+                            FillColumn.flex(child: SpeedTestGauge(progress: c.progress, part: SpeedTestGaugePart.dial)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    ?boardStrip,
+                    start,
+                    // 刚测完的那次就画在码表与读数里，「上次结果」和它是同一条，不重复
+                    if (!running && last != null && shareable == null) _LastResult(controller: c, record: last),
+                    _webRow(mm),
+                  ],
+                  // 右：延迟 / 下载 / 上传三格 + 逐秒曲线（吃满剩下的高度）+ 服务器 / 经由一行；测速源与线程
+                  right: [
+                    FillColumn.flex(
+                      // 内边距 32 + 三格约 62 + 曲线至少 60 + 服务器一行 34 + 间距
+                      min: 220,
+                      child: MeowCard(
+                        key: const ValueKey('speedtest-readouts-card'),
+                        padding: const EdgeInsets.all(16),
+                        radius: BorderRadius.circular(24),
+                        child: FillColumn(
+                          spacing: 10,
+                          children: [
+                            SpeedTestGauge(progress: c.progress, part: SpeedTestGaugePart.tiles),
+                            FillColumn.flex(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  SpeedTestGauge(progress: c.progress, part: SpeedTestGaugePart.chart),
+                                  if (c.progress.downloadSamples.isEmpty && c.progress.uploadSamples.isEmpty && !running)
+                                    _chartPlaceholder(mm),
+                                ],
+                              ),
+                            ),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minHeight: 32),
+                              child: Center(child: _infoLine(mm)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    _settingsCard(mm, running, wide: true),
+                  ],
+                ),
+              );
+            }
+            return MeSubPage.list(
+              title: '网络测速',
+              actions: actions,
+              children: [
+                MeowCard(
+                  padding: const EdgeInsets.all(18),
+                  radius: BorderRadius.circular(24),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _label(mm, '测速源'),
-                      _SourcePicker(value: c.source, onChanged: c.setSource),
-                      const SizedBox(height: 12),
-                      _label(mm, '线程'),
-                      MeowSegment<bool>(
-                        items: const [(false, '单线程'), (true, '多线程（${SpeedTestController.multiConnections}）')],
-                        value: c.multiThread,
-                        onChanged: c.setMultiThread,
-                        height: 38,
-                        fontSize: 13,
-                        onCard: true,
-                      ),
-                      const SizedBox(height: 12),
-                      Container(height: 1, color: mm.line),
-                      const SizedBox(height: 8),
-                      SpeedBoardSettingRow(
-                        value: c.boardConsent == true,
-                        onChanged: c.setBoardConsent,
-                        onInfo: () => _askBoardConsent(fromSettings: true),
-                      ),
+                      nodePicker,
+                      const SizedBox(height: 6),
+                      SpeedTestGauge(progress: c.progress),
+                      const SizedBox(height: 10),
+                      _infoLine(mm),
                     ],
                   ),
                 ),
-              ),
-            ),
-            MeowCardMaterial(
-              borderRadius: BorderRadius.circular(18),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => globalState.openUrl(SpeedTestController.webUrl),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.public_rounded, size: 20, color: mm.accent),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text('在浏览器打开网页测速', style: TextStyle(fontSize: 15, color: mm.t1))),
-                      Icon(Icons.north_east_rounded, size: 16, color: mm.t2),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const MeCaption(
-              '测速经所选节点直接连测速服务器，不经分流规则（只能选节点或直连，不能选代理组；直连测的是本机网络）。先测延迟，再下载、上传各 10 秒'
-              '（Google、Microsoft 只测下载）；多线程同时开 ${SpeedTestController.multiConnections} 条连接。数据边收边丢，但会照实消耗流量。',
-            ),
-          ],
+                ?boardStrip,
+                start,
+                if (!running && last != null) _LastResult(controller: c, record: last),
+                _settingsCard(mm, running),
+                _webRow(mm),
+                const MeCaption(_caption),
+              ],
+            );
+          },
         );
       },
     );
   }
+
+  static const _caption =
+      '测速经所选节点直接连测速服务器，不经分流规则（只能选节点或直连，不能选代理组；直连测的是本机网络）。先测延迟，再下载、上传各 10 秒'
+      '（Google、Microsoft 只测下载）；多线程同时开 ${SpeedTestController.multiConnections} 条连接。数据边收边丢，但会照实消耗流量。';
+
+  /// 测速源、单 / 多线程、测速榜开关（测的时候不能改）。宽版：测速源一行放得下就排一行，说明收进「测速源」旁的 ⓘ
+  Widget _settingsCard(MeowTokens mm, bool running, {bool wide = false}) => IgnorePointer(
+    ignoring: running,
+    child: AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: running ? 0.5 : 1,
+      child: MeowCard(
+        key: wide ? const ValueKey('speedtest-settings-card') : null,
+        padding: const EdgeInsets.all(16),
+        radius: BorderRadius.circular(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (wide)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Text('测速源', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
+                    const MeInfoButton(title: '关于测速', text: _caption),
+                  ],
+                ),
+              )
+            else
+              _label(mm, '测速源'),
+            _SourcePicker(value: c.source, onChanged: c.setSource, singleRow: wide),
+            const SizedBox(height: 12),
+            _label(mm, '线程'),
+            MeowSegment<bool>(
+              items: const [(false, '单线程'), (true, '多线程（${SpeedTestController.multiConnections}）')],
+              value: c.multiThread,
+              onChanged: c.setMultiThread,
+              height: 38,
+              fontSize: 13,
+              onCard: true,
+            ),
+            const SizedBox(height: 12),
+            Container(height: 1, color: mm.line),
+            const SizedBox(height: 8),
+            SpeedBoardSettingRow(
+              value: c.boardConsent == true,
+              onChanged: c.setBoardConsent,
+              onInfo: () => _askBoardConsent(fromSettings: true),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _webRow(MeowTokens mm) => MeowCardMaterial(
+    borderRadius: BorderRadius.circular(18),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => globalState.openUrl(SpeedTestController.webUrl),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.public_rounded, size: 20, color: mm.accent),
+            const SizedBox(width: 10),
+            Expanded(child: Text('在浏览器打开网页测速', style: TextStyle(fontSize: 15, color: mm.t1))),
+            Icon(Icons.north_east_rounded, size: 16, color: mm.t2),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  /// 宽版右栏还没开测时，曲线那一块的说明（不然是一大块空白）。窗口矮、曲线区小时先去掉图标，再小就不写
+  Widget _chartPlaceholder(MeowTokens mm) => IgnorePointer(
+    child: LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxHeight < 48) return const SizedBox.shrink();
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (box.maxHeight >= 100) ...[
+                Icon(Icons.show_chart_rounded, size: 26, color: mm.t3),
+                const SizedBox(height: 4),
+              ],
+              Text('逐秒速率', maxLines: 1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1)),
+              const SizedBox(height: 2),
+              Text(
+                '开始测速后，下载（紫）与上传（玫红）的曲线画在这里',
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: mm.t2),
+              ),
+            ],
+          ),
+        );
+      },
+    ),
+  );
 
   Widget _label(MeowTokens mm, String text) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
@@ -351,32 +477,49 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
 /// Google / Microsoft 一排、Apple / Speedtest / Cloudflare 一排，滑块只画在选中的那一排。选中项换排时两排都重建
 /// （key 跟着变），滑块直接落在新的段上，不从那一排上一次的位置滑过来。
 class _SourcePicker extends StatelessWidget {
-  const _SourcePicker({required this.value, required this.onChanged});
+  const _SourcePicker({required this.value, required this.onChanged, this.singleRow = false});
   final SpeedTestSource value;
   final ValueChanged<SpeedTestSource> onChanged;
+
+  /// 宽版：卡片里够宽（[singleRowWidth]）就五段排成一行，省一行高度
+  final bool singleRow;
+
+  /// 一行五段时每段约 70 宽才放得下「Cloudflare」（13pt）
+  static const singleRowWidth = 380.0;
 
   static const _rows = [
     [SpeedTestSource.google, SpeedTestSource.microsoft],
     [SpeedTestSource.apple, SpeedTestSource.speedtest, SpeedTestSource.cloudflare],
   ];
 
-  @override
-  Widget build(BuildContext context) => Column(
+  Widget _segment(Key key, List<SpeedTestSource> row) => MeowSegment<SpeedTestSource>(
+    key: key,
+    items: [for (final s in row) (s, s.title)],
+    value: value,
+    onChanged: onChanged,
+    height: 38,
+    fontSize: 13,
+    onCard: true,
+  );
+
+  Widget _twoRows() => Column(
     children: [
       for (final (i, row) in _rows.indexed) ...[
         if (i > 0) const SizedBox(height: 6),
-        MeowSegment<SpeedTestSource>(
-          key: ValueKey((i, row.contains(value))),
-          items: [for (final s in row) (s, s.title)],
-          value: value,
-          onChanged: onChanged,
-          height: 38,
-          fontSize: 13,
-          onCard: true,
-        ),
+        _segment(ValueKey((i, row.contains(value))), row),
       ],
     ],
   );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!singleRow) return _twoRows();
+    return LayoutBuilder(
+      builder: (context, c) => c.maxWidth >= singleRowWidth
+          ? _segment(const ValueKey('single'), [for (final row in _rows) ...row])
+          : _twoRows(),
+    );
+  }
 }
 
 class _StartButton extends StatelessWidget {
@@ -612,9 +755,16 @@ class _LastResult extends StatelessWidget {
 
 /// 读数区（设计稿 Design/ui-redesign/speedtest-gauge-preview.html「方案 A · 指针码表」）：270° 指针码表 + 表盘下方的大号 Mbps 与阶段，
 /// 下面是延迟 / 下载 / 上传三格（带峰值）与下载 / 上传曲线。下载紫、上传玫红（同网速卡），测完阶段字是绿的。
+///
+/// [part]：整块（手机竖屏的单列）；宽版两栏拆开放——左栏码表（[SpeedTestGaugePart.dial]，按给的空间等比缩放），
+/// 右栏三格（[SpeedTestGaugePart.tiles]）与曲线（[SpeedTestGaugePart.chart]，撑满父级给的大小）。
 class SpeedTestGauge extends StatelessWidget {
-  const SpeedTestGauge({super.key, required this.progress});
+  const SpeedTestGauge({super.key, required this.progress, this.part = SpeedTestGaugePart.all});
   final SpeedTestProgress progress;
+  final SpeedTestGaugePart part;
+
+  /// 宽版码表最多放大到 1.3 倍（再大和旁边的读数不成比例）
+  static const maxDialScale = 1.3;
 
   @override
   Widget build(BuildContext context) {
@@ -643,47 +793,64 @@ class SpeedTestGauge extends StatelessWidget {
       _ => null,
     };
     final transferring = p.phase == 'download' || p.phase == 'upload';
-    return Column(
+    final dial = SpeedTestDial(
+      // 指针只在下载 / 上传时指着当前速度，其余时候回到 0（测完的平均值在数字和三格里）
+      mbps: transferring ? p.currentMbps : 0,
+      scale: speedGaugeTiers[speedGaugeTierFor(p)],
+      color: p.phase == 'upload' ? mm.accent : mm.down,
+      value: big == null ? '0' : fmtMbps(big),
+      dimmed: big == null,
+      phase: title,
+      phaseColor: tint,
+    );
+    final tiles = Row(
       children: [
-        SpeedTestDial(
-          // 指针只在下载 / 上传时指着当前速度，其余时候回到 0（测完的平均值在数字和三格里）
-          mbps: transferring ? p.currentMbps : 0,
-          scale: speedGaugeTiers[speedGaugeTierFor(p)],
-          color: p.phase == 'upload' ? mm.accent : mm.down,
-          value: big == null ? '0' : fmtMbps(big),
-          dimmed: big == null,
-          phase: title,
-          phaseColor: tint,
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _tile(mm, '延迟', p.latencyMs?.toString(), 'ms', mm.t1),
-            const SizedBox(width: 8),
-            _tile(mm, '下载', p.downloadMbps == null ? null : fmtMbps(p.downloadMbps!), 'Mbps', mm.down,
-                peak: p.downloadPeakMbps),
-            const SizedBox(width: 8),
-            _tile(mm, '上传', p.uploadMbps == null ? null : fmtMbps(p.uploadMbps!), 'Mbps', mm.accent,
-                peak: p.uploadPeakMbps, note: p.source?.hasUpload == false ? '不支持' : null),
-          ],
-        ),
-        const SizedBox(height: 10),
-        // 曲线测速时逐帧重画，单独一层：不带着码表和三格一起重画
-        RepaintBoundary(
-          child: SizedBox(
-            height: 56,
-            child: SpeedTestChart(
-              download: p.downloadSamples,
-              upload: p.uploadSamples,
-              animating: p.isRunning,
-              downColor: mm.down,
-              upColor: mm.accent,
-              baseColor: mm.line,
+        _tile(mm, '延迟', p.latencyMs?.toString(), 'ms', mm.t1),
+        const SizedBox(width: 8),
+        _tile(mm, '下载', p.downloadMbps == null ? null : fmtMbps(p.downloadMbps!), 'Mbps', mm.down,
+            peak: p.downloadPeakMbps),
+        const SizedBox(width: 8),
+        _tile(mm, '上传', p.uploadMbps == null ? null : fmtMbps(p.uploadMbps!), 'Mbps', mm.accent,
+            peak: p.uploadPeakMbps, note: p.source?.hasUpload == false ? '不支持' : null),
+      ],
+    );
+    // 曲线测速时逐帧重画，单独一层：不带着码表和三格一起重画
+    final chart = SpeedTestChart(
+      download: p.downloadSamples,
+      upload: p.uploadSamples,
+      animating: p.isRunning,
+      downColor: mm.down,
+      upColor: mm.accent,
+      baseColor: mm.line,
+    );
+    return switch (part) {
+      // 在给的空间里按 300 : 270 等比放到最大（不超过 [maxDialScale] 倍）、居中；码表自己只会缩小，放大在外面做
+      SpeedTestGaugePart.dial => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: SpeedTestDial.width * maxDialScale,
+            maxHeight: SpeedTestDial.height * maxDialScale,
+          ),
+          child: AspectRatio(
+            aspectRatio: SpeedTestDial.width / SpeedTestDial.height,
+            child: FittedBox(
+              child: SizedBox(width: SpeedTestDial.width, height: SpeedTestDial.height, child: dial),
             ),
           ),
         ),
-      ],
-    );
+      ),
+      SpeedTestGaugePart.tiles => tiles,
+      SpeedTestGaugePart.chart => RepaintBoundary(child: chart),
+      SpeedTestGaugePart.all => Column(
+        children: [
+          dial,
+          const SizedBox(height: 4),
+          tiles,
+          const SizedBox(height: 10),
+          RepaintBoundary(child: SizedBox(height: 56, child: chart)),
+        ],
+      ),
+    };
   }
 
   Widget _tile(MeowTokens mm, String title, String? value, String unit, Color tint, {double? peak, String? note}) =>
@@ -723,6 +890,9 @@ class SpeedTestGauge extends StatelessWidget {
         ),
       );
 }
+
+/// [SpeedTestGauge] 画哪一部分
+enum SpeedTestGaugePart { all, dial, tiles, chart }
 
 /// 码表各档量程（Mbps，按最大值从小到大）：每档刻度等距、段内线性（低速段看得清）。同 Speedtest 动态变——起步最大 500，
 /// 测到的速率超过当前最大值就换到下一档（1000 / 2500 / 5000 / 10000），一次测速里只升不降。同 iOS 的 `SpeedGaugeScale`。
