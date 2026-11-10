@@ -8,6 +8,7 @@ class MeshPanelStatus {
     this.message = '',
     this.controlUrl = '',
     this.magicDns = '',
+    this.joinedAdmin = '',
   });
 
   final bool available;
@@ -20,6 +21,10 @@ class MeshPanelStatus {
   final String controlUrl;
   final String magicDns;
 
+  /// 加入了哪位管理员的喵窝（用户名）：与他、以及加入他的其它账号在同一网络，设备与站点双向互通。
+  /// 空 = 独立喵窝（老主控不发这个字段）
+  final String joinedAdmin;
+
   static MeshPanelStatus parse(Map<String, dynamic> r) {
     final err = r['error']?.toString() ?? '';
     if (err.isNotEmpty && r['available'] == null) throw PanelException(err);
@@ -30,13 +35,22 @@ class MeshPanelStatus {
       message: r['message']?.toString() ?? '',
       controlUrl: r['control_url']?.toString() ?? '',
       magicDns: r['magic_dns']?.toString() ?? '',
+      joinedAdmin: (r['joined_admin']?.toString() ?? '').trim(),
     );
   }
 }
 
-/// 主控里的一台设备（`mesh/devices` 的 devices[]）。
+/// 主控里的一台设备（`mesh/devices` 的 devices[]，以及同网络里别人的设备 shared_devices[]）。
 class MeshDevice {
-  const MeshDevice({required this.id, required this.name, this.ipv4 = '', this.online = false, this.lastSeen, this.routes = const []});
+  const MeshDevice({
+    required this.id,
+    required this.name,
+    this.ipv4 = '',
+    this.online = false,
+    this.lastSeen,
+    this.routes = const [],
+    this.username = '',
+  });
 
   final int id;
   final String name;
@@ -46,6 +60,9 @@ class MeshDevice {
 
   /// 这台发布并已批准的网段（OpenWrt）
   final List<String> routes;
+
+  /// 设备主人（只有 shared_devices 带：同网络里别人的设备）
+  final String username;
 
   static MeshDevice? parse(Object? o) {
     if (o is! Map) return null;
@@ -60,6 +77,7 @@ class MeshDevice {
       // Headscale 没见过的设备给的是零值时间（0001-01-01）
       lastSeen: seen == null || seen.year < 2000 ? null : seen,
       routes: [for (final r in (o['routes'] is List ? o['routes'] as List : const [])) r.toString()],
+      username: o['username']?.toString() ?? '',
     );
   }
 }
@@ -92,10 +110,14 @@ class MeshSite {
 
 /// `mesh/devices` 的应答。
 class MeshDeviceList {
-  const MeshDeviceList({this.devices = const [], this.sites = const [], this.complete = true});
+  const MeshDeviceList({this.devices = const [], this.sites = const [], this.sharedDevices = const [], this.complete = true});
 
   final List<MeshDevice> devices;
   final List<MeshSite> sites;
+
+  /// 同网络里别人的设备（加入了某位管理员的喵窝时；管理员本人这里是加入他的人的设备）。只读：
+  /// 主控对它们的改名 / 删除回 404。独立喵窝 / 老主控没有这个字段 = 空
+  final List<MeshDevice> sharedDevices;
 
   /// 主控完整给出了设备列表（Headscale 出错时主控仍回站点、设备不全，带 error）
   final bool complete;
@@ -107,6 +129,7 @@ class MeshDeviceList {
     return MeshDeviceList(
       devices: [for (final d in (r['devices'] is List ? r['devices'] as List : const [])) ?MeshDevice.parse(d)],
       sites: [for (final s in (r['sites'] is List ? r['sites'] as List : const [])) ?MeshSite.parse(s)],
+      sharedDevices: [for (final d in (r['shared_devices'] is List ? r['shared_devices'] as List : const [])) ?MeshDevice.parse(d)],
       complete: err.isEmpty,
     );
   }

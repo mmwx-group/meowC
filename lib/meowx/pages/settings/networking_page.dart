@@ -248,6 +248,7 @@ class MeshDetails extends ConsumerWidget {
                 ],
               ),
             ),
+            if (state.joinedAdmin.isNotEmpty) MeRow(label: '已加入 ${state.joinedAdmin} 的$name'),
             if (state.selfAddress(mesh.nodeId) case final ip when ip.isNotEmpty)
               MeRow(label: '本机地址', value: ip, mono: true, onTap: () => _copy(ip)),
             const MeshHostnameRow(),
@@ -261,6 +262,18 @@ class MeshDetails extends ConsumerWidget {
             children: [
               for (final d in state.devices)
                 _DeviceRow(device: d, isSelf: d.id == self?.id, selfOnline: phase == MeshPhase.connected, path: state.pathOf(d)),
+            ],
+          ),
+        ],
+        // 同网络里别人的设备（加入了管理员的喵窝时）：只读，点按复制地址，不给改名 / 删除
+        if (state.sharedDevices.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          MeSection(
+            title: '同网络的设备',
+            note: '点按复制地址',
+            children: [
+              for (final d in state.sharedDevices)
+                _DeviceRow(device: d, isSelf: false, selfOnline: false, path: state.pathOf(d), showOwner: true),
             ],
           ),
         ],
@@ -415,10 +428,13 @@ void _copy(String text) {
 
 /// 一台设备：在线时写内核看到的路径（直连 / 中继 · 区域，拿不到内核状态时只写「在线」），离线写离线多久。
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({required this.device, required this.isSelf, required this.selfOnline, this.path});
+  const _DeviceRow({required this.device, required this.isSelf, required this.selfOnline, this.path, this.showOwner = false});
   final MeshDevice device;
   final bool isSelf;
   final bool selfOnline;
+
+  /// 副标题末尾写设备主人（同网络里别人的设备）
+  final bool showOwner;
 
   /// 内核里这台对端的状态（直连地址 / 中继）
   final TsPeer? path;
@@ -436,7 +452,11 @@ class _DeviceRow extends StatelessWidget {
     return MeRow(
       leading: StatusDot(color: online ? mm.good : mm.t3),
       label: '${device.name}${isSelf ? '（本机）' : ''}',
-      subtitle: [if (device.ipv4.isNotEmpty) device.ipv4, ...device.routes].join(' · '),
+      subtitle: [
+        if (device.ipv4.isNotEmpty) device.ipv4,
+        ...device.routes,
+        if (showOwner && device.username.isNotEmpty) '属于 ${device.username}',
+      ].join(' · '),
       value: value.isEmpty ? null : value,
       onTap: device.ipv4.isEmpty ? null : () => _copy(device.ipv4),
     );

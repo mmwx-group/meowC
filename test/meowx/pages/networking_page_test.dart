@@ -9,6 +9,7 @@ import 'package:bett_box/meowx/state/tailscale_status.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -198,6 +199,114 @@ void main() {
     expect(find.text('退出喵窝'), findsOneWidget);
   });
 
+  testWidgets('组网页：加入了管理员的喵窝时多一行「已加入」与「同网络的设备」（只读、点按复制地址、写主人）', (tester) async {
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await _pump(
+      tester,
+      const NetworkingPage(),
+      size: const Size(412, 2000),
+      running: true,
+      meow: const MeowSettings(
+        account: _admin,
+        tailscaleNodes: false,
+        mesh: MeowMesh(enabled: true, controlUrl: 'https://x', hostname: 'pixel-8', nodeId: 7, panelReason: ''),
+      ),
+      mesh: MeshState(
+        availability: MeshAvailability.available,
+        joinedAdmin: 'boss',
+        devices: _devices,
+        sharedDevices: [
+          const MeshDevice(id: 21, name: 'boss-nas', ipv4: '100.64.0.21', online: true, username: 'boss', routes: ['192.168.9.0/24']),
+          MeshDevice(
+            id: 22,
+            name: 'carol-mac',
+            ipv4: '100.64.0.22',
+            lastSeen: DateTime.now().subtract(const Duration(hours: 3)),
+            username: 'carol',
+          ),
+        ],
+        devicesComplete: true,
+        devicesAt: DateTime.now(),
+        stateNodeId: 7,
+        stateNodeIdAt: DateTime.now(),
+      ),
+    );
+    expect(find.text('已加入 boss 的喵窝'), findsOneWidget);
+    expect(find.text('我的设备'), findsOneWidget);
+    expect(find.text('同网络的设备'), findsOneWidget);
+    // 在线台数只算我的设备（openwrt），别人的 boss-nas 不算
+    expect(find.text('已连接 · 1 台在线'), findsOneWidget);
+    expect(find.text('boss-nas'), findsOneWidget);
+    expect(find.text('100.64.0.21 · 192.168.9.0/24 · 属于 boss'), findsOneWidget);
+    expect(find.text('100.64.0.22 · 属于 carol'), findsOneWidget);
+    expect(find.text('离线 · 3 小时前'), findsOneWidget);
+    // 同网络设备的行没有任何操作入口（没有箭头 / 按钮 / 开关），点按只复制地址
+    final row = find.ancestor(of: find.text('boss-nas'), matching: find.byType(MeRow));
+    expect(tester.widget<MeRow>(row).trailing, isNull);
+    expect(tester.widget<MeRow>(row).chevron, isFalse);
+    for (final type in [IconButton, TextButton, FilledButton, PopupMenuButton, Switch]) {
+      expect(find.descendant(of: row, matching: find.byType(type)), findsNothing);
+    }
+    await tester.tap(find.text('boss-nas'));
+    await tester.pump();
+    expect(copied, ['100.64.0.21']);
+    expect(find.text('删除'), findsNothing);
+    expect(find.text('改名'), findsNothing);
+  });
+
+  testWidgets('组网页（宽屏）：同样有「已加入」与「同网络的设备」', (tester) async {
+    await _pump(
+      tester,
+      const NetworkingPage(),
+      size: const Size(1280, 1400),
+      running: true,
+      meow: const MeowSettings(
+        account: _admin,
+        tailscaleNodes: false,
+        mesh: MeowMesh(enabled: true, controlUrl: 'https://x', hostname: 'pixel-8', nodeId: 7, panelReason: ''),
+      ),
+      mesh: MeshState(
+        availability: MeshAvailability.available,
+        joinedAdmin: 'boss',
+        devices: _devices,
+        sharedDevices: const [MeshDevice(id: 21, name: 'boss-nas', ipv4: '100.64.0.21', online: true, username: 'boss')],
+        devicesComplete: true,
+        devicesAt: DateTime.now(),
+        stateNodeId: 7,
+      ),
+    );
+    expect(find.text('已加入 boss 的喵窝'), findsOneWidget);
+    expect(find.text('同网络的设备'), findsOneWidget);
+    expect(find.text('100.64.0.21 · 属于 boss'), findsOneWidget);
+  });
+
+  testWidgets('组网页：独立喵窝（老主控）不显示「已加入」与「同网络的设备」', (tester) async {
+    await _pump(
+      tester,
+      const NetworkingPage(),
+      meow: const MeowSettings(
+        account: _admin,
+        tailscaleNodes: false,
+        mesh: MeowMesh(enabled: true, controlUrl: 'https://x', hostname: 'pixel-8', nodeId: 7, panelReason: ''),
+      ),
+      mesh: MeshState(
+        availability: MeshAvailability.available,
+        devices: _devices,
+        devicesComplete: true,
+        devicesAt: DateTime.now(),
+        stateNodeId: 7,
+      ),
+    );
+    expect(find.text('我的设备'), findsOneWidget);
+    expect(find.textContaining('已加入'), findsNothing);
+    expect(find.text('同网络的设备'), findsNothing);
+  });
+
   testWidgets('组网页：没开喵窝也能先改设备名——显示自动名、编辑时预览 DNS 名、不合法不保存、留空恢复自动名', (tester) async {
     await _pump(tester, const NetworkingPage(), mesh: const MeshState(availability: MeshAvailability.available, magicDns: 'home.example'));
     await tester.pump();
@@ -277,6 +386,30 @@ void main() {
     expect(find.text('已连接 · 1 台在线'), findsOneWidget);
     expect(find.text('100.64.0.7'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+  });
+
+  testWidgets('首页喵窝卡：同网络别人的设备不算进在线台数', (tester) async {
+    await _pump(
+      tester,
+      const HomeMeshCard(),
+      running: true,
+      meow: const MeowSettings(
+        account: _admin,
+        mesh: MeowMesh(enabled: true, controlUrl: 'https://x', nodeId: 7, panelReason: ''),
+      ),
+      mesh: const MeshState(
+        availability: MeshAvailability.available,
+        joinedAdmin: 'boss',
+        devices: _devices,
+        sharedDevices: [
+          MeshDevice(id: 21, name: 'boss-nas', ipv4: '100.64.0.21', online: true, username: 'boss'),
+          MeshDevice(id: 22, name: 'boss-pc', ipv4: '100.64.0.22', online: true, username: 'boss'),
+        ],
+        stateNodeId: 7,
+      ),
+    );
+    expect(find.text('已连接 · 1 台在线'), findsOneWidget);
+    expect(find.text('boss-nas'), findsNothing);
   });
 
   testWidgets('首页喵窝卡：关着时打开 = 切到喵窝', (tester) async {

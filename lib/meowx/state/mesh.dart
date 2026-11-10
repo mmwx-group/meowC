@@ -194,6 +194,8 @@ class MeshState {
     this.magicDns = '',
     this.devices = const [],
     this.sites = const [],
+    this.joinedAdmin = '',
+    this.sharedDevices = const [],
     this.devicesComplete = false,
     this.devicesAt,
     this.stateNodeId,
@@ -214,6 +216,12 @@ class MeshState {
   final String magicDns;
   final List<MeshDevice> devices;
   final List<MeshSite> sites;
+
+  /// 加入了哪位管理员的喵窝（主控 `mesh/status` 的 joined_admin；空 = 独立喵窝 / 老主控）
+  final String joinedAdmin;
+
+  /// 同网络里别人的设备（主控 `mesh/devices` 的 shared_devices）：只读显示，不算进「我的设备」与在线台数
+  final List<MeshDevice> sharedDevices;
 
   /// 设备列表是主控完整给出的（Headscale 出错时主控只回一部分，不能据此判断「这台设备被删了」）
   final bool devicesComplete;
@@ -248,7 +256,7 @@ class MeshState {
     return null;
   }
 
-  /// 除本机外在线的设备数
+  /// 除本机外在线的「我的设备」数（同网络里别人的设备 [sharedDevices] 不算）；主控设备列表还没拿到时退回内核里的在线对端数
   int onlineOthers(int? fallbackId) {
     final self = selfDevice(fallbackId);
     if (devices.isEmpty && engine != null) return engine!.peers.where((p) => p.online).length;
@@ -279,6 +287,8 @@ class MeshState {
     String? magicDns,
     List<MeshDevice>? devices,
     List<MeshSite>? sites,
+    String? joinedAdmin,
+    List<MeshDevice>? sharedDevices,
     bool? devicesComplete,
     DateTime? devicesAt,
     int? stateNodeId,
@@ -298,6 +308,8 @@ class MeshState {
     magicDns: magicDns ?? this.magicDns,
     devices: devices ?? this.devices,
     sites: sites ?? this.sites,
+    joinedAdmin: joinedAdmin ?? this.joinedAdmin,
+    sharedDevices: sharedDevices ?? this.sharedDevices,
     devicesComplete: devicesComplete ?? this.devicesComplete,
     devicesAt: devicesAt ?? this.devicesAt,
     stateNodeId: clearStateNodeId ? null : (stateNodeId ?? this.stateNodeId),
@@ -451,12 +463,19 @@ class MeshController extends Notifier<MeshState> {
         message: meshReasonText(status.reason, status.message),
         devices: const [],
         sites: const [],
+        joinedAdmin: '',
+        sharedDevices: const [],
         devicesComplete: false,
       );
       _updateMesh((m) => m.copyWith(panelReason: status.reason, panelMessage: status.message));
       return;
     }
-    state = state.copyWith(availability: MeshAvailability.available, message: '', magicDns: status.magicDns);
+    state = state.copyWith(
+      availability: MeshAvailability.available,
+      message: '',
+      magicDns: status.magicDns,
+      joinedAdmin: status.joinedAdmin,
+    );
     final before = _mesh;
     _updateMesh(
       (m) => m.copyWith(
@@ -488,6 +507,7 @@ class MeshController extends Notifier<MeshState> {
       clearPanelError: true,
       devices: list.devices,
       sites: list.sites,
+      sharedDevices: list.sharedDevices,
       devicesComplete: list.complete,
       devicesAt: DateTime.now(),
     );
