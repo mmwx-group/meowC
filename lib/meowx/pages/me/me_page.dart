@@ -10,6 +10,7 @@ import '../../state/connection.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../state/wifi_switch.dart';
+import '../../theme/balanced_columns.dart';
 import '../../theme/glass_card.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
@@ -30,7 +31,7 @@ import 'subscriptions_card.dart';
 
 /// 「我的」（原「配置」+「设置」两页）：账户 → 订阅 → 设置。
 /// 手机：一页可滚，设置收成入口行，每行从底部升起一张设置卡片（设计稿 AMe；卡片见 me_sheet.dart）。
-/// 宽屏：三列铺开——账户 + 订阅 | 设置分组 | 设置分组（设计稿 WSettings）；平台专属分组用粉色标题。
+/// 宽屏：三列铺开——账户 + 订阅 | 设置分组 | 设置分组（设计稿 WSettings），分组按高度连续切到三列（账户 + 订阅下面也接）；平台专属分组用粉色标题。
 class MePage extends ConsumerStatefulWidget {
   const MePage({super.key});
 
@@ -101,7 +102,7 @@ class _MePageState extends ConsumerState<MePage> {
 
     const proxy = MeSection(title: '代理与测速', children: [ProxyRows()]);
     final traffic = MeSection(title: '流量控制', children: [TrafficRows(showProxyApps: system.isAndroid)]);
-    final platform = <Widget>[
+    final platform = <MeSection>[
       if (isDesktopUi) ...const [
         MeSection(title: '启动与窗口', note: '关闭按钮 = 收到托盘', accent: true, children: [StartupRows()]),
         MeSection(title: '接管方式', accent: true, children: [TakeoverRows()]),
@@ -112,7 +113,7 @@ class _MePageState extends ConsumerState<MePage> {
         MeSection(title: 'Wi-Fi 智能开关', accent: true, children: [WifiSwitchRows()]),
       ],
     ];
-    final rest = <Widget>[
+    final rest = <MeSection>[
       // 组网（喵窝 / Tailscale 三选一）：管理员账号、订阅里有组网节点或开着一个时才列
       if (ref.watch(networkingEntryVisibleProvider)) const MeSection(title: '组网', children: [NetworkingRow()]),
       const MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
@@ -120,18 +121,9 @@ class _MePageState extends ConsumerState<MePage> {
       const MeSection(title: '辅助功能 · $whitelistGroupTitle', info: whitelistInfo, children: [AssistRows()]),
       const MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
     ];
-    // Windows：第 2 列全是专属分组，通用分组都在第 3 列；平板没有那么多专属项，通用分组两列对半分
-    final colA = isDesktopUi ? platform : [proxy, traffic, ...platform];
-    final colB = isDesktopUi ? [proxy, traffic, ...rest] : rest;
-    Widget column(List<Widget> groups) => MeDense(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (final (i, g) in groups.indexed) ...[if (i > 0) const SizedBox(height: 10), g],
-        ],
-      ),
-    );
-
+    // 顺序：Windows / Linux 平台专属分组在前（同以前的第 2 列），平板没有那么多专属项、排在通用的「代理 / 流量」后面；
+    // 整串按实际高度连续切成三段（接在账户 + 订阅下面 / 第 2 列 / 第 3 列），见 BalancedColumns
+    final sections = isDesktopUi ? [...platform, proxy, traffic, ...rest] : [proxy, traffic, ...platform, ...rest];
     return Padding(
       padding: widePagePadding().copyWith(bottom: 0),
       // 窗口再宽内容也不跟着拉长（开关离标题太远）；靠左，标题与其它页对齐
@@ -156,26 +148,18 @@ class _MePageState extends ConsumerState<MePage> {
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.only(bottom: 16),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 292,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            account,
-                            const SizedBox(height: 12),
-                            subs,
-                            if (errorStrip != null) ...[const SizedBox(height: 12), errorStrip],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(child: column(colA)),
-                      const SizedBox(width: 12),
-                      Expanded(child: column(colB)),
-                    ],
+                  child: BalancedColumns(
+                    lead: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        account,
+                        const SizedBox(height: 12),
+                        subs,
+                        if (errorStrip != null) ...[const SizedBox(height: 12), errorStrip],
+                      ],
+                    ),
+                    // 按标题认分组：「组网」时有时无，不带 key 的话后面各组的状态会错位
+                    sections: [for (final s in sections) MeDense(key: ValueKey(s.title), child: s)],
                   ),
                 ),
               ),

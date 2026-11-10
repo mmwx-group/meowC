@@ -1,10 +1,12 @@
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
+import 'package:bett_box/meowx/pages/me/account_card.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
 import 'package:bett_box/meowx/pages/me/me_page.dart';
 import 'package:bett_box/meowx/pages/me/me_sheet.dart';
 import 'package:bett_box/meowx/pages/me/platform_rows.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
+import 'package:bett_box/meowx/pages/me/subscriptions_card.dart';
 import 'package:bett_box/meowx/pages/settings/akile_nodes_page.dart';
 import 'package:bett_box/meowx/pages/settings/assist_page.dart';
 import 'package:bett_box/meowx/pages/settings/overrides_pages.dart';
@@ -595,6 +597,45 @@ void main() {
       for (final label in ['DNS 模式', '测速方式', '测速地址', '阻止 QUIC', '代理推送服务', 'DNS 劫持', '绕过代理', '端口', '允许局域网', '用户名', '密码', '订阅同步间隔', 'po0 加白', 'GGY 加白', 'AkileCDN 白名单', 'AkileCDN 节点', '主题', '记录日志', '版本', '检查更新', '开源许可']) {
         expect(find.text(label), findsOneWidget, reason: '$label @ $size');
       }
+    }
+  });
+
+  testWidgets('宽屏三列高度均衡（#1772）：分组按原顺序接在账户 + 订阅下面 / 第 2 列 / 第 3 列，三列底边相差不到一个分组', (tester) async {
+    await _pump(
+      tester,
+      const MePage(),
+      size: const Size(1500, 1000),
+      textScale: 1,
+      overrides: _overrides(
+        wide: true,
+        twoPane: true,
+        meow: const MeowSettings(account: _account),
+        profiles: [_main, _backup, _direct],
+        current: 'p1',
+        remote: _remote,
+      ),
+    );
+    final sections = find.byType(MeSection);
+    final titles = [for (final e in sections.evaluate()) (e.widget as MeSection).title];
+    expect(titles, containsAllInOrder(['代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观 · 关于']));
+
+    // 各列底边：第 1 列从账户卡算起
+    final lead = tester.getRect(find.byType(AccountCard));
+    final bottoms = <double, double>{lead.left: tester.getRect(find.byType(SubscriptionsCard)).bottom};
+    final rects = [for (var i = 0; i < titles.length; i++) tester.getRect(sections.at(i))];
+    for (final r in rects) {
+      bottoms[r.left] = bottoms[r.left] == null || r.bottom > bottoms[r.left]! ? r.bottom : bottoms[r.left]!;
+    }
+    expect(bottoms.length, 3, reason: '三列都有内容：$bottoms');
+    final tallest = bottoms.values.reduce((a, b) => a > b ? a : b);
+    final shortest = bottoms.values.reduce((a, b) => a < b ? a : b);
+    final smallestSection = rects.map((r) => r.height).reduce((a, b) => a < b ? a : b);
+    expect(tallest - shortest, lessThan(smallestSection), reason: '$bottoms');
+
+    // 读的顺序不变：同一列里从上往下、换列往右
+    for (var i = 1; i < rects.length; i++) {
+      final (a, b) = (rects[i - 1], rects[i]);
+      expect(b.left > a.left || (b.left == a.left && b.top > a.top), isTrue, reason: '${titles[i - 1]} → ${titles[i]}');
     }
   });
 
