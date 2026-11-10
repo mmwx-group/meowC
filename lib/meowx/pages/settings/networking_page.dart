@@ -288,7 +288,10 @@ class MeshDetails extends ConsumerWidget {
           const SizedBox(height: 12),
           const _LeaveButton(),
         ],
-        MeCaption('$name由主控提供：同一账号的设备互相访问，OpenWrt 开放的局域网（家里的 NAS、路由器后台）在外面也能直接打开。设备之间端到端加密，主控与中继看不到内容。'),
+        // 加入了别人的喵窝时，互通的不只是本账号的设备，对方也能访问这边开放的局域网
+        MeCaption(state.joinedAdmin.isNotEmpty
+            ? '已加入 ${state.joinedAdmin} 的$name：你的设备与同一网络里其他人的设备互相访问，各自开放的局域网（家里的 NAS、路由器后台）对方也能直接打开。设备之间端到端加密，主控与中继看不到内容。'
+            : '$name由主控提供：同一账号的设备互相访问，OpenWrt 开放的局域网（家里的 NAS、路由器后台）在外面也能直接打开。设备之间端到端加密，主控与中继看不到内容。'),
       ],
     );
   }
