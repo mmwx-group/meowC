@@ -16,10 +16,8 @@ import '../pages/dashboard/dashboard_page.dart';
 import '../pages/me/me_page.dart';
 import '../pages/me/me_sheet.dart';
 import '../pages/proxies/proxies_page.dart';
-import '../panel/account.dart';
 import '../panel/client.dart';
 import '../panel/po0.dart';
-import '../panel/realtime.dart';
 import '../state/akile_reporter.dart';
 import '../state/battery_prompt.dart';
 import '../state/connection.dart';
@@ -28,6 +26,7 @@ import '../state/home_widget.dart';
 import '../state/mesh.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
+import '../state/realtime_sync.dart';
 import '../state/status.dart';
 import '../state/wifi_switch.dart';
 import '../theme/haptics.dart';
@@ -53,13 +52,11 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<PageLabel> _pageSub;
   late final ProviderSubscription<String?> _profileSub;
   late final ProviderSubscription<bool> _initSub;
-  late final ProviderSubscription<(String, String, bool)> _realtimeSub;
   late final ProviderSubscription<(String, bool, String, bool)> _po0Sub;
   late final ProviderSubscription<(bool, String, bool)> _ggySub;
   late final ProviderSubscription<(bool, String, String, bool)> _akileSub;
   late final ProviderSubscription<bool> _batterySub;
   final List<ProviderSubscription<Object?>> _wifiSubs = [];
-  RealtimeClient? _realtime;
   /// 安卓桌面小组件的数据同步（只 Android，见 state/home_widget.dart）
   late final HomeWidgetSync _homeWidget = HomeWidgetSync(ref);
 
@@ -75,14 +72,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     }
     // 测速成功 / 失败的震动要看安卓版本（API 30 以下没有那两种，见 MeowHaptics.androidSdk）
     if (system.isAndroid) MeowHaptics.androidSdk = globalState.appState.version;
-    _realtimeSub = ref.listenManual(
-      Provider<(String, String, bool)>((r) {
-        final a = r.watch(meowSettingProvider.select((s) => s.account));
-        return (a.host, a.token, r.watch(isRunningProvider));
-      }),
-      (prev, next) => _syncRealtime(next),
-      fireImmediately: true,
-    );
+    // 主控实时通道（入口即时切换 + 订阅自动更新）：通道在内核里，这里建出 Dart 一侧的同步（要连哪些主控、订阅待更新队列）
+    ref.read(realtimeSyncProvider);
     // po0 加白：以设置开关为准。开着 → 启动（核心 init 完）/ 登录后拉列表并立刻上报；开关刚打开、登录 / 登出、
     // 自定义条目增删时无视去重立刻报（直连规则随之更新）。关掉 → 停表清空；没登录时只报自己添加的，一条都没有才停
     _po0Sub = ref.listenManual(
@@ -258,7 +249,6 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _pageSub.close();
     _profileSub.close();
     _initSub.close();
-    _realtimeSub.close();
     _po0Sub.close();
     _ggySub.close();
     _akileSub.close();
@@ -266,33 +256,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     for (final sub in _wifiSubs) {
       sub.close();
     }
-    _realtime?.stop();
     _homeWidget.stop();
     super.dispose();
-  }
-
-  void _syncRealtime((String, String, bool) state) {
-    final (host, token, running) = state;
-    final want = host.isNotEmpty && token.isNotEmpty && running;
-    if (!want) {
-      _realtime?.stop();
-      _realtime = null;
-      return;
-    }
-    if (_realtime != null && _realtime!.token == token && _realtime!.client.base == PanelClient(host).base) return;
-    _realtime?.stop();
-    _realtime = RealtimeClient(
-      client: ref.read(panelClientProvider) ?? PanelClient(host),
-      token: token,
-      onEvent: (type, _) {
-        if (type != 'subscription_changed') return;
-        final current = ref.read(currentProfileProvider);
-        if (current != null && current.url.isNotEmpty) {
-          globalState.appController.updateProfile(current);
-        }
-        ref.read(accountActionsProvider).refreshSubscriptions();
-      },
-    )..start();
   }
 
   void _pushBettboxPage(PageLabel label) {

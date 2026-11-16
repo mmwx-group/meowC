@@ -13,6 +13,9 @@ class ClashMessage {
   ClashMessage._() {
     controller.stream.listen((message) {
       if (message.isEmpty) return;
+      // MeowX：MeowX 自己的消息（meowSubChanged 等，见 core/meow_realtime.go）由 lib/meowx 直接听 controller.stream，
+      // 不进 AppMessageType（加枚举要改生成文件，旧枚举遇到不认识的类型会抛错）
+      if (message['type'] is String && (message['type'] as String).startsWith('meow')) return;
       final m = AppMessage.fromJson(message);
       for (final AppMessageListener listener in _listeners) {
         switch (m.type) {

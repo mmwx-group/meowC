@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:bett_box/clash/core.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/meowx/config/subscription_headers.dart';
+import 'package:bett_box/meowx/config/subscription_meta.dart';
+import 'package:bett_box/meowx/state/subscription_meta_store.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -196,10 +198,11 @@ extension ProfileExtension on Profile {
     return (await file.lastModified()).microsecondsSinceEpoch;
   }
 
-  Future<Profile> update({bool validate = true}) async {
+  /// MeowX：[requestHeaders] 是额外的请求头（主控推送触发的重拉带 `mmwx-refresh: push`）。
+  Future<Profile> update({bool validate = true, Map<String, String>? requestHeaders}) async {
     // MeowX：回的是通用订阅（分享链接）就换 clash.meta 的 UA 再要一次，见 fetchClashSubscription
     final response = await fetchClashSubscription(
-      (ua) => request.getFileResponseForUrl(url, userAgent: ua),
+      (ua) => request.getFileResponseForUrl(url, userAgent: ua, extraHeaders: requestHeaders),
       (r) => r.data as List<int>,
     );
     final disposition = response.headers['content-disposition']?.firstOrNull;
@@ -207,11 +210,18 @@ extension ProfileExtension on Profile {
     // MeowX：妙妙屋X 主控还会给 profile-title（可 base64:）与 profile-update-interval（小时）
     final title = subscriptionTitle(response.headers['profile-title']?.firstOrNull);
     final interval = response.headers['profile-update-interval']?.firstOrNull;
-    return await copyWith(
+    final saved = await copyWith(
       label: label ?? title ?? utils.getFileNameForDisposition(disposition) ?? _hostLabel(url) ?? '订阅',
       autoUpdateDuration: interval == null ? autoUpdateDuration : subscriptionUpdateInterval(interval),
       subscriptionInfo: SubscriptionInfo.formHString(userinfo),
     ).saveFile(response.data, validate: validate);
+    // MeowX：内容写好了再记下主控给的订阅键 / rev / 实时通道凭证（mmwx-* 应答头，没有就记空），
+    // 订阅自动更新与只读实时通道靠它们（见 lib/meowx/state/realtime_sync.dart）
+    await subscriptionMetaStore.record(
+      saved.id,
+      SubscriptionMeta.fromHeaders(url, (name) => response.headers[name]?.firstOrNull, now: DateTime.now().millisecondsSinceEpoch),
+    );
+    return saved;
   }
 
   Future<Profile> saveFile(Uint8List bytes, {bool validate = true}) async {

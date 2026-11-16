@@ -66,6 +66,7 @@ func handleStartListener() bool {
 	isRunning = true
 	updateListeners()
 	resolver.ResetConnection()
+	meowRealtimeSetRunning(true) // MeowX：主控实时通道跟着代理起停（见 meow_realtime.go）
 	return true
 }
 
@@ -74,6 +75,7 @@ func handleStopListener() bool {
 	defer runLock.Unlock()
 	isRunning = false
 	listener.StopListener()
+	meowRealtimeSetRunning(false) // MeowX：见 meow_realtime.go
 	return true
 }
 

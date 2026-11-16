@@ -277,6 +277,9 @@ enum ActionMethod {
   /// MeowX：AkileCDN 白名单（查规则 / 一轮上报：直连查出口 IPv4、PUT 入口白名单），见 core/meow_akile.go
   meowAkile,
 
+  /// MeowX：主控实时通道（入口即时切换 + 订阅自动更新：配置通道、入口覆盖表、待更新队列），见 core/meow_realtime.go
+  meowRealtime,
+
   ///Android,
   setState,
   startTun,

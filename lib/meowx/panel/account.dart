@@ -11,6 +11,7 @@ import '../config/direct_profile.dart';
 import '../state/mesh.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
+import '../state/realtime_sync.dart';
 import 'client.dart';
 import 'models.dart';
 import 'node_match.dart';
@@ -152,6 +153,8 @@ class AccountActions {
         await globalState.appController.deleteProfile(p.id);
       }
     }
+    // 主控指定的入口（入口即时切换）跟着登录走：清掉，回到 DNS
+    await clearPanelEntriesOnLogout(ref, _account.host);
     _update((a) => a.copyWith(token: '', nickname: '', avatarUrl: ''));
     _clearAccountData();
     // 喵窝跟着账号走：关掉（设备留在主控里，换回这个账号再打开直接上线）；登录过期不关（登记过的设备不靠登录）

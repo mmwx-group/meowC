@@ -1,180 +1,173 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:bett_box/common/common.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:web_socket_channel/io.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import '../config/subscription_meta.dart';
+import '../state/format.dart';
 
-import 'client.dart';
-import 'crypto.dart';
+// 主控实时通道（入口即时切换 + 订阅自动更新，规格 MeowX 仓库 Design/entry-realtime.md）现在在 Go 内核里
+// （core/Clash.Meta 的 component/panelrt；桥层 core/meow_realtime.go），这里只是 Dart 一侧的调用与回包解析：
+// 以前 Dart 自己连 `/api/secure/ws`，安卓上界面一收通道就断，入口切换也到不了内核；
+// 同一主控两条连接（Dart 一条、内核一条）还会多占主控每个用户 16 条的名额，所以 Dart 这条整个去掉了。
 
-/// 断线重连的退避：连续失败依次等 5 → 10 → 20 → 40 秒，之后封顶 60 秒。
-/// 主控连不上（没网、被拦）或鉴权被拒时，原来固定 5 秒一次的重连会一直空转（每次一轮握手、唤醒一次射频）。
-/// 一条连接稳住 [stableAfter] 以上才算「连上过」并复位——鉴权被拒时主控是握手成功后立刻关，那种不能算。
-class ReconnectBackoff {
-  static const stableAfter = Duration(seconds: 30);
-  static const _maxSeconds = 60;
+/// 核心 `meowRealtime` 动作（参数 → 回包 JSON）。
+typedef RealtimeSend = Future<String> Function(Map<String, Object?> params);
 
-  int _failures = 0;
+/// 内核通道的各个操作。[send] 在 App 里是 `clashCore.clashInterface.invoke(meowRealtime)`，测试里换掉。
+class CoreRealtime {
+  const CoreRealtime(this.send);
 
-  /// 一条连接断开（或压根没连上）之后调用，返回下次重连前等多久。[uptime] 是它活了多久，没连上传 null。
-  Duration next({Duration? uptime}) {
-    if (uptime != null && uptime >= stableAfter) _failures = 0;
-    final seconds = 5 << (_failures < 4 ? _failures : 4);
-    _failures++;
-    return Duration(seconds: seconds > _maxSeconds ? _maxSeconds : seconds);
-  }
+  final RealtimeSend send;
 
-  /// 网络变了：之前的失败不再说明问题，从头退避。
-  void reset() => _failures = 0;
-}
-
-/// 主控实时通道 `wss://host/api/secure/ws`：
-/// 帧 1 明文 ePub(32B)；帧 2 加密 `{ts, nonce, token?}`；此后每帧 `counter‖ct‖tag`；55s 加密 ping；
-/// 断线按 [ReconnectBackoff] 退避重连，网络变化时立刻重连。
-class RealtimeClient {
-  RealtimeClient({
-    required this.client,
-    required this.token,
-    required this.onEvent,
-    @visibleForTesting Stream<Object?>? networkChanges,
-  }) : _networkChanges = networkChanges;
-
-  /// 加密 ping 的间隔。主控对这条通道的空闲窗口是 70 秒（appWSIdleWindow），必须小于它，
-  /// 留出余量给迟到的定时器（后台 / 息屏时会迟到）。原来是 25 秒，多出来的只是射频唤醒。
-  static const pingInterval = Duration(seconds: 55);
-
-  final PanelClient client;
-  final String token;
-  final void Function(String type, Map<String, dynamic> json) onEvent;
-
-  WebSocketChannel? _channel;
-  SecureSession? _session;
-  Timer? _ping, _reconnect;
-  bool _running = false;
-  final _backoff = ReconnectBackoff();
-  DateTime? _connectedAt;
-  StreamSubscription<Object?>? _networkSub;
-
-  /// 网络变化事件的来源；测试注入，平时是 connectivity_plus。
-  final Stream<Object?>? _networkChanges;
-
-  bool get isRunning => _running;
-
-  void start() {
-    if (_running) return;
-    _running = true;
-    // 网络变了（换 Wi-Fi / 蜂窝、恢复联网）不等完退避：正等着重连的话立刻连，退避从头算
-    _networkSub = (_networkChanges ?? Connectivity().onConnectivityChanged).listen((_) => _onNetworkChanged(), onError: (_) {});
-    unawaited(_connect());
-  }
-
-  void _onNetworkChanged() {
-    if (!_running) return;
-    // 退避无条件复位：重连定时器刚触发、握手还在途中时（_reconnect 已是 null）也算，
-    // 否则旧网络上那次握手失败后还接着按涨上去的间隔排（最长 60 秒）。
-    _backoff.reset();
-    if (_reconnect == null) return;
-    _reconnect?.cancel();
-    _reconnect = null;
-    unawaited(_connect());
-  }
-
-  Future<void> stop() async {
-    _running = false;
-    _ping?.cancel();
-    _reconnect?.cancel();
-    _ping = _reconnect = null;
-    unawaited(_networkSub?.cancel());
-    _networkSub = null;
-    final ch = _channel;
-    _channel = null;
-    _session = null;
-    await ch?.sink.close();
-  }
-
-  Future<void> _connect() async {
-    if (!_running) return;
+  Future<Map<String, dynamic>> _call(Map<String, Object?> params) async {
+    final raw = await send(params);
+    if (raw.isEmpty) return const {'error': '核心没有回应'};
     try {
-      final masterPub = await client.masterPub();
-      final ephemeral = await MeowCrypto.newEphemeral();
-      final uri = Uri.parse(client.base).replace(scheme: 'wss', path: '/api/secure/ws');
-      final ch = IOWebSocketChannel.connect(
-        uri,
-        customClient: HttpClient()..findProxy = (_) => 'DIRECT',
-        connectTimeout: const Duration(seconds: 15),
-      );
-      await ch.ready;
-      if (!_running) {
-        await ch.sink.close();
-        return;
-      }
-      _channel = ch;
-      final session = await SecureSession.create(ephemeral: ephemeral, masterPub: masterPub);
-      _session = session;
-      ch.sink.add(Uint8List.fromList((await ephemeral.extractPublicKey()).bytes));
-      ch.sink.add(await session.seal(utf8.encode(json.encode({
-        'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        'nonce': DateTime.now().microsecondsSinceEpoch.toRadixString(36),
-        if (token.isNotEmpty) 'token': token,
-      }))));
-      _connectedAt = DateTime.now();
-      _ping = Timer.periodic(pingInterval, (_) => _send({'type': 'ping'}));
-      ch.stream.listen(_onFrame, onError: (_) => _scheduleReconnect(), onDone: _scheduleReconnect, cancelOnError: true);
-      commonPrint.log('realtime connected: ${uri.host}');
-    } catch (e) {
-      commonPrint.log('realtime connect failed: $e');
-      _scheduleReconnect();
+      final v = json.decode(raw);
+      return v is Map ? v.cast<String, dynamic>() : const {'error': '回包无法解析'};
+    } on FormatException {
+      return const {'error': '回包无法解析'};
     }
   }
 
-  Future<void> _send(Map<String, dynamic> obj) async {
-    final ch = _channel;
-    final s = _session;
-    if (ch == null || s == null) return;
-    try {
-      ch.sink.add(await s.seal(utf8.encode(json.encode(obj))));
-    } catch (e) {
-      commonPrint.log('realtime send failed: $e');
-    }
+  /// 要连哪些主控 + 手上各订阅的 rev（桥层落盘，代理运行时才接到内核上）。回错误文字，成功回 null。
+  Future<String?> configure(RealtimePlan plan) async {
+    final r = await _call({
+      'op': 'configure',
+      'channels': [for (final c in plan.channels) c.toJson()],
+      'subs': [for (final s in plan.subs) s.toJson()],
+    });
+    final e = r['error']?.toString() ?? '';
+    return e.isEmpty ? null : e;
   }
 
-  Future<void> _onFrame(dynamic data) async {
-    final s = _session;
-    if (s == null) return;
-    final bytes = switch (data) {
-      List<int> b => b,
-      String str => base64.decode(str),
-      _ => null,
-    };
-    if (bytes == null) return;
-    try {
-      final plain = json.decode(utf8.decode(await s.open(bytes)));
-      if (plain is Map) {
-        final m = plain.cast<String, dynamic>();
-        onEvent(m['type']?.toString() ?? '', m);
-      }
-    } catch (e) {
-      commonPrint.log('realtime frame dropped: $e');
-    }
+  /// 待更新队列（内核通知过、Dart 还没处理完的订阅变更）。
+  Future<List<SubChange>> pending() async {
+    final items = (await _call({'op': 'pending'}))['items'];
+    if (items is! List) return const [];
+    return [
+      for (final it in items)
+        if (it is Map) SubChange.fromJson(it.cast<String, dynamic>()),
+    ];
   }
 
-  void _scheduleReconnect() {
-    _ping?.cancel();
-    _ping = null;
-    _channel = null;
-    _session = null;
-    final connectedAt = _connectedAt;
-    _connectedAt = null;
-    if (!_running || _reconnect != null) return;
-    final delay = _backoff.next(uptime: connectedAt == null ? null : DateTime.now().difference(connectedAt));
-    _reconnect = Timer(delay, () {
-      _reconnect = null;
-      unawaited(_connect());
+  Future<void> ack(List<SubChange> items) async {
+    if (items.isEmpty) return;
+    await _call({
+      'op': 'ack',
+      'items': [for (final it in items) it.toJson()],
     });
   }
+
+  /// 清掉来自这个主控的入口覆盖（退出登录、这个主控的订阅都删了）。回清掉的条数。
+  Future<int> clear(String base) async {
+    if (base.isEmpty) return 0;
+    final n = (await _call({'op': 'clear', 'source': base}))['cleared'];
+    return n is num ? n.toInt() : 0;
+  }
+
+  /// 换网：退避中的通道提前重连。
+  Future<void> kick() => _call({'op': 'kick'});
+
+  Future<List<EntryOverride>> entries() async => parseEntryOverrides((await _call({'op': 'entries'}))['entries']);
+}
+
+/// 入口覆盖表的一条（内核 entryoverride.View）：主控把节点 [server] 指定成这几个入口 IP。
+class EntryOverride {
+  const EntryOverride({
+    required this.server,
+    required this.ips,
+    this.rev = 0,
+    this.chainId = 0,
+    this.source = '',
+    this.updatedAt = 0,
+    this.active = false,
+  });
+
+  final String server;
+  final List<String> ips;
+  final int rev;
+  final int chainId;
+
+  /// 来自哪个主控（规范化的 base）
+  final String source;
+
+  /// 本机换上这份入口的时间（毫秒）
+  final int updatedAt;
+
+  /// 当前配置里有节点的 server 等于这个键（只有这时内核才会用它）
+  final bool active;
+
+  factory EntryOverride.fromJson(Map<String, dynamic> j) => EntryOverride(
+    server: j['server']?.toString() ?? '',
+    ips: [
+      for (final ip in (j['ips'] is List ? j['ips'] as List : const []))
+        if (ip.toString().isNotEmpty) ip.toString(),
+    ],
+    rev: (j['rev'] as num?)?.toInt() ?? 0,
+    chainId: (j['chainId'] as num?)?.toInt() ?? 0,
+    source: j['source']?.toString() ?? '',
+    updatedAt: (j['updatedAt'] as num?)?.toInt() ?? 0,
+    active: j['active'] == true,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is EntryOverride &&
+      other.server == server &&
+      other.rev == rev &&
+      other.active == active &&
+      other.updatedAt == updatedAt &&
+      other.ips.join(',') == ips.join(',');
+
+  @override
+  int get hashCode => Object.hash(server, rev, active, updatedAt, ips.join(','));
+}
+
+/// 解析核心 `entries` 的列表；只留有 IP 的。
+List<EntryOverride> parseEntryOverrides(Object? list) {
+  if (list is! List) return const [];
+  return [
+    for (final it in list)
+      if (it is Map) EntryOverride.fromJson(it.cast<String, dynamic>()),
+  ].where((e) => e.server.isNotEmpty && e.ips.isNotEmpty).toList();
+}
+
+/// 节点 server 的规范写法（同内核 entryoverride.NormalizeKey）：IPv6 去方括号与 zone、IPv4-mapped 还原成 IPv4，
+/// 按地址字节比；域名小写、去掉结尾的点。
+String entryKeyOf(String server) {
+  var s = server.trim();
+  if (s.startsWith('[') && s.endsWith(']')) s = s.substring(1, s.length - 1);
+  final zone = s.indexOf('%');
+  final bare = zone > 0 ? s.substring(0, zone) : s;
+  final ip = InternetAddress.tryParse(bare);
+  if (ip != null) {
+    final raw = ip.rawAddress;
+    // ::ffff:a.b.c.d → a.b.c.d
+    if (raw.length == 16 && raw.sublist(0, 10).every((b) => b == 0) && raw[10] == 0xff && raw[11] == 0xff) {
+      return raw.sublist(12).join('.');
+    }
+    return raw.length == 4 ? raw.join('.') : raw.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+  var host = s.toLowerCase();
+  while (host.endsWith('.')) {
+    host = host.substring(0, host.length - 1);
+  }
+  return host;
+}
+
+/// 节点 [server] 现在生效的主控指定入口；没有为 null。
+EntryOverride? entryOverrideFor(String server, List<EntryOverride> entries) {
+  if (server.trim().isEmpty) return null;
+  final key = entryKeyOf(server);
+  for (final e in entries) {
+    if (e.active && e.ips.isNotEmpty && entryKeyOf(e.server) == key) return e;
+  }
+  return null;
+}
+
+/// 节点详情里的一行：「主控指定入口 203.0.113.11, 203.0.113.12 · 3 分钟前」（时间是本机换上这份入口的时间）。
+String entryOverrideLabel(EntryOverride e, {DateTime? now}) {
+  final ips = e.ips.join(', ');
+  if (e.updatedAt <= 0) return '主控指定入口 $ips';
+  return '主控指定入口 $ips · ${fmtRelative(DateTime.fromMillisecondsSinceEpoch(e.updatedAt), now)}';
 }

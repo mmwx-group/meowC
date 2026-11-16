@@ -285,6 +285,10 @@ func handleAction(action *Action, result ActionResult) {
 			result.success(value)
 		})
 		return
+	case meowRealtimeMethod:
+		// MeowX：主控实时通道（入口即时切换 + 订阅自动更新，见 meow_realtime.go）
+		result.success(handleMeowRealtime(action.Data.(string)))
+		return
 	case crashMethod:
 		result.success(true)
 		handleCrash()

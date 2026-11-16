@@ -22,6 +22,7 @@ import '../../theme/card_surface.dart';
 import '../../theme/haptics.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
+import 'entry_badge.dart';
 import 'group_reveal.dart';
 import 'node_parts.dart';
 
@@ -347,7 +348,8 @@ class _NodeCell extends ConsumerWidget {
               tail: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 徽标自带 2 的点按边距，间距按视觉 6 配
+                  // 徽标自带 2 的点按边距，间距按视觉 6 配；主控指定入口的小标没有覆盖时不占位
+                  EntryOverrideBadge(proxy.name, size: dense ? 13 : 14),
                   if (medal != null) ...[const SizedBox(width: 4), MedalBadge(medal, size: dense ? 14 : 15)],
                   if (unlocks != null) ...[const SizedBox(width: 4), UnlockBadge(unlocks, size: dense ? 13 : 14)],
                   if (busy)
