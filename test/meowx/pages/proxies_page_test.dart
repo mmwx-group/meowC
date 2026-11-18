@@ -14,7 +14,6 @@ import 'package:bett_box/meowx/theme/unlock_badge.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
-import 'package:bett_box/meowx/state/format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
