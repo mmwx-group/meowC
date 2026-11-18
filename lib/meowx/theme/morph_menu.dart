@@ -270,7 +270,10 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
     if (!_route.reduce) {
       // 同 iOS 27：水滴从按钮中心弹出来，菜单项一开始就在（跟着面板拉伸、先糊后清），不再逐项错峰淡入
       _clock.value = 1;
-      _morph.animateWith(SpringSimulation(DropletMorph.spring, 0, 1, 0));
+      // 菜单的第一帧（p = 0 的水滴）画出来之后再开始计时：第一帧的排版 / 玻璃比较重，算进时间的话一出来就快展开完了
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !_closing) _morph.animateWith(SpringSimulation(DropletMorph.spring, _morph.value, 1, 0));
+      });
     }
     _routeAnimation = _route.animation?..addStatusListener(_onRouteStatus);
   }

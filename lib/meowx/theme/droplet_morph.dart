@@ -8,13 +8,14 @@ import 'package:flutter/physics.dart';
 
 /// iOS 27 弹出菜单 / popover 的「水滴」变形（2026-11-18 对着 iOS 27 模拟器录屏逐帧照抄，第二版）：
 /// - 从按钮中心冒出一颗小的圆形玻璃水滴（一出来就是玻璃、透出背后放大发糊的画面），不是从按钮的矩形长出来；
-/// - 约 0.4 秒长成面板、冲过头约 10% 再弹回来（第二版只冲 3%，用户说回弹没了）；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
+/// - 从小到大慢慢长：约 0.3 秒到顶、冲过头约 10% 再弹回来，约 0.5 秒停住（第二版只冲 3%，用户说回弹没了；
+///   第三版太快，用户说一瞬间就展开了）。动画在气泡第一帧画出来之后才开始计时；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
 /// - 内容按最终尺寸钉在最终位置，面板只是把它一点点露出来（不跟着面板拉伸——第一版拉伸了，用户说内容没有自适应）；
-///   前三成只看得到玻璃，之后内容由糊变清；
+///   前一半只看得到玻璃，之后内容才由糊变清（展开途中内容不完整显示）；
 /// - 关：内容糊掉、面板缩回按钮中心的水滴，约 0.16 秒，最后一点淡掉。
 abstract final class DropletMorph {
-  /// 开的弹簧：约 0.4 秒停住、冲过头约 10%（看得出「啵」地弹一下）
-  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 320, ratio: 0.58);
+  /// 开的弹簧：约 0.3 秒到顶、冲过头约 10%（看得出「啵」地弹一下）、约 0.5 秒停住
+  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 170, ratio: 0.6);
 
   /// 关的时长与曲线
   static const closeDuration = Duration(milliseconds: 160);
@@ -61,9 +62,14 @@ abstract final class DropletMorph {
       child: Transform.translate(offset: target.topLeft - r.topLeft, child: child),
     );
     double ease(double a, double b) => Curves.easeOut.transform(((pc - a) / (b - a)).clamp(0.0, 1.0));
-    final sigma = blur ? 12 * (1 - ease(0.3, 0.85)) : 0.0;
-    if (sigma > 0.3) c = ImageFiltered(imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: c);
-    return Opacity(opacity: ease(0.3, 0.75), child: c);
+    final sigma = blur ? 14 * (1 - ease(0.45, 1.0)) : 0.0;
+    // 模糊层一直在树上（只开关）：插拔它会让里面的内容整棵重挂、每帧重画
+    c = ImageFiltered(
+      enabled: sigma > 0.3,
+      imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+      child: c,
+    );
+    return Opacity(opacity: ease(0.5, 0.95), child: c);
   }
 }
 
@@ -71,7 +77,7 @@ abstract final class DropletMorph {
 class DropletSpringCurve extends Curve {
   const DropletSpringCurve();
 
-  static const duration = Duration(milliseconds: 650);
+  static const duration = Duration(milliseconds: 700);
 
   @override
   double transformInternal(double t) {

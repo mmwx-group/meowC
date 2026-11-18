@@ -92,8 +92,9 @@ void main() {
       entries: const [MeowMenuItem(1, '甲', checked: true), MeowMenuItem(2, '乙'), MeowMenuItem(3, '丙')],
     );
     await tester.pump();
-    // 菜单项都已淡入（之后透明度不再变），面板的弹簧还在走
-    await tester.pump(Duration(milliseconds: MeowMotion.menuItemsTotal(3) + 16));
+    // 水滴变形（第一帧画出来后才开始弹）：等到内容已经露出来（进度过半），面板的弹簧还在走
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
     final item = find.ancestor(of: find.text('乙'), matching: find.byType(RepaintBoundary)).first;
     final size0 = tester.getSize(find.ancestor(of: item, matching: find.byType(ClipRRect)).first);
     final picture = _picture(tester, item);

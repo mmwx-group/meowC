@@ -195,6 +195,7 @@ class DashboardPage extends ConsumerWidget {
     showMeowPopover<void>(
       anchor,
       title: S.homeCards,
+      width: 260,   // 以前缺省 320，用户说太宽
       builder: (ctx) => Consumer(
         builder: (ctx, ref, _) {
           final cs = ctx.cs;
@@ -212,29 +213,21 @@ class DashboardPage extends ConsumerWidget {
               homeHiddenCards: on ? s.homeHiddenCards.where((n) => n != c.name).toList() : [...s.homeHiddenCards, c.name],
             ),
           );
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          // 只有开关：底部那句说明 2026-11-18 用户要求去掉
+          return M3SegmentedList(
             children: [
-              M3SegmentedList(
-                children: [
-                  for (final c in cards)
-                    M3ListRow(
-                      title: c.label,
-                      titleSize: 15,
-                      color: meowDialogRowColor(cs),
-                      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-                      onTap: () => toggle(c, hidden.contains(c.name)),
-                      trailing: Switch(
-                        value: !hidden.contains(c.name),
-                        onChanged: MeowHaptics.onSwitch((on) => toggle(c, on)),
-                      ),
-                    ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-                child: Text(S.homeCardsHint, style: TextStyle(fontSize: MeowFont.caption, color: cs.onSurfaceVariant)),
-              ),
+              for (final c in cards)
+                M3ListRow(
+                  title: c.label,
+                  titleSize: 15,
+                  color: meowDialogRowColor(cs),
+                  padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                  onTap: () => toggle(c, hidden.contains(c.name)),
+                  trailing: Switch(
+                    value: !hidden.contains(c.name),
+                    onChanged: MeowHaptics.onSwitch((on) => toggle(c, on)),
+                  ),
+                ),
             ],
           );
         },

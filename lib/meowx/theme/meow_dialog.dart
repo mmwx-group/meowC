@@ -220,18 +220,17 @@ class _MeowPopoverPanel extends StatefulWidget {
   State<_MeowPopoverPanel> createState() => _MeowPopoverPanelState();
 }
 
-class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
+class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerProviderStateMixin {
   /// 内容（标题 + 正文）带全局 key：先在台下量出尺寸，量好挪进面板里，状态不丢
   final _contentKey = GlobalKey();
 
   /// 量出来的气泡尺寸；null = 还没量（这一帧只在台下排版、不画）
   Size? _size;
 
-  late final CurvedAnimation _morph = CurvedAnimation(
-    parent: widget.animation,
-    curve: widget.route.reduce ? Curves.linear : const DropletSpringCurve(),
-    reverseCurve: DropletMorph.closeCurve,
-  );
+  /// 变形进度（自己的弹簧，不用路由动画）：量好尺寸、第一帧画出来之后才开始弹——
+  /// 以前跟着路由动画走，台下量尺寸那一帧和第一帧的卡顿都算进了时间，画面出来时已经快展开完了（用户：一瞬间就展开）
+  late final _morph = AnimationController.unbounded(vsync: this, value: widget.route.reduce ? 1 : 0);
+  bool _started = false;
 
   @override
   void initState() {
@@ -251,11 +250,22 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
     if (!mounted) return;
     final size = _contentKey.currentContext?.size;
     if (size != null && size != _size) setState(() => _size = size);
+    if (size != null && !_started && !widget.route.reduce) {
+      _started = true;
+      // 气泡的第一帧（p = 0 的水滴）画出来之后再开始计时
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.animation.status != AnimationStatus.reverse) {
+          _morph.animateWith(SpringSimulation(DropletMorph.spring, _morph.value, 1, 0));
+        }
+      });
+    }
   }
 
   /// 开始关：按此刻的内容尺寸缩回（打开期间内容可能变高 / 变矮）
   void _onStatus(AnimationStatus status) {
-    if (status == AnimationStatus.reverse) _measure();
+    if (status != AnimationStatus.reverse) return;
+    _measure();
+    if (!widget.route.reduce) _morph.animateTo(0, duration: DropletMorph.closeDuration, curve: DropletMorph.closeCurve);
   }
 
   @override
