@@ -14,6 +14,9 @@ import '../../state/wifi_switch.dart';
 import '../../theme/m3.dart';
 import '../../theme/latency_badge.dart';
 import '../../theme/m3_kit.dart';
+import '../../theme/meow_dialog.dart';
+import '../../state/status.dart';
+import 'node_picker.dart';
 
 /// 连接主卡（M3 Expressive，画布稿 Main）：状态（提示 / 大字 / 已运行）+ 饼干形电源键；「当前节点」行；「规则 | 全局 | 直连」连接式按钮组。
 /// 底色与首页其它卡片相同（2026-11-18 用户要求，以前已连接时换成主色容器）：状态靠大字的颜色（连上是主题色）与电源键表达；圆角 36。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
@@ -215,12 +218,21 @@ class _NodeRow extends ConsumerWidget {
     }
     final tile = dense ? 40.0 : 44.0;
 
+    // 宽屏（侧栏 / 平板 / 桌面）点了就地弹节点浮层（同 iOS iPad / Duo）；手机照旧去节点页
+    final popover = ref.watch(isWideLayoutProvider) && mode != Mode.direct && node != null;
     return Material(
       color: color,
       borderRadius: BorderRadius.circular(MeowShape.lInc + 4),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: () => goTab(ref, MeowTab.proxies),
+        onTap: () => popover
+            ? showMeowPopover<void>(
+                context,
+                title: '切换节点',
+                width: 400,
+                builder: (_) => NodePickerPanel(initialGroup: node.group),
+              )
+            : goTab(ref, MeowTab.proxies),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(

@@ -26,6 +26,7 @@ import '../../theme/m3.dart';
 import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
 import '../settings/proxy_apps_page.dart';
+import 'memory_report.dart';
 
 // 这个文件里的卡片都可能放在宽屏首页的 IntrinsicHeight 里（见 dashboard_page.dart），不要用 LayoutBuilder。
 
@@ -571,6 +572,8 @@ class HomeMetricsRow extends ConsumerWidget {
             label: dense ? S.coreMemory : S.memory,
             value: running && stats.memory > 0 ? fmtSize(stats.memory) : '—',
             dense: dense,
+            // 点开看核心的内存构成（同 iOS）
+            onTap: running ? () => unawaited(showMemoryReport(context)) : null,
           ),
           _ => _DnsTile(dense: dense),
         },

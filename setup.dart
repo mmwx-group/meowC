@@ -484,6 +484,16 @@ class BuildCommand extends Command {
 
     final appDevArg = Build.isDev ? ' --build-dart-define=APP_DEV=true' : '';
 
+    // MeowX：内核子模块的版本（tag-提交数-短哈希），「关于」页显示「核心版本」（同 iOS）。内核本身没有版本号接口
+    var coreVersion = '';
+    try {
+      final r = await Process.run('git', ['-C', join(current, 'core', 'Clash.Meta'), 'describe', '--tags', '--always']);
+      if (r.exitCode == 0) coreVersion = (r.stdout as String).trim();
+    } catch (_) {}
+    final coreVersionArg = coreVersion.isNotEmpty
+        ? ' --build-dart-define=MEOWX_CORE_VERSION=$coreVersion'
+        : '';
+
     final environment = Map<String, String>.from(Platform.environment);
     if (compatible) {
       environment['BETTBOX_COMPATIBLE_BUILD'] = '1';
@@ -493,7 +503,7 @@ class BuildCommand extends Command {
     await Build.exec(
       name: name,
       Build.getExecutable(
-        'flutter_distributor package --skip-clean --platform ${target.name} --targets $targets --flutter-build-args=verbose$args$sentryArg$suffixArg$ipinfoArg --build-dart-define=APP_ENV=$env$appDevArg',
+        'flutter_distributor package --skip-clean --platform ${target.name} --targets $targets --flutter-build-args=verbose$args$sentryArg$suffixArg$ipinfoArg --build-dart-define=APP_ENV=$env$appDevArg$coreVersionArg',
       ),
       environment: environment,
     );

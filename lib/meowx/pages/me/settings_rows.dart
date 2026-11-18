@@ -27,11 +27,15 @@ import 'me_kit.dart';
 const _testUrlPresets = {
   'Cloudflare': 'https://cp.cloudflare.com/generate_204',
   'Google': 'https://www.gstatic.com/generate_204',
-  'Google（connectivitycheck）': 'http://connectivitycheck.gstatic.com/generate_204',
+  'Google（connectivitycheck）': 'https://connectivitycheck.gstatic.com/generate_204',
   'Apple': 'https://captive.apple.com/hotspot-detect.html',
 };
 
 const _customTestUrl = '__custom__';
+
+/// 「跟随订阅」（同 iOS #1437）：测某个组用这个组写的 url，没写的用内置默认——即 Bettbox 的「测试链接覆盖配置」关着。
+/// 选了预设 / 自定义地址 = 打开覆盖、一律用它。
+const _followTestUrl = '__follow__';
 
 const syncIntervalLabels = {0: '手动', 6: '6 小时', 12: '12 小时', 24: '每天', 72: '3 天'};
 
@@ -61,6 +65,7 @@ class ProxyRows extends ConsumerWidget {
     final latencyMode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final ipv6 = ref.watch(meowSettingProvider.select((s) => s.ipv6));
     final testUrl = ref.watch(appSettingProvider.select((s) => s.testUrl));
+    final overrideTestUrl = ref.watch(overrideTestUrlProvider);
     return MeRows(
       children: [
         MePickerRow<MeowDnsMode>(
@@ -100,16 +105,36 @@ class ProxyRows extends ConsumerWidget {
         ),
         MePickerRow<String>(
           label: '测速地址',
-          value: _testUrlPresets.containsValue(testUrl) ? testUrl : _customTestUrl,
-          values: [..._testUrlPresets.values, _customTestUrl],
-          text: (v) => v == _customTestUrl ? '自定义' : _testUrlPresets.entries.firstWhere((e) => e.value == v).key,
+          value: !overrideTestUrl
+              ? _followTestUrl
+              : _testUrlPresets.containsValue(testUrl)
+              ? testUrl
+              : _customTestUrl,
+          values: [_followTestUrl, ..._testUrlPresets.values, _customTestUrl],
+          text: (v) => switch (v) {
+            _followTestUrl => '跟随订阅',
+            _customTestUrl => '自定义',
+            _ => _testUrlPresets.entries.firstWhere((e) => e.value == v).key,
+          },
           onChanged: (v) async {
+            final override = ref.read(overrideTestUrlProvider.notifier);
+            if (v == _followTestUrl) {
+              if (!ref.read(overrideTestUrlProvider) && testUrl == defaultTestUrl) return;
+              // 组里没写 url 的用内置默认
+              ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(testUrl: defaultTestUrl));
+              override.value = false;
+              _reloadIfRunning(ref);   // 覆盖与否写在生成的配置里（各组的 url），连着要重载
+              return;
+            }
             if (v == _customTestUrl) {
               final input = await mePrompt(context, '自定义测速地址', testUrl, keyboard: TextInputType.url);
               if (input == null || input.trim().isEmpty) return;
               v = input.trim();
             }
+            final wasOverride = ref.read(overrideTestUrlProvider);
             ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(testUrl: v));
+            if (!wasOverride) override.value = true;
+            _reloadIfRunning(ref);
           },
         ),
       ],
@@ -350,7 +375,9 @@ class AppearanceRows extends ConsumerWidget {
   }
 }
 
-/// 关于：版本 / 检查更新 / 开源许可。
+const meowCoreVersion = String.fromEnvironment('MEOWX_CORE_VERSION');
+
+/// 关于：版本 / 核心版本 / 检查更新 / 开源许可。
 class AboutRows extends ConsumerWidget {
   const AboutRows({super.key});
 
@@ -361,6 +388,8 @@ class AboutRows extends ConsumerWidget {
     return MeRows(
       children: [
         MeRow(label: S.version, value: globalState.packageInfo.version, mono: true),
+        // 核心版本（同 iOS）：打包时由 setup.dart 写进来（内核子模块的 git describe）；本地 flutter run 没有就不显示
+        if (meowCoreVersion.isNotEmpty) MeRow(label: '核心版本', value: meowCoreVersion, mono: true),
         MeRow(
           label: S.checkUpdate,
           subtitle: system.isWindows || system.isAndroid ? '有新版本时可在 App 内直接更新' : null,

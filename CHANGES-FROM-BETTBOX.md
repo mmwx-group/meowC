@@ -309,3 +309,9 @@
 - `pubspec.yaml`：去掉只给旧界面用的 `animations`、`emoji_regex`、`defer_pointer`、`google_nav_bar`、`web_socket_channel`；删掉关于页的贡献者头像 `assets/images/avatars/`。
 - **可选 App 图标「X」三款**（双色 / 墨底 / 渐变，设计稿 `design/brand/icon-x.svg`）：`AndroidManifest.xml` 加 `MainActivityXDuo` / `XInk` / `XGradient` 三个默认停用的 alias（同 M 图标）；`AppPlugin.kt` 的图标表、`NotificationComponentCache.kt` 的通知入口各加三项；自适应图标资源由 `scripts/make-x-icons.py`（几何在 `scripts/x_icons.py`，MeowX iOS 用同一份）生成：位图背景层 + 前景层 + 单色层。
 - 首页「喵窝」卡用普通卡片底色，并可在「首页卡片」里关掉（`lib/models/meow.dart` 的 `HomeCard` 加 `mesh`）；入口覆盖小标按 server + 端口认（主控新字段 `ports`，内核对应改动在 meowx-core 分支 `feat/entry-ports`），只有一个入口 IP 时不显示。
+
+## 2026-11-18 · 界面与 iOS 对齐（分支 feat/ios-align）
+- `setup.dart`：打包时取内核子模块的 `git describe --tags --always`，以 `--build-dart-define=MEOWX_CORE_VERSION=…` 传进来，「关于」页显示「核心版本」（内核本身没有版本号接口，`constant.Version` 为空）。取不到就不传、不显示。
+- `lib/models/meow.dart`（MeowX 的设置模型）：`NodeCardSize` 加回 `compact`（生成文件 `meow.g.dart` 的枚举表跟着重新生成）；`HomeCard` 里下载排到上传前面（只影响「首页卡片」设置里的顺序，存的是名字）。
+- 「记录日志」改成只调内核日志等级（开 = debug、关 = warning），内核日志一直订阅：没有改 Bettbox 的订阅逻辑，而是在 `lib/meowx/app/meow_root.dart` 启动时把 `appSetting.openLogs` 置为 true（老用户关着开关时日志等级从缺省的 error 放到 warning）。
+- 其余都在 `lib/meowx/`；拨号失败记录靠解析内核 warning 日志，未改内核。

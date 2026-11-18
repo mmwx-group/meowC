@@ -26,6 +26,7 @@ import 'hero_card.dart';
 import 'info_cards.dart';
 import 'mesh_card.dart';
 import 'speed_card.dart';
+import 'speed_test_card.dart';
 import 'takeover_card.dart';
 
 const _gap = 12.0;
@@ -135,6 +136,7 @@ class DashboardPage extends ConsumerWidget {
             features,
             metrics,
             exitIp,
+            const HomeSpeedTestCard(),   // 宽屏才有（同 iOS iPad / Duo）
             HomeActiveConnections(minRows: 5, fetch: fetchConnections),
           ]),
         ),
@@ -143,7 +145,8 @@ class DashboardPage extends ConsumerWidget {
 
     // 够高：整页正好一屏，「网速」「活跃连接」撑满两列剩下的高度；不够高（最小窗口、手机横屏、大字号）：按内容高度排、整页滚动。
     // 用 IntrinsicHeight 量内容自己要多高（两个撑满的卡各报一个最小高度），和视口高度取大者——所以这棵子树里不能出现 LayoutBuilder。
-    final left = _spaced([hero, takeover, if (speed != null) chart ? Expanded(child: speed) : speed]);
+    // 左栏底部「网络测速」卡（同 iOS iPad 横屏首页左栏）
+    final left = _spaced([hero, takeover, if (speed != null) chart ? Expanded(child: speed) : speed, const HomeSpeedTestCard()]);
     final right = _spaced([subscription, features, metrics, exitIp, Expanded(child: HomeActiveConnections(expand: true, fetch: fetchConnections))]);
     return PageWidth(
       child: LayoutBuilder(

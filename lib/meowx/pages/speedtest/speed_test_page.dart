@@ -49,7 +49,11 @@ class SpeedTestPage extends ConsumerStatefulWidget {
     this.systemShare,
     this.boardGrant,
     this.openUrl,
+    this.autoStart = false,
   });
+
+  /// 进页面就开测（首页「网络测速」卡的「开始测速」，同 iOS）；没连接 / 没有可测的节点时不动
+  final bool autoStart;
 
   /// 测试里换成假的；缺省用全局那一份
   final SpeedTestController? controller;
@@ -83,6 +87,9 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
 
   /// 正在生成 / 分享：页头按钮转圈、不响应
   bool _sharing = false;
+
+  /// [SpeedTestPage.autoStart] 只在进来时开一次
+  bool _autoStarted = false;
 
   /// [button] 是分享按钮自己的 context：上传过的记录从按钮上弹菜单（菜单开着时按钮不转圈，选了出图才转）
   Future<void> _share(BuildContext button, SpeedTestRecord record) async {
@@ -160,6 +167,19 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
             // 测的时候节点行写实际在测的节点（核心回的 via）：主组是 url-test / fallback 时测速中途组可能换了节点，缺省推算的会跟着变
             final shown = running ? (c.progress.via ?? node) : node;
             final canStart = connected && node != null;
+            if (widget.autoStart && !_autoStarted && !running) {
+              _autoStarted = true;
+              if (canStart) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted || c.isRunning) return;
+                  _requestStart(
+                    node,
+                    protocol: speedTestProtocolTitle(protocols[node]),
+                    protocolCode: speedBoardProtocolCode(protocols[node]),
+                  );
+                });
+              }
+            }
             final last = c.history.records.firstOrNull;
             // 这次刚测完的那条（还没测过 / 在测 / 停掉 / 失败 / 被删了都没有）：不画，不画成禁用
             final shareable = c.shareableRecord;
