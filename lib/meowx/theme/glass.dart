@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../app/glass_host.dart' show MeowGlassDevice;
 import '../glass/liquid_glass.dart';
 import 'motion.dart';
 import 'tokens.dart';
@@ -55,6 +56,10 @@ class MeowGlassControls extends InheritedWidget {
 
 /// 这里的控件要不要画成玻璃：宿主允许（液态玻璃主题、不是低端机 / 高对比度）且外层确有玻璃宿主在取背景。
 bool meowGlassOn(BuildContext context) => MeowGlassControls.of(context) && LiquidGlassScope.of(context);
+
+/// 弹出菜单 / 锚定气泡画不画成液态玻璃（2026-11-18 起同 iOS 27：从按钮变形出来的玻璃气泡）：
+/// 外层有玻璃宿主（手机，底栏那一套）就画，不看页面控件的开关（[MeowGlassControls] 在 M3 改版后一律关）；低端机退回实色。
+bool meowPopupGlassOn(BuildContext context) => LiquidGlassScope.of(context) && !MeowGlassDevice.lowEnd;
 
 /// 各控件的玻璃参数：FlClash 的几档（regular / menu / tinted / lens）按「透明 / 着色」调厚薄。
 /// 玻璃不跟卡片颜色变：取色用固定的一份配色，不读主题里随卡片色变的 surface。

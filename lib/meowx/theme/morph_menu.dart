@@ -303,7 +303,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
   Widget build(BuildContext context) {
     final mm = context.mm;
     final route = _route;
-    final glass = meowGlassOn(context);
+    final glass = meowPopupGlassOn(context);
     final contentH = meowMenuContentHeight(_entries);
     final target = meowMenuRect(
       anchor: route.anchor,

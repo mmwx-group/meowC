@@ -1,6 +1,9 @@
+import 'dart:ui' show lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
+import 'glass.dart';
 import 'haptics.dart';
 
 import 'm3.dart';
@@ -126,10 +129,12 @@ class MeowDialogLabel extends StatelessWidget {
 Color meowDialogRowColor(ColorScheme cs) =>
     cs.brightness == Brightness.dark ? cs.surfaceContainerLow : cs.surfaceContainerLowest;
 
-/// 锚定在按钮上的气泡（iOS 27 那种：从按钮的位置长出来、带回弹，2026-11-17 用户要求右上角按钮用它、不用对话框）。
-/// 放在按钮下方（下面放不下放上方），水平方向贴着按钮那一侧的边；从按钮中心所在的那一点按欠阻尼弹簧放大
-/// （0.15 → 1，冲过头约 12% 再弹回，[_PopoverSpring]）并淡入，弹出时轻震一下；关时缩回那一点。
-/// 点气泡外面关闭。系统「移除动画」时只淡入淡出、不震。
+/// 锚定在按钮上的气泡（iOS 27 新版菜单那种，2026-11-18 用户要求两端一致）：点按钮后，气泡**从按钮本身变形出来**——
+/// 面板的位置、宽高、圆角从按钮的矩形（胶囊 / 圆）按欠阻尼弹簧（[_PopoverSpring]，冲过头一点再回）长成气泡，
+/// 内容钉在气泡的最终位置、面板只是裁出它的一部分，后半段淡入；关时缩回按钮。弹出时轻震一下。
+/// 有玻璃宿主（手机，底栏的那一套）时面板是液态玻璃（菜单那一档），否则是实色 surfaceContainerHigh。
+/// 放在按钮下方（下面放不下放上方），水平方向贴着按钮那一侧的边。点气泡外面关闭；里面的开关点了不收。
+/// 系统「移除动画」时只淡入淡出、不震。
 Future<T?> showMeowPopover<T>(
   BuildContext anchorContext, {
   required String title,
@@ -148,6 +153,7 @@ Future<T?> showMeowPopover<T>(
       title: title,
       builder: builder,
       reduce: MeowMotion.reduced(anchorContext),
+      fromColor: Theme.of(anchorContext).colorScheme.surfaceContainerHighest,
     ),
   );
 }
@@ -159,6 +165,7 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
     required this.title,
     required this.builder,
     required this.reduce,
+    required this.fromColor,
   });
 
   final Rect anchor;
@@ -167,8 +174,11 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   final WidgetBuilder builder;
   final bool reduce;
 
+  /// 按钮的底色：实色面板从它过渡到气泡的颜色
+  final Color fromColor;
+
   @override
-  Color? get barrierColor => Colors.black.withValues(alpha: 0.12);
+  Color? get barrierColor => Colors.black.withValues(alpha: 0.08);
   @override
   bool get barrierDismissible => true;
   @override
@@ -176,15 +186,69 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   @override
   Duration get transitionDuration => reduce ? const Duration(milliseconds: 150) : _PopoverSpring.duration;
   @override
-  Duration get reverseTransitionDuration => Duration(milliseconds: reduce ? 120 : 200);
+  Duration get reverseTransitionDuration => Duration(milliseconds: reduce ? 120 : 260);
 
   @override
-  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) {
+  Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
+      _MeowPopoverPanel(route: this, animation: animation);
+}
+
+class _MeowPopoverPanel extends StatefulWidget {
+  const _MeowPopoverPanel({required this.route, required this.animation});
+  final _MeowPopoverRoute<dynamic> route;
+  final Animation<double> animation;
+
+  @override
+  State<_MeowPopoverPanel> createState() => _MeowPopoverPanelState();
+}
+
+class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
+  /// 内容（标题 + 正文）带全局 key：先在台下量出尺寸，量好挪进面板里，状态不丢
+  final _contentKey = GlobalKey();
+
+  /// 量出来的气泡尺寸；null = 还没量（这一帧只在台下排版、不画）
+  Size? _size;
+
+  late final CurvedAnimation _morph = CurvedAnimation(
+    parent: widget.animation,
+    curve: widget.route.reduce ? Curves.linear : const _PopoverSpring(),
+    reverseCurve: Curves.easeInCubic,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    widget.animation.addStatusListener(_onStatus);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+  }
+
+  @override
+  void dispose() {
+    widget.animation.removeStatusListener(_onStatus);
+    _morph.dispose();
+    super.dispose();
+  }
+
+  void _measure() {
+    if (!mounted) return;
+    final size = _contentKey.currentContext?.size;
+    if (size != null && size != _size) setState(() => _size = size);
+  }
+
+  /// 开始关：按此刻的内容尺寸缩回（打开期间内容可能变高 / 变矮）
+  void _onStatus(AnimationStatus status) {
+    if (status == AnimationStatus.reverse) _measure();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final route = widget.route;
+    final anchor = route.anchor;
     final cs = context.cs;
     final screen = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
     const margin = 12.0, gap = 8.0;
-    final w = width.clamp(220.0, screen.width - margin * 2);
+    final w = route.width.clamp(220.0, screen.width - margin * 2);
     // 水平：按钮在右半边就右边对齐按钮右沿，否则左边对齐左沿
     final rightSide = anchor.center.dx > screen.width / 2;
     final left = (rightSide ? anchor.right - w : anchor.left).clamp(margin, screen.width - w - margin);
@@ -192,48 +256,94 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
     final spaceAbove = anchor.top - pad.top - gap - margin;
     final below = spaceBelow >= 240 || spaceBelow >= spaceAbove;
     final maxH = (below ? spaceBelow : spaceAbove).clamp(160.0, screen.height * 0.75);
-    // 放大的原点：按钮中心在气泡里的相对位置（气泡顶 / 底贴着按钮）
-    final originX = ((anchor.center.dx - left) / w).clamp(0.0, 1.0) * 2 - 1;
-    final origin = Alignment(originX, below ? -1 : 1);
+    final glass = meowPopupGlassOn(context);
 
-    final fade = CurvedAnimation(parent: animation, curve: const Interval(0, 0.5, curve: Curves.easeOut));
-    final scale = CurvedAnimation(parent: animation, curve: const _PopoverSpring(), reverseCurve: Curves.easeInCubic);
-    final bubble = Material(
-      color: cs.surfaceContainerHigh,
-      elevation: 8,
-      shadowColor: Colors.black.withValues(alpha: 0.3),
-      borderRadius: BorderRadius.circular(MeowShape.xl),
-      clipBehavior: Clip.antiAlias,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxH),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text(title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface)),
+    final content = KeyedSubtree(
+      key: _contentKey,
+      child: SizedBox(
+        width: w,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                  child: Text(route.title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface)),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 14), child: route.builder(context)),
+                ),
+              ],
             ),
-            Flexible(
-              child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 14), child: builder(context)),
-            ),
-          ],
+          ),
         ),
       ),
     );
+
+    final size = _size;
+    if (size == null) {
+      // 第一帧：台下排版量尺寸，不画
+      return Stack(children: [Positioned(left: left, top: 0, child: Offstage(child: content))]);
+    }
+    // 内容尺寸变了（打开后有行出现 / 消失）：下一帧按新尺寸
+    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    final target = Rect.fromLTWH(left, below ? anchor.bottom + gap : anchor.top - gap - size.height, w, size.height);
+    final fromRadius = anchor.shortestSide / 2;
+
     return Stack(
       children: [
-        Positioned(
-          left: left,
-          width: w,
-          top: below ? anchor.bottom + gap : null,
-          bottom: below ? null : screen.height - anchor.top + gap,
-          child: FadeTransition(
-            opacity: fade,
-            child: reduce
-                ? bubble
-                : ScaleTransition(scale: Tween(begin: 0.15, end: 1.0).animate(scale), alignment: origin, child: bubble),
-          ),
+        AnimatedBuilder(
+          animation: _morph,
+          builder: (context, child) {
+            final p = route.reduce ? 1.0 : _morph.value;
+            final pc = p.clamp(0.0, 1.0);
+            final r = Rect.lerp(anchor, target, p)!;
+            final radius = BorderRadius.circular(lerpDouble(fromRadius, MeowShape.xl, pc)!);
+            // 内容后半段淡入（移除动画时整体淡入淡出）
+            final contentOpacity = route.reduce ? widget.animation.value : ((pc - 0.35) / 0.65).clamp(0.0, 1.0);
+            final clipped = ClipRRect(
+              borderRadius: radius,
+              child: OverflowBox(
+                alignment: Alignment.topLeft,
+                minWidth: target.width,
+                maxWidth: target.width,
+                minHeight: target.height,
+                maxHeight: target.height,
+                child: Transform.translate(
+                  offset: target.topLeft - r.topLeft,
+                  child: Opacity(opacity: contentOpacity, child: child),
+                ),
+              ),
+            );
+            final Widget panel = glass
+                ? MeowGlassBox(
+                    style: MeowGlassStyles.menu(context).scale(pc),
+                    radius: radius,
+                    rim: MeowGlassStyles.menuRim(context).scale(pc),
+                    shadows: MeowGlassStyles.menuShadows(context, pc),
+                    child: clipped,
+                  )
+                : DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color.lerp(route.fromColor, cs.surfaceContainerHigh, pc),
+                      borderRadius: radius,
+                      boxShadow: [
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.22 * pc), blurRadius: 24, offset: const Offset(0, 8)),
+                      ],
+                    ),
+                    child: clipped,
+                  );
+            return Positioned.fromRect(
+              rect: r,
+              child: route.reduce ? Opacity(opacity: widget.animation.value, child: panel) : panel,
+            );
+          },
+          // 内容自成一层：变形每帧只改面板的矩形 / 圆角和内容的位移，内容不跟着重画
+          child: RepaintBoundary(child: content),
         ),
       ],
     );
