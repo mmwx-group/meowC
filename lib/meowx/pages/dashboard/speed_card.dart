@@ -60,8 +60,8 @@ class HomeSpeedCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: color),
-              const SizedBox(width: 6),
+              Icon(icon, size: 16, color: color),
+              const SizedBox(width: 4),
               Flexible(
                 child: Text(
                   label,
@@ -72,7 +72,6 @@ class HomeSpeedCard extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -83,13 +82,13 @@ class HomeSpeedCard extends ConsumerWidget {
                   if (at >= 0)
                     TextSpan(
                       text: text.substring(at),
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
                     ),
                 ],
               ),
               maxLines: 1,
               style: TextStyle(
-                fontSize: dense ? 26 : 30,
+                fontSize: dense ? 24 : 26,
                 fontWeight: FontWeight.w800,
                 color: cs.onSurface,
                 fontFeatures: const [FontFeature.tabularFigures()],
@@ -113,13 +112,14 @@ class HomeSpeedCard extends ConsumerWidget {
     final speedTest = M3IconButton(
       icon: Icons.speed_rounded,
       tooltip: '网络测速',
-      size: 44,
+      size: 36,
       tonal: true,
       onPressed: () => BaseNavigator.push(context, const SpeedTestPage()),
     );
 
+    // 照 iOS 首页网速卡收紧（2026-11-18）：内边距 16 / 14、折线 40 高、行距 8
     return M3Card(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: expand && chart ? MainAxisSize.max : MainAxisSize.min,
@@ -143,13 +143,13 @@ class HomeSpeedCard extends ConsumerWidget {
             ],
           ),
           if (chart) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (expand)
               Expanded(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 24), child: painter))
             else
-              SizedBox(height: dense ? 72 : 56, child: painter),
+              SizedBox(height: dense ? 64 : 40, child: painter),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(

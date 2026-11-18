@@ -154,7 +154,7 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
     final cs = context.cs;
     final dense = widget.dense;
     final profile = ref.watch(currentProfileProvider);
-    final caption = TextStyle(fontSize: dense ? 12 : 13, color: cs.onSurfaceVariant);
+    final caption = TextStyle(fontSize: 12, color: cs.onSurfaceVariant);
     if (profile == null) {
       return M3Card(
         onTap: () => goTab(ref, MeowTab.me),
@@ -202,7 +202,7 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
           profile.label ?? profile.id,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: dense ? 17 : 20, fontWeight: FontWeight.w800, color: cs.onSurface),
+          style: TextStyle(fontSize: dense ? 16 : 17, fontWeight: FontWeight.w800, color: cs.onSurface),
         ),
       ),
     );
@@ -218,16 +218,16 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
         child: InkWell(
           onTap: open,
           child: SizedBox(
-            height: dense ? 36 : 40,
+            height: 34,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: dense ? 14 : 16),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     direct ? '选择订阅' : '切换订阅',
                     maxLines: 1,
-                    style: TextStyle(fontSize: dense ? 13 : 14, fontWeight: FontWeight.w700, color: chipFg),
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: chipFg),
                   ),
                   if (importing) ...[
                     const SizedBox(width: 6),
@@ -291,33 +291,29 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
             );
     }
 
+    // 照 iOS 首页订阅卡（2026-11-18 用户：安卓首页卡片太高）：名字 + 切换订阅一行，用量条，「已用 · 到期」与更新时间并排一行
+    final lineText = Text(line, maxLines: 1, overflow: TextOverflow.ellipsis, style: caption);
     return M3Card(
-      padding: EdgeInsets.symmetric(horizontal: 20, vertical: dense ? 16 : 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    name,
-                    const SizedBox(height: 2),
-                    Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: caption),
-                  ],
-                ),
-              ),
+              Expanded(child: Align(alignment: Alignment.centerLeft, child: name)),
               const SizedBox(width: 12),
               chip,
             ],
           ),
-          if (progress != null) ...[const SizedBox(height: 12), progress],
-          if (updated != null) ...[
-            SizedBox(height: progress != null ? 8 : 10),
-            Align(alignment: Alignment.centerLeft, child: updated),
-          ],
+          if (progress != null) ...[const SizedBox(height: 10), progress],
+          SizedBox(height: progress != null ? 6 : 8),
+          Row(
+            children: [
+              Expanded(child: lineText),
+              if (updated != null) ...[const SizedBox(width: 8), updated],
+            ],
+          ),
         ],
       ),
     );

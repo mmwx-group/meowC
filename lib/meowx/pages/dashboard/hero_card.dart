@@ -39,16 +39,17 @@ class HomeHeroCard extends ConsumerWidget {
       ConnPhase.off when ref.watch(wifiPausedProvider) => ('Wi-Fi 规则暂停中 · 点电源键恢复', x.warn, '已暂停'),
       ConnPhase.off => (hasProfile ? S.ready : S.notConfigured, cs.onSurfaceVariant, S.disconnected),
     };
-    final gap = dense ? 14.0 : 18.0;
+    // 内边距 / 行距 / 字号照 iOS 首页主卡收紧（2026-11-18 用户：安卓首页卡片太高）：内边距 18、行距 12、大字 32
+    final gap = 12.0;
     // 卡内的节点行与没选中的模式按钮：比卡片深一档
     final track = cs.cardInner;
 
     return AnimatedContainer(
       duration: MeowSprings.effectsDuration,
-      padding: dense ? const EdgeInsets.fromLTRB(16, 18, 16, 16) : const EdgeInsets.fromLTRB(20, 22, 20, 20),
+      padding: dense ? const EdgeInsets.fromLTRB(16, 16, 16, 16) : const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: cs.card,
-        borderRadius: BorderRadius.circular(dense ? MeowShape.xlInc : 36),
+        borderRadius: BorderRadius.circular(dense ? MeowShape.xlInc : 32),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -84,7 +85,7 @@ class HomeHeroCard extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    SizedBox(height: dense ? 4 : 6),
+                    const SizedBox(height: 4),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
@@ -92,8 +93,8 @@ class HomeHeroCard extends ConsumerWidget {
                         status,
                         maxLines: 1,
                         style: TextStyle(
-                          fontSize: dense ? 34 : 46,
-                          height: dense ? 40 / 34 : 52 / 46,
+                          fontSize: dense ? 30 : 34,
+                          height: dense ? 36 / 30 : 40 / 34,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
                           // 连上之后大字换成主题色（卡片底色不再随状态变，状态靠它与电源键表达）
@@ -101,7 +102,7 @@ class HomeHeroCard extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    SizedBox(height: dense ? 4 : 6),
+                    const SizedBox(height: 4),
                     _SubLine(dense: dense, color: cs.onSurfaceVariant),
                   ],
                 ),
@@ -120,12 +121,12 @@ class HomeHeroCard extends ConsumerWidget {
           SizedBox(height: gap),
           _NodeRow(dense: dense, color: track),
           SizedBox(height: gap),
-          // 震动在 M3ButtonGroup 换段时；别处改的模式（直连档自动切、托盘）走不到这里
-          M3ButtonGroup<Mode>(
+          // 同 iOS 的滑块分段（轨道 + 反色滑块，换段时滑块弹过去）；震动在换段时，别处改的模式（直连档自动切、托盘）只滑不震
+          MeowSlideSegment<Mode>(
             items: const [(Mode.rule, S.modeRule), (Mode.global, S.modeGlobal), (Mode.direct, S.modeDirect)],
             selected: mode,
-            height: dense ? 44 : 48,
-            unselectedColor: track,
+            height: dense ? 40 : 44,
+            track: track,
             onChanged: (m) => setOutboundMode(ref, m),
           ),
         ],
@@ -158,7 +159,7 @@ class _SubLine extends ConsumerWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(
-        fontSize: dense ? 13 : 14,
+        fontSize: 13,
         fontWeight: FontWeight.w500,
         color: color,
         fontFeatures: const [FontFeature.tabularFigures()],
@@ -173,9 +174,9 @@ class _SubLine extends ConsumerWidget {
 double _powerSize(BuildContext context, bool dense) {
   final scaler = MediaQuery.textScalerOf(context);
   double line(double fontSize) => scaler.scale(fontSize) * 1.43;
-  final status = scaler.scale(dense ? 34 : 46) * (dense ? 40 / 34 : 52 / 46);
-  final total = line(dense ? 12 : 13) + status + line(dense ? 13 : 14) + (dense ? 8 : 12);
-  return total.clamp(64.0, 116.0);
+  final status = scaler.scale(dense ? 30 : 34) * (dense ? 36 / 30 : 40 / 34);
+  final total = line(dense ? 12 : 13) + status + line(13) + 8;
+  return total.clamp(64.0, 104.0);
 }
 
 class _NodeRow extends ConsumerWidget {
@@ -216,13 +217,14 @@ class _NodeRow extends ConsumerWidget {
         mode: ref.watch(meowSettingProvider.select((s) => s.latencyMode)),
       );
     }
-    final tile = dense ? 40.0 : 44.0;
+    // 同 iOS 的出口行：整行约 56 高
+    final tile = 36.0;
 
     // 宽屏（侧栏 / 平板 / 桌面）点了就地弹节点浮层（同 iOS iPad / Duo）；手机照旧去节点页
     final popover = ref.watch(isWideLayoutProvider) && mode != Mode.direct && node != null;
     return Material(
       color: color,
-      borderRadius: BorderRadius.circular(MeowShape.lInc + 4),
+      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => popover
@@ -234,7 +236,7 @@ class _NodeRow extends ConsumerWidget {
               )
             : goTab(ref, MeowTab.proxies),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
               M3IconTile(
@@ -255,14 +257,14 @@ class _NodeRow extends ConsumerWidget {
                       icon == null ? nodeTitleWithoutFlag(name) : name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: dense ? 15 : 16, fontWeight: FontWeight.w700, color: cs.onSurface),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: cs.onSurface),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 1),
                     Text(
                       sub,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: dense ? 12 : 13, color: cs.onSurfaceVariant),
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
