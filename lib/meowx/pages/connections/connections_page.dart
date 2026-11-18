@@ -10,7 +10,6 @@ import 'package:bett_box/state.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
-import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/meow_tab.dart';
@@ -67,9 +66,6 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   _Seg _seg = _Seg.connections;
   final _search = TextEditingController();
   String _query = '';
-
-  /// 手机上搜索框收在标题行的圆钮后面（画布稿），点开才占一行；有搜索词时一直开着
-  bool _searchOpen = false;
 
   /// 类型筛选（全部 / 推送 / DNS / 直连 / 代理 / 已关闭），连接与日志共用（对应 iOS，APNs 换成 Google 推送）；
   /// 「已关闭」只作用于连接，日志按「全部」
@@ -243,13 +239,17 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     return (items: _viewItems, sum: _viewSum);
   }
 
+  void _clearQuery() {
+    _search.clear();
+    setState(() => _query = '');
+  }
+
   void _switchSeg(_Seg v) {
     if (v == _seg) return;
     _search.clear();
     setState(() {
       _seg = v;
       _query = '';
-      _searchOpen = false;
     });
   }
 
@@ -338,6 +338,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
       onChanged: (v) => setState(() => _query = v.trim()),
       height: 40,
       fontSize: 13,
+      onClear: _clearQuery,
     );
     // 「已关闭」没有可关的，不放「全部关闭」
     final Widget? rowAction = onConns && _closedMode
@@ -349,25 +350,6 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
           )
         : _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs());
-    // 手机标题行右边的圆钮（画布稿：第三色容器的「全部关闭」）；两栏照旧用搜索框旁的胶囊
-    final Widget? headerAction = onConns && _closedMode
-        ? null
-        : onConns
-        ? _Selected<bool>(
-            listenable: _polled,
-            select: () => _conns.isEmpty,
-            builder: (context, empty) => M3IconButton(
-              icon: Icons.close_rounded,
-              tooltip: '全部关闭',
-              tertiary: true,
-              onPressed: empty ? null : _closeAll,
-            ),
-          )
-        : M3IconButton(
-            icon: Icons.delete_sweep_rounded,
-            tooltip: '清空日志',
-            onPressed: () => ref.read(logsProvider.notifier).clearLogs(),
-          );
     final kindFilter = _KindFilter(value: _kind, compact: twoPane, onChanged: (k) => setState(() => _kind = k));
     final emptyText = _query.isNotEmpty
         ? '无匹配连接'
@@ -383,7 +365,6 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
     if (!twoPane) {
-      final showSearch = _searchOpen || _query.isNotEmpty;
       // 手机：悬浮底栏盖在内容上，列表底部让出它的高度；平板竖屏 / 窄窗口有侧栏，底边留白在外层
       final bottom = (wide ? 0.0 : 16.0) + MediaQuery.paddingOf(context).bottom;
       final Widget body;
@@ -431,25 +412,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           children: [
             PageTitle(
               MeowTab.connections.label,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  M3IconButton(
-                    icon: Icons.search_rounded,
-                    tooltip: '搜索',
-                    tonal: showSearch,
-                    onPressed: () => setState(() {
-                      if (showSearch) {
-                        _search.clear();
-                        _query = '';
-                      }
-                      _searchOpen = !showSearch;
-                    }),
-                  ),
-                  if (headerAction != null) ...[const SizedBox(width: 8), headerAction],
-                ],
-              ),
-              // 标题下面一行：当前列表累计上下行
+              // 标题下面一行：当前列表累计下行 / 上行
               subtitle: running
                   ? ListenableBuilder(
                       listenable: _polled,
@@ -462,21 +425,23 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             ),
             const SizedBox(height: 14),
             segment,
-            if (showSearch) ...[
-              const SizedBox(height: 12),
-              _SearchField(
-                controller: _search,
-                hint: onConns ? '搜索域名 / 目标 / 规则' : '搜索日志',
-                onChanged: (v) => setState(() => _query = v.trim()),
-                height: 48,
-                fontSize: 15,
-                onClose: () => setState(() {
-                  _search.clear();
-                  _query = '';
-                  _searchOpen = false;
-                }),
-              ),
-            ],
+            // 搜索框常驻，「全部关闭」/「清空」是它旁边的胶囊（同 iOS，2026-11-18；以前搜索收在标题行圆钮后面、全部关闭是标题行的 ✕）
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _SearchField(
+                    controller: _search,
+                    hint: onConns ? '搜索域名 / 目标 / 规则' : '搜索日志',
+                    onChanged: (v) => setState(() => _query = v.trim()),
+                    height: 44,
+                    fontSize: 15,
+                    onClear: _clearQuery,
+                  ),
+                ),
+                if (rowAction != null) ...[const SizedBox(width: 8), rowAction],
+              ],
+            ),
             const SizedBox(height: 12),
             kindFilter,
             const SizedBox(height: 14),
@@ -689,14 +654,14 @@ class _Sum {
   }
 }
 
-/// 当前列表累计「↑ 上传 · ↓ 下载」（手机在标题下面一行，两栏在汇总栏里）。
+/// 当前列表累计「↓ 下载 · ↑ 上传」（下载在前，三端统一）（手机在标题下面一行，两栏在汇总栏里）。
 class _Totals extends StatelessWidget {
   const _Totals({required this.up, required this.down});
   final int up, down;
 
   @override
   Widget build(BuildContext context) => Text(
-    '↑ ${fmtSize(up)} · ↓ ${fmtSize(down)}',
+    '↓ ${fmtSize(down)} · ↑ ${fmtSize(up)}',
     maxLines: 1,
     overflow: TextOverflow.ellipsis,
     style: TextStyle(
@@ -715,15 +680,15 @@ class _SearchField extends StatelessWidget {
     required this.onChanged,
     required this.height,
     required this.fontSize,
-    this.onClose,
+    this.onClear,
   });
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String> onChanged;
   final double height, fontSize;
 
-  /// 手机：行尾的收起钮（清掉搜索词并收起）；点开时自动聚焦
-  final VoidCallback? onClose;
+  /// 有搜索词时行尾的清空钮
+  final VoidCallback? onClear;
 
   @override
   Widget build(BuildContext context) {
@@ -740,7 +705,6 @@ class _SearchField extends StatelessWidget {
             child: TextField(
               controller: controller,
               onChanged: onChanged,
-              autofocus: onClose != null && controller.text.isEmpty,
               textInputAction: TextInputAction.search,
               cursorColor: cs.primary,
               style: TextStyle(fontSize: fontSize, color: cs.onSurface),
@@ -756,11 +720,11 @@ class _SearchField extends StatelessWidget {
               ),
             ),
           ),
-          if (onClose != null)
+          if (onClear != null && controller.text.isNotEmpty)
             IconButton(
-              tooltip: '收起搜索',
+              tooltip: '清空搜索',
               visualDensity: VisualDensity.compact,
-              onPressed: onClose,
+              onPressed: onClear,
               icon: Icon(Icons.close_rounded, size: 20, color: cs.onSurfaceVariant),
             ),
         ],
@@ -911,8 +875,8 @@ String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase(
   return ('直连', cs.tertiaryContainer, cs.onTertiaryContainer, M3TileShape.circle);
 }
 
-/// 窄屏连接行（画布稿 Activity）：分段清单的一行。类型块 + 主机:端口 / 出站 · 规则 + 右侧速率（或累计）与时长；
-/// 点了看详情，左滑关闭。已关闭的（[closedAt] 不为空）右侧写「已结束」与用时，不能滑。
+/// 窄屏连接行（照 iOS，2026-11-18）：类型块 + 主机:端口 / 出站（叶子节点）· 规则 / 「↓ ↑ 累计 · 时长」，行尾 ✕ 关闭（左滑也能关）；
+/// 点了看详情。已关闭的（[closedAt] 不为空）末行写用时与关闭时刻，没有 ✕、不能滑。
 class _ConnRow extends StatelessWidget {
   const _ConnRow({super.key, required this.c, required this.onTap, required this.onClose, this.closedAt});
   final TrackerInfo c;
@@ -923,22 +887,27 @@ class _ConnRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = context.cs;
     final aux = _auxScaler(context);
-    // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：写规则选中的那个（组名或 DIRECT）
-    final policy = c.chains.lastOrNull ?? '—';
     final (label, bg, fg, shape) = _kindTile(c, cs);
-    final speed = (c.downloadSpeed ?? 0) + (c.uploadSpeed ?? 0);
-    final rate = closedAt != null
-        ? '已结束'
-        : (c.downloadSpeed != null || c.uploadSpeed != null)
-        ? fmtRate(speed)
-        : '↓ ${fmtSize(c.download)}';
-    final time = closedAt == null ? _age(c.start) : '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt!).duration)}';
+    // 下载在前（三端统一）；时长每轮快照（1.5s）跟着重建
+    final bytes = '↓ ${fmtSize(c.download)}  ↑ ${fmtSize(c.upload)}';
+    final tail = closedAt == null
+        ? _age(c.start)
+        : '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt!).duration)} · ${fmtClockTime(closedAt!)}';
     final row = M3ListRow(
       title: '${_hostOf(c)}:${c.metadata.destinationPort}',
       titleSize: 15,
-      subtitle: '$policy · ${_subOf(c)}',
+      // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：写叶子节点（实际出去的那个，同 iOS）
+      subtitle: '${_targetOf(c)} · ${_subOf(c)}',
       subtitleMaxLines: 1,
+      footer: Text(
+        '$bytes · $tail',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        textScaler: aux,
+        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()]),
+      ),
       onTap: onTap,
+      padding: EdgeInsets.fromLTRB(14, 12, closedAt == null ? 4 : 14, 12),
       leading: M3IconTile(
         text: label,
         shape: shape,
@@ -951,29 +920,14 @@ class _ConnRow extends StatelessWidget {
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg),
         ),
       ),
-      trailing: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            rate,
-            maxLines: 1,
-            textScaler: aux,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: closedAt == null ? cs.primary : cs.onSurfaceVariant,
-              fontFeatures: const [FontFeature.tabularFigures()],
+      trailing: closedAt != null
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.close_rounded, size: 20),
+              color: cs.onSurfaceVariant,
+              tooltip: '关闭连接',
+              onPressed: onClose,
             ),
-          ),
-          Text(
-            time,
-            maxLines: 1,
-            textScaler: aux,
-            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ],
-      ),
     );
     if (closedAt != null) return row;
     return Dismissible(
@@ -993,10 +947,7 @@ class _ConnRow extends StatelessWidget {
           ],
         ),
       ),
-      child: Semantics(
-        customSemanticsActions: {const CustomSemanticsAction(label: '关闭这条连接'): onClose},
-        child: row,
-      ),
+      child: row,
     );
   }
 }
@@ -1073,7 +1024,7 @@ class _ConnTable extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(flex: 2, child: cell('出站')),
                   const SizedBox(width: 10),
-                  SizedBox(width: rateW, child: cell(closedAtOf == null ? '下载' : '关闭于', align: TextAlign.end)),
+                  SizedBox(width: rateW, child: cell(closedAtOf == null ? '↓ 累计' : '关闭于', align: TextAlign.end)),
                   const SizedBox(width: 10),
                   SizedBox(width: ageW, child: cell(closedAtOf == null ? '时长' : '用时', align: TextAlign.end)),
                 ],
@@ -1172,7 +1123,7 @@ class _ConnTableRow extends StatelessWidget {
                   const SizedBox(width: 10),
                   fit(fmtClosedDuration(ClosedConnection(c, at).duration), ageWidth),
                 ] else ...[
-                  fit(fmtRate(c.downloadSpeed ?? 0), rateWidth),
+                  fit(fmtSize(c.download), rateWidth),   // 累计下载（同 iOS 连接表）
                   const SizedBox(width: 10),
                   fit(_age(c.start), ageWidth),
                 ],
@@ -1221,7 +1172,7 @@ class _InfoCard extends StatelessWidget {
   }
 }
 
-/// 上传 / 下载两格：小字标题 + 大数字。
+/// 下载 / 上传两格（下载在前）：小字标题 + 大数字。
 class _StatPair extends StatelessWidget {
   const _StatPair({required this.up, required this.down});
   final int up, down;
@@ -1262,9 +1213,9 @@ class _StatPair extends StatelessWidget {
     );
     return Row(
       children: [
-        cell(S.upload, up, cs.tertiary, Icons.arrow_upward_rounded),
-        const SizedBox(width: 10),
         cell(S.download, down, cs.primary, Icons.arrow_downward_rounded),
+        const SizedBox(width: 10),
+        cell(S.upload, up, cs.tertiary, Icons.arrow_upward_rounded),
       ],
     );
   }

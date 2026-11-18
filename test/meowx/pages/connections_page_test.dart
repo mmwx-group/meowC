@@ -128,12 +128,8 @@ Future<void> _pump(
   await tester.pump();
 }
 
-/// 往搜索框里输字：手机上搜索框收在标题行的圆钮后面，没展开就先点开。
+/// 往搜索框里输字（搜索框常驻，同 iOS）。
 Future<void> _typeSearch(WidgetTester tester, String text) async {
-  if (find.byType(TextField).evaluate().isEmpty) {
-    await tester.tap(find.byTooltip('搜索'));
-    await tester.pump();
-  }
   await tester.enterText(find.byType(TextField), text);
 }
 
@@ -149,17 +145,18 @@ void main() {
 
     expect(find.text('动态'), findsOneWidget);
     expect(find.text('连接 · 3'), findsOneWidget);
-    // 标题行右边「全部关闭」圆钮，搜索框下面一排类型筛选 chip；没有「N 条 · 代理 · 直连」那一行
+    // 搜索框常驻、旁边是「全部关闭」胶囊（同 iOS），下面一排类型筛选 chip；没有「N 条 · 代理 · 直连」那一行
     for (final k in ['全部', '推送', 'DNS', '直连', '代理']) {
       expect(find.widgetWithText(M3FilterChip, k), findsOneWidget);
     }
     expect(find.textContaining('条 · 代理'), findsNothing);
     expect(find.text('www.youtube.com:443'), findsOneWidget);
-    expect(find.byTooltip('全部关闭'), findsOneWidget);
-    // 第二行写规则选中的策略（组名）· 规则，右侧累计下行（核心没给速率时）+ 时长
-    expect(find.text('节点选择 · GEOSITE,youtube'), findsOneWidget);
-    expect(find.text('0 KB/s'), findsNWidgets(3));   // 核心给的速率
-    expect(find.textContaining('00:4'), findsNWidgets(3));
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('全部关闭'), findsOneWidget);
+    // 第二行写叶子节点（实际出去的那个）· 规则，第三行「↓ ↑ 累计 · 时长」，行尾 ✕（同 iOS）
+    expect(find.text('香港 01 · IEPL · GEOSITE,youtube'), findsOneWidget);
+    expect(find.textContaining(RegExp(r'^↓ .+  ↑ .+ · 00:4\d$')), findsNWidgets(3));
+    expect(find.byTooltip('关闭连接'), findsNWidgets(3));
     // 悬浮底栏的高度让进了列表底部留白
     final list = tester.widget<ListView>(find.byType(ListView));
     expect(list.padding, const EdgeInsets.only(bottom: 16 + 96));
@@ -219,7 +216,7 @@ void main() {
 
     await tester.tap(find.text('日志'));
     await tester.pump();
-    expect(find.byType(TextField), findsNothing);
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, isEmpty);
     expect(find.textContaining('NXDOMAIN'), findsOneWidget);
   });
 
@@ -259,12 +256,13 @@ void main() {
 
     await _typeSearch(tester, '伦敦');
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));   // 日志列表最多 250ms 刷一次
     expect(find.textContaining('伦敦 01'), findsOneWidget);
     expect(find.textContaining('NXDOMAIN'), findsNothing);
 
     await _typeSearch(tester, '');
     await tester.pump();
-    await tester.tap(find.byTooltip('清空日志'));
+    await tester.tap(find.text('清空'));
     await tester.pump();
     expect(find.text('暂无日志'), findsOneWidget);
   });
@@ -320,8 +318,6 @@ void main() {
       fetch: () async => rounds[round < rounds.length ? round++ : rounds.length - 1],
     );
     expect(find.text('连接 · 3'), findsOneWidget);
-    await tester.tap(find.byTooltip('搜索'));   // 展开搜索框：下面看它跟着轮询重建了没有
-    await tester.pump();
     final title = tester.widget(find.byType(PageTitle));
     final field = tester.widget(find.byType(TextField));
     final segment = tester.widget(find.byWidgetPredicate((w) => w is M3ButtonGroup));
@@ -367,18 +363,18 @@ void main() {
     // 还没有关闭的
     await pick('已关闭');
     expect(find.text('暂无已关闭的连接'), findsOneWidget);
-    expect(find.byTooltip('全部关闭'), findsNothing);
+    expect(find.text('全部关闭'), findsNothing);
 
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump();
     expect(find.textContaining('bilibili.com'), findsOneWidget);
     expect(find.textContaining('用时 4'), findsOneWidget);   // 开始于 42 秒前
-    expect(find.text('已结束'), findsOneWidget);
+    expect(find.byTooltip('关闭连接'), findsNothing);   // 已关闭的没有 ✕
     expect(find.byType(Dismissible), findsNothing);   // 已关闭的不能滑
 
     // 回到全部、左滑关掉 youtube：它排到已关闭的最前面
     await pick('全部');
-    expect(find.byTooltip('全部关闭'), findsOneWidget);
+    expect(find.text('全部关闭'), findsOneWidget);
     expect(find.textContaining('bilibili.com'), findsNothing);
     await tester.drag(find.text('www.youtube.com:443'), const Offset(-400, 0));
     await tester.pumpAndSettle();
@@ -399,7 +395,7 @@ void main() {
     await tester.tap(find.textContaining('bilibili.com'));
     await tester.pumpAndSettle();
     expect(find.text('关闭于'), findsOneWidget);
-    expect(find.text('已结束'), findsWidgets);   // 详情里一处，底下的行上还有
+    expect(find.text('已结束'), findsWidgets);   // 详情里
     expect(find.text('关闭这条连接'), findsNothing);
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();

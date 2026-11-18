@@ -492,11 +492,15 @@ class M3ListRow extends StatelessWidget {
     this.titleMaxLines = 1,
     this.subtitleMaxLines = 2,
     this.titleSize = 16,
+    this.footer,
   });
 
   final String title;
   final String? subtitle;
   final Widget? leading, trailing;
+
+  /// 副标题下面再一行（动态页连接行的「↓ ↑ 累计 · 时长」）
+  final Widget? footer;
   final bool selected;
   final VoidCallback? onTap, onLongPress;
   final Color? color;
@@ -566,6 +570,7 @@ class M3ListRow extends StatelessWidget {
                             style: TextStyle(fontSize: MeowFont.caption, color: sub),
                           ),
                         ),
+                      if (footer != null) Padding(padding: const EdgeInsets.only(top: 2), child: footer),
                     ],
                   ),
                 ),
