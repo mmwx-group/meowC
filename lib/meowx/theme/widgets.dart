@@ -142,7 +142,7 @@ class MeowSegment<T> extends StatelessWidget {
   );
 }
 
-/// 电源键（M3 改版后就是 [M3PowerButton]：没连是圆角方块，连上变成主色饼干，连接中在转）。宽屏侧栏用。
+/// 电源键（就是 [M3PowerButton]：同 iOS 的圆角方块，连接中樱粉液面上升）。宽屏侧栏用。
 class MeowPowerButton extends StatelessWidget {
   const MeowPowerButton({
     super.key,

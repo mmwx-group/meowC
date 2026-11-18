@@ -880,111 +880,95 @@ class M3Cookie extends StatelessWidget {
   );
 }
 
-/// 电源键（M3E 的饼干形按钮）：已连接 = 主色八瓣饼干、白色图标；没连 = 圆角方块、主色容器底（随主题色变）、主色图标；
-/// 连接中是半开的花瓣转得快一点（同 M3E 的加载指示器），连上之后花瓣全开、一直慢慢转（2026-11-18 用户要求「启动后一直旋转」）。
-/// 一直转的时候只重画这颗按钮自己（外面一层 RepaintBoundary）；首页不在前台时外层的 TickerMode 停掉它；系统「移除动画」时不转。
-///
-/// 形变（2026-11-17 用户在四个方案里选的「A 同族八瓣」，以前是九瓣 ↔ 方块直接按半径插值）：
-/// - 八瓣：方块每条边正好变成两瓣，整个过程保持四重对称（九瓣对四个角，中间形状歪、鼓包）；
-/// - 两个量分开走：[_morph] 方块 ↔ 圆（阻尼比 0.62，几乎不冲过头），[_depth] 花瓣深浅（阻尼比 0.45，开花时回弹一下）；
-///   连接中花瓣只开一半，连上再全开；
-/// - 形变时顺带转 1/16 圈，方块与花外沿差不多大（以前方块小 6%，大小会跳）；
-/// - 转动停下时对齐到 1/4 圈：之后再变回方块是正的，不会斜着。
+/// 电源键（2026-11-18 用户要求与 iOS 一致，照 iOS `PowerButton` 的经典样式；以前是 M3E 的饼干 ↔ 八瓣花、连上一直转）：
+/// 圆角方块（圆角 = 边长 × 0.325，超椭圆）；没连 = 反色实心（浅色深底浅图标、深色浅底深图标，同 iOS 的墨色 / 近白）；
+/// 连接过程是「液面上升」：连接中樱粉从底部注入——先快后慢，1.2 秒到七成，之后 6 秒慢慢涨到九成（规则集拉得久、核心起得慢也不会注满了还没连上）；
+/// 连上那一刻补满（弹跳弹簧）、外扩一圈同形描边涟漪、图标转深色；断开或连接失败时排空。
+/// 樱粉 = 主题主色的色相，浅色亮度 70%、深色 80%（同 iOS 的 heroShades），连上时带一圈同色投影。
+/// 液面只是一块按比例纵向缩放的色块（锚在底边），不触发布局。系统「移除动画」时直接跳到位。
 class M3PowerButton extends StatefulWidget {
   const M3PowerButton({
     super.key,
     required this.on,
     required this.busy,
     required this.onTap,
-    this.size = 116,
+    this.size = 80,
     this.enabled = true,
-    this.spinWhileOn = false,
   });
 
   final bool on, busy, enabled;
   final VoidCallback onTap;
   final double size;
 
-  /// 连上之后也一直慢慢转（首页连接主卡用；侧栏的小电源键不转，免得一直要帧）
-  final bool spinWhileOn;
+  /// 已连接的填充色（樱粉）：主色的色相，饱和度夹在 0.35–0.78，浅色亮度 70%、深色 80%（同 iOS）
+  static Color activeFill(ColorScheme cs) {
+    final hsl = HSLColor.fromColor(cs.primary);
+    final s = hsl.saturation < 0.08 ? hsl.saturation : hsl.saturation.clamp(0.35, 0.78);
+    return hsl.withSaturation(s).withLightness(cs.brightness == Brightness.dark ? 0.80 : 0.70).toColor();
+  }
 
-  /// 测试里关掉「连上一直转」：一直转的话 pumpAndSettle 等不到停
-  @visibleForTesting
-  static bool debugSpinWhileOn = true;
+  /// 连上时图标的深色（同 iOS #2A2130）
+  static const activeIcon = Color(0xFF2A2130);
 
   @override
   State<M3PowerButton> createState() => _M3PowerButtonState();
 }
 
 class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateMixin {
-  // 方块 ↔ 圆：1 = 圆角方块（没连），0 = 圆（已连 / 正在连，花瓣深浅由 _depth 定）
-  late final AnimationController _morph = AnimationController.unbounded(vsync: this, value: _morphTarget);
-  // 花瓣深浅：0 = 没有花瓣，0.45 = 连接中半开，1 = 已连全开
-  late final AnimationController _depth = AnimationController.unbounded(vsync: this, value: _depthTarget);
-  // 转动：连接中一圈 5.2 秒，连上之后一圈 12 秒一直转；断开时转到最近的 1/4 圈停下
-  late final AnimationController _spin = AnimationController(vsync: this, duration: _spinPeriod);
+  /// 液面高度 0…1：初值按出现时的状态给（切回首页时已连接就是满的，不再从零注一遍）
+  late final AnimationController _level = AnimationController.unbounded(vsync: this, value: widget.on ? 1 : 0);
 
-  static const _busyTurn = Duration(milliseconds: 5200);
-  static const _onTurn = Duration(seconds: 12);
-  Duration get _spinPeriod => widget.busy ? _busyTurn : _onTurn;
-  // 系统「移除动画」时不转（也不空跑 Ticker）
-  bool get _spinning =>
-      (widget.busy || (widget.on && widget.spinWhileOn && M3PowerButton.debugSpinWhileOn)) &&
-      !MediaQuery.disableAnimationsOf(context);
-  static final _morphSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 300, ratio: 0.62);
-  static final _depthSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 420, ratio: 0.45);
+  /// 连上那一刻外扩一次的涟漪（0 → 1：放大 1 → 1.5、透明度 0.8 → 0）
+  late final AnimationController _ripple = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 650),
+    value: 1,
+  );
 
-  double get _morphTarget => widget.on || widget.busy ? 0 : 1;
-  double get _depthTarget => widget.on ? 1 : (widget.busy ? 0.45 : 0);
+  bool _pressed = false;
+  int _pourId = 0;
+
+  static final _fillSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 260, ratio: 0.5);
+
+  bool get _reduce => MediaQuery.disableAnimationsOf(context);
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncSpin();
-  }
-
-  void _syncSpin() {
-    if (_spinning && !_spin.isAnimating) {
-      _spin.repeat(period: _spinPeriod);
-    } else if (!_spinning && _spin.isAnimating && MediaQuery.disableAnimationsOf(context)) {
-      _spin
-        ..stop()
-        ..value = 0;
-    }
-  }
-
-  void _springTo(AnimationController c, double target, SpringDescription spring) {
-    if (c.value == target && !c.isAnimating) return;
-    // 弹簧停下时离目标还差一点点（容差内就算停）：正常结束后对齐到目标，颜色才是准的；被新目标打断时不会走到这里
-    c.animateWith(SpringSimulation(spring, c.value, target, c.velocity)).then((_) {
-      if (mounted) c.value = target;
-    });
+    // 连接中切回首页：接着注
+    if (widget.busy && !widget.on && _level.value == 0 && !_level.isAnimating) _pour();
   }
 
   @override
   void didUpdateWidget(M3PowerButton old) {
     super.didUpdateWidget(old);
-    _springTo(_morph, _morphTarget, _morphSpring);
-    _springTo(_depth, _depthTarget, _depthSpring);
-    if (_spinning && (!_spin.isAnimating || old.busy != widget.busy || old.on != widget.on)) {
-      // 从当前角度接着转，只换转速（连接中 → 已连接变慢）
-      _spin.repeat(period: _spinPeriod);
-    } else if (!_spinning && _spin.isAnimating) {
-      // 转到下一个 1/4 圈停下：八瓣与方块都对齐，不突然跳回
-      const step = 0.25;
-      final end = ((_spin.value / step).ceil() * step).clamp(0.0, 1.0);
-      final ms = ((end - _spin.value) * _busyTurn.inMilliseconds).round() + 1;
-      _spin.animateTo(end, duration: Duration(milliseconds: ms)).then((_) {
-        if (mounted && !_spinning) _spin.value = 0;
+    if (old.on != widget.on || old.busy != widget.busy) _pour();
+  }
+
+  void _pour() {
+    final id = ++_pourId;
+    if (_reduce) {
+      _level.value = widget.on ? 1 : (widget.busy ? 0.7 : 0);
+      return;
+    }
+    if (widget.on) {
+      _level.animateWith(SpringSimulation(_fillSpring, _level.value, 1, _level.velocity)).then((_) {
+        if (mounted && id == _pourId) _level.value = 1;
       });
+      _ripple.forward(from: 0);
+    } else if (widget.busy) {
+      _level.animateTo(0.7, duration: const Duration(milliseconds: 1200), curve: const Cubic(0.2, 0.8, 0.3, 1)).then((_) {
+        if (mounted && id == _pourId) _level.animateTo(0.92, duration: const Duration(seconds: 6), curve: Curves.linear);
+      });
+    } else {
+      _level.animateTo(0, duration: const Duration(milliseconds: 350), curve: const Cubic(0.5, 0, 0.8, 0.4));
     }
   }
 
   @override
   void dispose() {
-    _morph.dispose();
-    _depth.dispose();
-    _spin.dispose();
+    _level.dispose();
+    _ripple.dispose();
     super.dispose();
   }
 
@@ -992,96 +976,108 @@ class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateM
   Widget build(BuildContext context) {
     final cs = context.cs;
     final size = widget.size;
-    final reduce = MediaQuery.disableAnimationsOf(context);
+    final enabled = widget.enabled;
+    final active = M3PowerButton.activeFill(cs);
+    final shape = RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(size * 0.325));
+    final idleFill = enabled ? cs.inverseSurface : cs.cardInner;
+    final iconColor = !enabled ? cs.outline : (widget.on ? M3PowerButton.activeIcon : cs.onInverseSurface);
     return Semantics(
       button: true,
-      enabled: widget.enabled,
+      enabled: enabled,
       label: widget.on ? '断开连接' : (widget.busy ? '正在连接' : '连接'),
-      child: Opacity(
-        opacity: widget.enabled || widget.busy ? 1 : 0.38,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled
-              ? () {
-                  MeowHaptics.toggle();
-                  widget.onTap();
-                }
-              : null,
-          // 一直转：只重画这一颗
-          child: RepaintBoundary(
-            child: SizedBox.square(
-              dimension: size,
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_morph, _depth, _spin]),
-                builder: (_, _) {
-                  final m = (reduce ? _morphTarget : _morph.value).clamp(0.0, 1.0);
-                  final d = reduce ? _depthTarget : _depth.value;
-                  // 两头都随主题色：没连是主色容器底 + 主色图标，连上是主色底 + 主色上的字色
-                  final fill = Color.lerp(cs.primary, cs.primaryContainer, m)!;
-                  final iconColor = Color.lerp(cs.onPrimary, cs.primary, m)!;
-                  return CustomPaint(
-                    painter: _PowerShapePainter(
-                      color: fill,
-                      morph: m,
-                      depth: d,
-                      rotation: (reduce ? 0 : _spin.value * 2 * math.pi) + (1 - m) * math.pi / 8,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: enabled
+            ? () {
+                MeowHaptics.toggle();
+                widget.onTap();
+              }
+            : null,
+        child: AnimatedScale(
+          scale: _pressed && !_reduce ? 0.94 : 1,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: SizedBox.square(
+            dimension: size,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // 连上时外扩的同形描边
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedBuilder(
+                      animation: _ripple,
+                      builder: (_, _) {
+                        final t = const Cubic(0.2, 0.8, 0.3, 1).transform(_ripple.value);
+                        final opacity = 0.8 * (1 - _ripple.value);
+                        if (opacity <= 0.01) return const SizedBox.shrink();
+                        return Transform.scale(
+                          scale: 1 + 0.5 * t,
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              shape: shape.copyWith(side: BorderSide(color: active.withValues(alpha: opacity), width: 2)),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                    child: Center(
-                      child: Icon(Icons.power_settings_new_rounded, size: size * 0.36, color: iconColor),
+                  ),
+                ),
+                // 本体：反色底 + 樱粉液面 + 图标；连上时同色投影，没连时淡淡的黑影
+                Positioned.fill(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    decoration: ShapeDecoration(
+                      shape: shape,
+                      shadows: [
+                        BoxShadow(
+                          color: widget.on
+                              ? active.withValues(alpha: 0.45)
+                              : Colors.black.withValues(alpha: enabled ? 0.18 : 0),
+                          blurRadius: size * 0.25,
+                          offset: Offset(0, size * 0.1),
+                        ),
+                      ],
                     ),
-                  );
-                },
-              ),
+                    child: ClipPath(
+                      clipper: ShapeBorderClipper(shape: shape),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ColoredBox(color: idleFill),
+                          if (enabled)
+                            AnimatedBuilder(
+                              animation: _level,
+                              // 纵向缩放锚在底边（只改变换，不重新排版）
+                              builder: (_, child) => Transform(
+                                alignment: Alignment.bottomCenter,
+                                transform: Matrix4.diagonal3Values(1, _level.value.clamp(0.0, 1.0), 1),
+                                child: child,
+                              ),
+                              child: ColoredBox(color: active),
+                            ),
+                          Center(
+                            child: TweenAnimationBuilder<Color?>(
+                              tween: ColorTween(end: iconColor),
+                              duration: const Duration(milliseconds: 220),
+                              builder: (_, c, _) => Icon(Icons.power_settings_new_rounded, size: size * 0.42, color: c),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
-}
-
-/// 电源键的形状：八瓣饼干与圆角方块（超椭圆，指数 4.5）按半径插值，见 [M3PowerButton]。
-/// 饼干外沿 = 半径（花瓣全开时凹处 87%），没开花时略收 3%；方块边的中点在 90%，四个角圆润外凸，两者看着差不多大。
-@visibleForTesting
-Path meowPowerShape(Size size, {required double morph, required double depth, double rotation = 0, int samples = 240}) {
-  final c = size.center(Offset.zero);
-  final rMax = size.shortestSide / 2;
-  const n = 4.5;
-  final path = Path();
-  for (var i = 0; i <= samples; i++) {
-    final t = i / samples * 2 * math.pi;
-    final a = t - rotation;
-    final cookie = (1 - 0.13 * depth * (1 - math.cos(8 * a)) / 2) * (1 - 0.03 * (1 - depth));
-    final ct = math.cos(a).abs(), st = math.sin(a).abs();
-    final square = math.pow(math.pow(ct, n) + math.pow(st, n), -1 / n) * 0.9;
-    final r = rMax * (cookie + (square - cookie) * morph);
-    final p = c + Offset(math.cos(t) * r, math.sin(t) * r);
-    if (i == 0) {
-      path.moveTo(p.dx, p.dy);
-    } else {
-      path.lineTo(p.dx, p.dy);
-    }
-  }
-  return path..close();
-}
-
-class _PowerShapePainter extends CustomPainter {
-  const _PowerShapePainter({required this.color, required this.morph, required this.depth, required this.rotation});
-
-  final Color color;
-  final double morph, depth, rotation;
-
-  @override
-  void paint(Canvas canvas, Size size) => canvas.drawPath(
-    meowPowerShape(size, morph: morph, depth: depth, rotation: rotation),
-    Paint()
-      ..color = color
-      ..isAntiAlias = true,
-  );
-
-  @override
-  bool shouldRepaint(_PowerShapePainter old) =>
-      old.color != color || old.morph != morph || old.depth != depth || old.rotation != rotation;
 }
 
 /// 波浪进度条（M3E）：已完成的一段画成正弦波，剩下的是直的轨道（中间隔一段空），末端一个主色小圆点。

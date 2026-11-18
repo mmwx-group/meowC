@@ -109,24 +109,7 @@ void main() {
     expect(circleish.contains(const Offset(100 + 80, 100 + 80)), isFalse, reason: '圆在对角方向只到 0.707');
   });
 
-  test('电源键形状：八瓣 ↔ 方块全程四重对称；方块边中点 90%、花瓣外沿贴着外接圆', () {
-    const size = Size(200, 200);
-    const c = Offset(100, 100);
-    for (final m in [0.0, 0.3, 0.5, 0.8, 1.0]) {
-      final path = meowPowerShape(size, morph: m, depth: 1 - m);
-      // 转 90° 的点在不在形状里应当一致（四重对称）
-      for (final p in [const Offset(160, 120), const Offset(185, 100), const Offset(170, 170)]) {
-        final q = c + Offset(-(p.dy - c.dy), p.dx - c.dx);
-        expect(path.contains(p), path.contains(q), reason: 'morph $m 点 $p');
-      }
-    }
-    final square = meowPowerShape(size, morph: 1, depth: 0).getBounds();
-    expect(square.right, closeTo(190, 0.5));
-    final flower = meowPowerShape(size, morph: 0, depth: 1).getBounds();
-    expect(flower.right, closeTo(200, 0.5));
-  });
-
-  testWidgets('电源键：没连是浅底 + 主色图标，连上换成主色饼干 + 白图标；忙的时候在转、停下不报错', (tester) async {
+  testWidgets('电源键（同 iOS）：没连是反色方块 + 反色图标；连接中液面注到七成、连上补满并换深色图标；断开排空', (tester) async {
     var on = false, busy = false;
     late StateSetter set;
     await tester.pumpWidget(
@@ -141,43 +124,33 @@ void main() {
     );
     await tester.pumpAndSettle();
     Icon icon() => tester.widget<Icon>(find.byIcon(Icons.power_settings_new_rounded));
-    expect(icon().color, _cs.primary);
+    // 液面 = 锚在底边的纵向缩放
+    double level() => tester
+        .widget<Transform>(find.byWidgetPredicate((w) => w is Transform && w.alignment == Alignment.bottomCenter))
+        .transform
+        .entry(1, 1);
+    expect(icon().color, _cs.onInverseSurface);
+    expect(level(), 0);
     expect(find.bySemanticsLabel('连接'), findsOneWidget);
 
     set(() => busy = true);
-    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1200));
+    expect(level(), closeTo(0.7, 0.02));
     expect(find.bySemanticsLabel('正在连接'), findsOneWidget);
+
     set(() {
       busy = false;
       on = true;
     });
     await tester.pumpAndSettle();
-    expect(icon().color, _cs.onPrimary);
+    expect(level(), 1);
+    expect(icon().color, M3PowerButton.activeIcon);
     expect(find.bySemanticsLabel('断开连接'), findsOneWidget);
-  });
 
-  testWidgets('电源键 spinWhileOn：连上之后一直转（一直要帧），断开后停在整 1/4 圈、不再要帧；默认不转', (tester) async {
-    var on = true;
-    late StateSetter set;
-    await tester.pumpWidget(
-      _app(
-        StatefulBuilder(
-          builder: (_, s) {
-            set = s;
-            return M3PowerButton(on: on, busy: false, spinWhileOn: true, onTap: () {});
-          },
-        ),
-      ),
-    );
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.binding.hasScheduledFrame, isTrue);
     set(() => on = false);
     await tester.pumpAndSettle();
-    expect(tester.binding.hasScheduledFrame, isFalse);
-
-    // 不开 spinWhileOn（侧栏的小电源键）：连上也不转
-    await tester.pumpWidget(_app(M3PowerButton(on: true, busy: false, onTap: () {})));
-    await tester.pumpAndSettle();
+    expect(level(), 0);
     expect(tester.binding.hasScheduledFrame, isFalse);
   });
 

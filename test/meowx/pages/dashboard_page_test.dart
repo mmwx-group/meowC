@@ -297,9 +297,7 @@ Future<void> _pump(
 DashboardPage _page() => DashboardPage(fetchConnections: () async => _conns);
 
 void main() {
-  // 连接主卡的电源键连上后一直转：这里关掉，否则 pumpAndSettle 等不到停（一直转本身在 m3_kit_test 里测）
   setUpAll(() {
-    M3PowerButton.debugSpinWhileOn = false;
     SharedPreferences.setMockInitialValues({});   // 宽屏的「网络测速」卡读测速记录
   });
 

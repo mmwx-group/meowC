@@ -18,7 +18,7 @@ import '../../theme/meow_dialog.dart';
 import '../../state/status.dart';
 import 'node_picker.dart';
 
-/// 连接主卡（M3 Expressive，画布稿 Main）：状态（提示 / 大字 / 已运行）+ 饼干形电源键；「当前节点」行；「规则 | 全局 | 直连」连接式按钮组。
+/// 连接主卡（M3 Expressive，画布稿 Main）：状态（提示 / 大字 / 已运行）+ 圆角方块电源键（同 iOS）；「当前节点」行；「规则 | 全局 | 直连」连接式按钮组。
 /// 底色与首页其它卡片相同（2026-11-18 用户要求，以前已连接时换成主色容器）：状态靠大字的颜色（连上是主题色）与电源键表达；圆角 36。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
 class HomeHeroCard extends ConsumerWidget {
   const HomeHeroCard({super.key, this.dense = false});
@@ -112,7 +112,6 @@ class HomeHeroCard extends ConsumerWidget {
                 size: _powerSize(context, dense),
                 on: on,
                 busy: phase == ConnPhase.connecting,
-                spinWhileOn: true,
                 enabled: ref.watch(powerEnabledProvider),
                 onTap: () => unawaited(ref.read(powerProvider.notifier).toggle()),
               ),
