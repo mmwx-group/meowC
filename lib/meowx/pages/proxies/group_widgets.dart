@@ -203,8 +203,9 @@ class GroupCard extends ConsumerWidget {
     return M3ListRow(
       title: group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
       titleSize: 15,
-      // 组名下面只写策略（用户 2026-11-17：不写成员数和当前节点）
-      subtitle: groupTypeLabel(group.type.name),
+      // 同 iOS：类型徽标跟在组名后面（主题色），组名下面写当前选中的节点（用户 2026-11-18）
+      titleTrailing: GroupTypeTag(group: group, onSelected: selected),
+      subtitle: current.isEmpty ? null : current,
       subtitleMaxLines: 1,
       selected: selected,
       onTap: onTap,
@@ -248,20 +249,38 @@ class GroupCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: fg),
+                    // 同 iOS：组名后面跟类型徽标（主题色），下面一行是当前选中的节点（用户 2026-11-18）
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: fg),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GroupTypeTag(group: group, onSelected: open),
+                      ],
                     ),
-                    const SizedBox(height: 1),
-                    // 组名下面只写策略（用户 2026-11-17：不写成员数和当前节点）
-                    Text(
-                      groupTypeLabel(group.type.name),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: MeowFont.caption, color: sub),
-                    ),
+                    if (current.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          NestedGroupIcon(current, size: 14, gap: 4),
+                          Flexible(
+                            child: Text(
+                              current,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w500, color: sub),
+                            ),
+                          ),
+                          CurrentBadges(groupName: group.name),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -283,6 +302,37 @@ class GroupCard extends ConsumerWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 代理组类型徽标：主题色等宽字、卡片次级底、圆角 8（同 iOS 的 GroupKindBadge，不按类型变色）。
+/// [onSelected] = 所在的卡片是选中 / 展开的容器色底，徽标底换成卡片色。
+class GroupTypeTag extends StatelessWidget {
+  const GroupTypeTag({super.key, required this.group, this.onSelected = false});
+  final Group group;
+  final bool onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: onSelected ? cs.card : cs.cardInner,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        groupTypeLabel(group.type.name),
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(
+          fontSize: MeowFont.caption2,
+          fontWeight: FontWeight.w600,
+          color: cs.primary,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     );

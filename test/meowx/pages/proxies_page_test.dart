@@ -317,11 +317,15 @@ void main() {
     expect(find.byType(GroupCard), findsNWidgets(4));
     expect(find.byType(GroupChipBar), findsNothing);
     expect(find.byType(NodeSliverGrid), findsNothing);
-    // 组名下面只写策略，不写成员数和当前节点
-    expect(find.descendant(of: find.widgetWithText(GroupCard, 'AI 服务（名字也很长的一个代理组）'), matching: find.text('故障转移')), findsOneWidget);
-    expect(find.textContaining('洛杉矶'), findsNothing);
+    // 同 iOS：组名后面跟类型徽标（主题色），组名下面一行是当前选中的节点
+    final ai = _groupCard('AI 服务（名字也很长的一个代理组）');
+    final tag = find.descendant(of: ai, matching: find.byType(GroupTypeTag));
+    expect(find.descendant(of: tag, matching: find.text('故障转移')), findsOneWidget);
+    final cs = Theme.of(tester.element(tag)).colorScheme;
+    expect(tester.widget<Text>(find.descendant(of: tag, matching: find.text('故障转移'))).style!.color, cs.primary);
+    expect(find.descendant(of: ai, matching: find.textContaining('洛杉矶')), findsOneWidget);
     expect(find.text('负载均衡'), findsNWidgets(2));   // 组名 + 策略
-    final urlTest = find.widgetWithText(GroupCard, '自动选择');
+    final urlTest = _groupCard('自动选择');
 
     // 展开动画从高度 0 开始（这一帧网格还不在屏上），播完才整段露出
     await tester.tap(urlTest);
@@ -343,7 +347,7 @@ void main() {
       size: const Size(360, 1600),
       overrides: _overrides(profile: _profile(), layout: ProxyLayout.list),
     );
-    final card = find.widgetWithText(GroupCard, '自动选择');
+    final card = _groupCard('自动选择');
     final test = find.descendant(of: card, matching: find.byType(GroupTestButton));
     expect(test, findsOneWidget);
     expect(tester.getSize(test).height, 30);
@@ -371,19 +375,19 @@ void main() {
     );
     final lower = find.byWidgetPredicate((w) => w is NodeSliverGrid && w.group.type == GroupType.Fallback);
 
-    await tester.tap(find.widgetWithText(GroupCard, 'AI 服务（名字也很长的一个代理组）'));
+    await tester.tap(_groupCard('AI 服务（名字也很长的一个代理组）'));
     await tester.pumpAndSettle();
     final before = tester.element(lower);
     final cell = tester.element(find.text('洛杉矶 01 · 9929').last);
 
     // 在它上面插进一行「自动选择」和一份节点清单
-    await tester.tap(find.widgetWithText(GroupCard, '自动选择'));
+    await tester.tap(_groupCard('自动选择'));
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNWidgets(2));
     expect(identical(tester.element(lower), before), isTrue);
     expect(identical(tester.element(find.text('洛杉矶 01 · 9929').last), cell), isTrue);
 
-    await tester.tap(find.widgetWithText(GroupCard, '自动选择').first);
+    await tester.tap(_groupCard('自动选择'));
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(identical(tester.element(lower), before), isTrue);
@@ -493,8 +497,7 @@ void main() {
       expect(find.text('手动选择 · 5'), findsOneWidget);
       expect(find.byType(Switch), findsNothing);
 
-      // 「节点选择」那张卡的第二行也是「自动选择」（它当前选中的成员）：取第二张
-      await tester.tap(find.widgetWithText(GroupCard, '自动选择').last);
+      await tester.tap(_groupCard('自动选择'));
       await tester.pump();
       expect(find.text('延迟最低 · 12 · 自动'), findsOneWidget);
       expect(find.descendant(of: find.byType(GroupSummary), matching: find.text(_longName)), findsOneWidget);
@@ -558,3 +561,6 @@ void main() {
     });
   });
 }
+
+/// 按组名找组卡（组卡第二行写当前节点，别的组选中「自动选择」时 widgetWithText 会多匹配）
+Finder _groupCard(String name) => find.byWidgetPredicate((w) => w is GroupCard && w.group.name == name);

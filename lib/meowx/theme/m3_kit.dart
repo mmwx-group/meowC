@@ -493,9 +493,21 @@ class M3ListRow extends StatelessWidget {
     this.subtitleMaxLines = 2,
     this.titleSize = 16,
     this.footer,
+    this.titleTrailing,
+    this.titleLeading,
+    this.subtitleWidget,
   });
 
   final String title;
+
+  /// 紧跟在标题后面的小部件（节点页组卡的类型徽标）
+  final Widget? titleTrailing;
+
+  /// 紧挨在标题前面的小部件（动态页连接行的 TCP / UDP 小标）
+  final Widget? titleLeading;
+
+  /// 代替 [subtitle] 的一行（需要分段上色时用）
+  final Widget? subtitleWidget;
   final String? subtitle;
   final Widget? leading, trailing;
 
@@ -555,13 +567,31 @@ class M3ListRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        title,
-                        maxLines: titleMaxLines,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w700, color: fg),
-                      ),
-                      if (subtitle != null && subtitle!.isNotEmpty)
+                      if (titleTrailing == null && titleLeading == null)
+                        Text(
+                          title,
+                          maxLines: titleMaxLines,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w700, color: fg),
+                        )
+                      else
+                        Row(
+                          children: [
+                            if (titleLeading != null) ...[titleLeading!, const SizedBox(width: 6)],
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: titleSize, fontWeight: FontWeight.w700, color: fg),
+                              ),
+                            ),
+                            if (titleTrailing != null) ...[const SizedBox(width: 6), titleTrailing!],
+                          ],
+                        ),
+                      if (subtitleWidget != null)
+                        Padding(padding: const EdgeInsets.only(top: 2), child: subtitleWidget)
+                      else if (subtitle != null && subtitle!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 1),
                           child: Text(
