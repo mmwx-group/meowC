@@ -7,7 +7,6 @@ import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:bett_box/common/delay_test.dart';
-import 'package:bett_box/meowx/theme/target_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -15,15 +14,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../panel/account.dart';
-import '../../state/format.dart';
 import '../../state/meow_settings.dart';
-import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/haptics.dart';
-import '../../theme/latency_badge.dart';
-import '../../theme/m3.dart';
-import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'entry_badge.dart';
@@ -33,8 +27,11 @@ import 'node_parts.dart';
 const _gridSpacing = 8.0;
 
 /// 节点格的尺寸：手机按 ANodes（内边距 10/12、行距 6、名 14、最矮 64、圆角 18），
-/// 宽屏两栏按 WNodes（9/11、5、13、58、16）。
-({double padH, double padV, double gap, double name, double minH, double radius}) _spec(bool dense) => dense
+/// 宽屏两栏按 WNodes（9/11、5、13、58、16）；紧凑档同 iOS（内边距 7、名 12，没有副标题）。
+({double padH, double padV, double gap, double name, double minH, double radius}) _spec(bool dense, NodeCardSize size) =>
+    size == NodeCardSize.compact
+    ? (padH: 9, padV: 7, gap: 5, name: 12, minH: 50, radius: 16)
+    : dense
     ? (padH: 11, padV: 9, gap: 5, name: 13, minH: 58, radius: 16)
     : (padH: 12, padV: 10, gap: 6, name: 14, minH: 64, radius: 18);
 
@@ -43,8 +40,8 @@ TextStyle _subStyle([Color? color]) => MeowFont.mono(size: 11, color: color);
 
 /// 节点格高度：两行（名 / 副标题 + 徽标 + 延迟胶囊）。网格是懒加载、定高的（mainAxisExtent），不能让格子自己撑开，
 /// 所以按主题字样和文字缩放量出来——写死的话文字继承 M3 bodyMedium 的行高 1.43，字号调大一档第二行就越出格子底边。
-double _nodeCellExtent(BuildContext context, bool dense) {
-  final s = _spec(dense);
+double _nodeCellExtent(BuildContext context, bool dense, NodeCardSize size) {
+  final s = _spec(dense, size);
   final scaler = MediaQuery.textScalerOf(context);
   final base = DefaultTextStyle.of(context).style;
   double lineHeight(TextStyle style, String sample) {
@@ -62,7 +59,7 @@ double _nodeCellExtent(BuildContext context, bool dense) {
   // 样例带中文和国旗：CJK 字体与彩色 emoji 的行高都比拉丁字母高
   final name = lineHeight(_nameStyle(s.name), 'Ag节点🇺🇸');
   final sub = [
-    lineHeight(_subStyle(), 'vless · reality 直连'),
+    if (size != NodeCardSize.compact) lineHeight(_subStyle(), 'vless · reality 直连'),
     lineHeight(MeowFont.mono(size: 11, weight: FontWeight.w700), '88 ms超时') + 4,   // 延迟胶囊上下 padding 2+2
     19.0,   // 奖牌 15 + 点按边距 2+2
   ].max;
@@ -133,10 +130,14 @@ Future<void> pickNode(WidgetRef ref, Group group, Proxy proxy) async {
   }
 }
 
-/// 列数跟着网格宽度走：手机标准 2 列、大卡 1 列，更宽（平板、宽屏右栏）按最小格宽加列。
+/// 列数跟着网格宽度走：手机紧凑 3 列、标准 2 列、大卡 1 列（同 iOS），更宽（平板、宽屏右栏）按最小格宽加列。
 int nodeColumns(double width, NodeCardSize size) {
-  final large = size == NodeCardSize.large;
-  return math.max(large ? 1 : 2, ((width + _gridSpacing) / ((large ? 260 : 185) + _gridSpacing)).floor());
+  final (minCols, minWidth) = switch (size) {
+    NodeCardSize.compact => (3, 112.0),
+    NodeCardSize.standard => (2, 185.0),
+    NodeCardSize.large => (1, 260.0),
+  };
+  return math.max(minCols, ((width + _gridSpacing) / (minWidth + _gridSpacing)).floor());
 }
 
 /// 节点网格的排布：列数在布局阶段按网格自己的宽度算（[nodeColumns]），格高由外面量好传进来。
@@ -168,12 +169,8 @@ class NodeSliverGrid extends ConsumerWidget {
     required this.size,
     this.dense = false,
     this.reveal,
-    this.view = NodeView.grid,
   });
   final Group group;
-
-  /// 清单（M3 分段清单，一行一个）还是网格
-  final NodeView view;
 
   /// 列表布局里正在展开 / 收起时的错峰动画；null = 静止。
   final GroupReveal? reveal;
@@ -195,17 +192,8 @@ class NodeSliverGrid extends ConsumerWidget {
     final pinned = watchFixedMember(ref, group);
     final pendingPick = computed ? ref.watch(pendingPickProvider.select((m) => m[group.name])) : null;
     final shownSelected = (pendingPick != null && pendingPick.isNotEmpty) ? pendingPick : selectedName;
-    // 按延迟排要盯住每个成员的延迟：测出一个就重排一次（同一帧里到的结果合成一次重建）
-    final sort = ref.watch(proxiesStyleSettingProvider.select((s) => s.sortType));
-    final nodes = sortNodes(
-      group.all,
-      sort,
-      delayOf: sort == ProxiesSortType.delay
-          ? (p) => ref.watch(getDelayProvider(proxyName: p.name, testUrl: group.testUrl))
-          : null,
-    );
-    // 重排时已建出的格子跟着自己的名字挪位置，不在原位拆掉重建
-    final indexOf = sort == ProxiesSortType.none ? null : {for (final (i, p) in nodes.indexed) p.name: i};
+    // 不排序，按订阅里的顺序（2026-11-18 起同 iOS，节点视图里去掉了排序）
+    final nodes = group.all;
     VoidCallback? tapOf(Proxy p) => selectable
         ? () {
             // select 组点已选中的那个什么都不变，不震；url-test / fallback 组点了不是固定就是取消固定，都算换了
@@ -223,26 +211,7 @@ class NodeSliverGrid extends ConsumerWidget {
           key: ValueKey(p.name),
           reveal: reveal,
           index: i,
-          child: view == NodeView.list
-              ? Padding(
-                  padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
-                  child: M3SegmentSlot(
-                    index: i,
-                    count: nodes.length,
-                    child: _NodeListRow(
-                      proxy: p,
-                      group: group,
-                      meta: metas[p.name],
-                      index: i,
-                      selected: selected,
-                      pinned: isPinned,
-                      busy: busy,
-                      mode: mode,
-                      onTap: tapOf(p),
-                    ),
-                  ),
-                )
-              : _NodeCell(
+          child: _NodeCell(
                   proxy: p,
                   group: group,
                   meta: metas[p.name],
@@ -251,17 +220,16 @@ class NodeSliverGrid extends ConsumerWidget {
                   busy: busy,
                   mode: mode,
                   dense: dense,
+                  size: size,
                   onTap: tapOf(p),
                 ),
         );
       },
       childCount: nodes.length,
       addRepaintBoundaries: false,
-      findChildIndexCallback: indexOf == null ? null : (key) => key is ValueKey<String> ? indexOf[key.value] : null,
     );
-    if (view == NodeView.list) return SliverList(delegate: delegate);
     return SliverGrid(
-      gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense)),
+      gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense, size)),
       delegate: delegate,
     );
   }
@@ -278,93 +246,6 @@ String nodeSubtitle(Proxy proxy, ProxyMeta? meta, MeowTokens mm) {
 
 bool _testable(Proxy proxy) => !const {'REJECT', 'REJECT-DROP', 'PASS'}.contains(proxy.name.toUpperCase());
 
-/// 清单里的一行（画布稿 Nodes）：图标块（地区码；没选中的按行号轮换四种形状，选中变成主色圆）+ 名（+ 图钉）/ 副标题 +
-/// 主控指定入口 / 回程奖牌 / 解锁徽标 + 延迟胶囊（点 = 测该成员）。选中 = 次色容器底、四角 28。
-class _NodeListRow extends ConsumerWidget {
-  const _NodeListRow({
-    required this.proxy,
-    required this.group,
-    required this.meta,
-    required this.index,
-    required this.selected,
-    required this.pinned,
-    required this.busy,
-    required this.mode,
-    required this.onTap,
-  });
-
-  final Proxy proxy;
-  final Group group;
-  final ProxyMeta? meta;
-  final int index;
-  final bool selected, pinned, busy;
-  final LatencyMode mode;
-  final VoidCallback? onTap;
-
-  static const _shapes = [M3TileShape.rounded, M3TileShape.circle, M3TileShape.leafA, M3TileShape.leafB];
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cs = context.cs;
-    final nested = isGroupType(proxy.type);
-    final delay = ref.watch(getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl));
-    final medal = ref.watch(nodeMedalsProvider.select((m) => m[proxy.name]));
-    final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[proxy.name]));
-    final icon = nested ? ref.watch(groupIconProvider(proxy.name)) : '';
-    final Widget leading = icon.isNotEmpty
-        ? M3IconTile(
-            shape: selected ? M3TileShape.circle : _shapes[index % _shapes.length],
-            bg: selected ? cs.primary : cs.surfaceContainerHighest,
-            fg: selected ? cs.onPrimary : cs.onSurfaceVariant,
-            child: CommonTargetIcon(src: icon, size: 22),
-          )
-        : M3IconTile(
-            text: nested ? null : nodeTileLabel(proxy.name),
-            icon: nested ? Icons.layers_rounded : null,
-            shape: selected ? M3TileShape.circle : _shapes[index % _shapes.length],
-            bg: selected ? cs.primary : cs.surfaceContainerHighest,
-            fg: selected ? cs.onPrimary : cs.onSurfaceVariant,
-          );
-    return M3ListRow(
-      // 图标块里已经画了国旗，名字里的那面不再重复（嵌套的组 / 带图标的组没有国旗块，照写全名）
-      title: nested || icon.isNotEmpty ? proxy.name : nodeTitleWithoutFlag(proxy.name),
-      titleSize: 15,
-      subtitle: nodeSubtitle(proxy, meta, context.mm),
-      subtitleMaxLines: 1,
-      selected: selected,
-      onTap: onTap,
-      leading: leading,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (pinned)
-            Tooltip(
-              message: '已固定，点组内第一个节点恢复自动选择',
-              child: Icon(Icons.push_pin_rounded, size: 16, color: cs.primary),
-            ),
-          EntryOverrideBadge(proxy.name, size: 14),
-          if (medal != null) ...[const SizedBox(width: 4), MedalBadge(medal, size: 16)],
-          if (unlocks != null) ...[const SizedBox(width: 4), UnlockBadge(unlocks, size: 15)],
-          const SizedBox(width: 6),
-          if (busy)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
-            )
-          else if (_testable(proxy))
-            GestureDetector(
-              onTap: () {
-                MeowHaptics.tap();
-                proxyDelayTest(proxy, group.testUrl);
-              },
-              child: LatencyBadge(ms: delay, mode: mode, fontSize: 12),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 /// 节点格：地区码 + 名（+ 图钉）；行 2 协议 / 安全性副标题 + 回程奖牌 + 解锁 + 延迟胶囊（点 = 测该成员）。
 /// 白卡；选中 = 柔粉底 + 玫红 2px 描边。
 class _NodeCell extends ConsumerWidget {
@@ -377,6 +258,7 @@ class _NodeCell extends ConsumerWidget {
     this.busy = false,
     required this.mode,
     required this.dense,
+    required this.size,
     required this.onTap,
   });
 
@@ -392,12 +274,14 @@ class _NodeCell extends ConsumerWidget {
   final bool busy;
   final LatencyMode mode;
   final bool dense;
+  final NodeCardSize size;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mm = context.mm;
-    final s = _spec(dense);
+    final s = _spec(dense, size);
+    final compact = size == NodeCardSize.compact;
     final nested = isGroupType(proxy.type);
     final subtitle = nodeSubtitle(proxy, meta, mm);
     final delay = ref.watch(
@@ -449,7 +333,7 @@ class _NodeCell extends ConsumerWidget {
             SizedBox(height: s.gap),
             FitRow(
               text: Text(
-                subtitle,
+                compact ? '' : subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: _subStyle(mm.t2),

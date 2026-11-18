@@ -130,7 +130,6 @@ List<Override> _overrides({
   bool twoPane = false,
   ProxyLayout layout = ProxyLayout.tabs,
   NodeCardSize size = NodeCardSize.standard,
-  NodeView view = NodeView.list,
   Profile? profile,
   bool live = false,
   List<Group>? groups,
@@ -154,7 +153,7 @@ List<Override> _overrides({
     groupsProvider.overrideWith(() => _Groups(gs)),
     currentPageLabelProvider.overrideWith(_PageLabel.new),
     proxiesStyleSettingProvider.overrideWith(_Style.new),
-    meowSettingProvider.overrideWith(() => _Meow(MeowSettings(proxyLayout: layout, nodeCardSize: size, nodeView: view))),
+    meowSettingProvider.overrideWith(() => _Meow(MeowSettings(proxyLayout: layout, nodeCardSize: size))),
     proxyMetaProvider.overrideWithValue(const {_longName: ProxyMeta(type: 'vless', reality: true, flow: 'xtls-rprx-vision')}),
     medalsProvider.overrideWith((ref) => {_longName: _medal(_longName, 'gold'), '东京 01 · IIJ': _medal('东京 01 · IIJ', 'silver')}),
     unlocksProvider.overrideWith((ref) => {_longName: _unlock(_longName, 'yes'), '香港 02 · BGP': _unlock('香港 02 · BGP', 'no')}),
@@ -176,6 +175,9 @@ Future<void> _pump(
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  // 组类型跟随设备语言：这些用例按中文系统写
+  tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+  addTearDown(tester.platformDispatcher.clearLocaleTestValue);
   addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(
@@ -232,83 +234,29 @@ void main() {
     expect(find.byType(GroupSummary), findsNothing);
     expect(find.byType(Switch), findsNothing);
     expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38')), findsOneWidget);
-    // 节点行：国旗画在行首的图标块里，名字里的那面不重复写；不画地区码标签
+    // 节点格（一律网格，2026-11-18 起同 iOS）：国旗原样写在名字里；不画地区码标签
     expect(find.byType(RegionTag), findsNothing);
-    expect(find.text(nodeTitleWithoutFlag(_longName)), findsOneWidget);
+    expect(find.text(_longName), findsOneWidget);
     expect(find.text('Premium-Node-Without-Region-12345'), findsOneWidget);
     expect(find.text('vless · reality · vision'), findsOneWidget);
     expect(find.text('hy2'), findsOneWidget);
     // 延迟四态：有值 / 测试中 / 没测过 / 超时
-    expect(find.text('38 ms'), findsOneWidget);
-    expect(find.text('12345 ms'), findsOneWidget);
+    expect(find.text('38'), findsWidgets);   // 节点格 + 组测速钮
+    expect(find.text('12345'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
-    expect(find.text('— ms'), findsWidgets);
+    expect(find.text('—'), findsWidgets);
     expect(find.text('超时'), findsOneWidget);
-    // 行首的图标块：节点名里的国旗
-    expect(find.text('🇭🇰'), findsOneWidget);
     // 奖牌 / 解锁：节点行里的
     expect(find.byType(MedalBadge), findsNWidgets(2));
     expect(find.byType(UnlockBadge), findsNWidgets(2));
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
-    // 清单（不是网格）；没有「全部测速」按钮（2026-11-17 去掉），底部留白只让悬浮底栏
-    expect(find.byType(SliverGrid), findsNothing);
-    expect(find.byType(SliverList), findsWidgets);
-    expect(find.text('全部测速'), findsNothing);
+    // 网格；标题栏有「全部测速」（2026-11-18 加回来），底部留白只让悬浮底栏
+    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(find.byTooltip('全部测速'), findsOneWidget);
     final gridPad = tester.widget<SliverPadding>(
       find.ancestor(of: find.byType(NodeSliverGrid), matching: find.byType(SliverPadding)).first,
     );
     expect(gridPad.padding, const EdgeInsets.fromLTRB(16, 0, 16, 12 + 96));
-  });
-
-  testWidgets('排序：「节点视图」菜单里选延迟 / 名称，节点格跟着重排并记下；选默认回到订阅顺序', (tester) async {
-    await _pump(tester, size: const Size(412, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
-    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    // 行里显示的名字去掉了国旗（国旗在图标块里），按显示名认回原名
-    final names = {for (final p in _nodes) nodeTitleWithoutFlag(p.name): p.name};
-    final subscription = [for (final p in _nodes) p.name];
-    // 节点格里的名字，按网格顺序（摘要里的当前节点不算）
-    List<String> order() => [
-      for (final t in tester.widgetList<Text>(find.descendant(of: find.byType(NodeSliverGrid), matching: find.byType(Text))))
-        if (names.containsKey(t.data)) names[t.data]!,
-    ];
-    // 「节点视图」是从按钮长出来的气泡：点排序那一组按钮即时生效，点气泡外面关掉再看节点顺序
-    Future<void> pick(String item) async {
-      await tester.tap(find.byTooltip('节点视图'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text(item));
-      await tester.pump();
-      await tester.tapAt(const Offset(10, 1500));
-      await tester.pumpAndSettle();
-    }
-
-    expect(order(), subscription);
-
-    // 延迟：有读数的从低到高（12345 也是读数），测试中 / 没测过的按原顺序接后面，超时垫底
-    await pick('延迟');
-    expect(container.read(proxiesStyleSettingProvider).sortType, ProxiesSortType.delay);
-    expect(order(), [
-      _longName,
-      '东京 01 · IIJ',
-      '洛杉矶 01 · 9929',
-      '香港 02 · BGP',
-      '大阪 02',
-      '新加坡 01',
-      '台北 01 · HiNet',
-      '圣何塞 02',
-      '首尔 01',
-      '法兰克福 01',
-      'Premium-Node-Without-Region-12345',
-      '伦敦 01',
-    ]);
-
-    // 名称：中文按拼音（大阪 daban、东京 dongjing、法兰克福 falankefu …），国旗开头的排在最后
-    await pick('名称');
-    expect(container.read(proxiesStyleSettingProvider).sortType, ProxiesSortType.name);
-    expect(order().take(3), ['大阪 02', '东京 01 · IIJ', '法兰克福 01']);
-    expect(order().last, _longName);
-
-    await pick('默认');
-    expect(order(), subscription);
   });
 
   testWidgets('手机 · 单组布局：已固定的 url-test 组 / 大卡片单列 / 深色', (tester) async {
@@ -318,13 +266,30 @@ void main() {
       overrides: _overrides(
         profile: _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'}),
         size: NodeCardSize.large,
-        view: NodeView.grid,
       ),
       brightness: Brightness.dark,
     );
 
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
     expect(_gridColumns(tester), 1);
+  });
+
+  testWidgets('紧凑档：手机 3 列、不写协议副标题（同 iOS）', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(360, 1600),
+      overrides: _overrides(profile: _profile(), size: NodeCardSize.compact),
+      textScale: 1.4,
+    );
+    expect(_gridColumns(tester), 3);
+    expect(find.text('vless · reality · vision'), findsNothing);
+  });
+
+  test('组类型跟随设备语言：非中文系统写英文类型名', () {
+    expect(groupTypeLabel('URLTest', zh: false), 'url-test');
+    expect(groupTypeLabel('Selector', zh: false), 'select');
+    expect(groupTypeLabel('URLTest', zh: true), '延迟最低');
+    expect(groupTypeLabel('LoadBalance', zh: true), '负载均衡');
   });
 
   testWidgets('手机 · 单组布局：select 组没有「自动选择」开关，嵌套组 / 内置策略成员的副标题', (tester) async {
@@ -337,7 +302,7 @@ void main() {
 
     // 没记过停在哪个组 → 第一个组
     expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '节点选择')).selected, isTrue);
-    expect(find.text('代理组 · url-test'), findsOneWidget);
+    expect(find.text('代理组 · 延迟最低'), findsOneWidget);   // 中文系统写中文类型名
     expect(find.text('直连'), findsOneWidget);
     expect(find.byIcon(Icons.layers_rounded), findsOneWidget);
   });
@@ -492,7 +457,7 @@ void main() {
     await _pump(
       tester,
       size: const Size(360, 800),
-      overrides: _overrides(profile: _profile(), view: NodeView.grid),
+      overrides: _overrides(profile: _profile()),
       textScale: 1,
     );
     final grid = tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid));
@@ -519,10 +484,10 @@ void main() {
       await _pump(
         tester,
         size: size,
-        overrides: _overrides(profile: _profile(), wide: true, twoPane: true, view: NodeView.grid),
+        overrides: _overrides(profile: _profile(), wide: true, twoPane: true),
       );
 
-      expect(find.text('全部测速'), findsNothing);
+      expect(find.byTooltip('全部测速'), findsOneWidget);
       expect(find.byType(GroupCard), findsNWidgets(4));
       expect(find.byType(GroupChipBar), findsNothing);
       expect(find.byType(GroupSummary), findsOneWidget);
@@ -544,11 +509,11 @@ void main() {
     await _pump(
       tester,
       size: const Size(600, 900),
-      overrides: _overrides(profile: _profile(), wide: true, view: NodeView.grid),
+      overrides: _overrides(profile: _profile(), wide: true),
     );
 
     expect(find.byType(GroupChipBar), findsOneWidget);
-    expect(find.text('全部测速'), findsNothing);
+    expect(find.byTooltip('全部测速'), findsOneWidget);
     expect(_gridColumns(tester), 3);
   });
 
@@ -573,7 +538,7 @@ void main() {
 
       await _tapAction(tester, find.byTooltip('测速本组'));
       expect(haptics, [kLight]);
-      await _tapAction(tester, find.text('152 ms'));   // 香港 02 的延迟胶囊
+      await _tapAction(tester, find.text('152'));   // 香港 02 的延迟胶囊
       expect(haptics, [kLight, kLight]);
     });
 

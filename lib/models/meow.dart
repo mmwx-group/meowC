@@ -52,12 +52,15 @@ enum LatencyMode {
   };
 }
 
-/// 节点卡片两档：标准 2 列 / 大 1 列（紧凑档已删：3 列时名字挤不下、徽标叠在一起）。
+/// 节点卡片三档（同 iOS）：紧凑 3 列 / 标准 2 列 / 大 1 列。紧凑档只留节点名、徽标与延迟，不写协议副标题
+/// （3 列时挤不下；2026-11-18 用户要求加回来，以前因为副标题挤成一团删过）。
 enum NodeCardSize {
+  compact,
   standard,
   large;
 
   String get label => switch (this) {
+    NodeCardSize.compact => '紧凑',
     NodeCardSize.standard => '标准',
     NodeCardSize.large => '大',
   };

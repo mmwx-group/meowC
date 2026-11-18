@@ -49,26 +49,44 @@ class TypeBadge extends StatelessWidget {
 }
 
 /// 代理组类型 → （显示名, 颜色）。
+/// 显示名同 [groupTypeLabel]（跟随设备语言）。
 ({String label, Color color}) groupBadge(String type, MeowTokens mm) {
+  final label = groupTypeLabel(type);
   return switch (type.toLowerCase()) {
-    'selector' || 'select' => (label: 'select', color: mm.pur),
-    'urltest' || 'url-test' => (label: 'url-test', color: mm.accent),
-    'fallback' => (label: 'fallback', color: mm.good),
-    'loadbalance' || 'load-balance' => (label: 'load-balance', color: mm.orange),
-    'relay' => (label: 'relay', color: mm.t2),
-    final other => (label: other, color: mm.t2),
+    'selector' || 'select' => (label: label, color: mm.pur),
+    'urltest' || 'url-test' => (label: label, color: mm.accent),
+    'fallback' => (label: label, color: mm.good),
+    'loadbalance' || 'load-balance' => (label: label, color: mm.orange),
+    _ => (label: label, color: mm.t2),
   };
 }
 
-/// 代理组类型的中文写法（M3 改版后组卡上的类型标签用它）
-String groupTypeLabel(String type) => switch (type.toLowerCase()) {
-  'selector' || 'select' => '手动选择',
-  'urltest' || 'url-test' => '延迟最低',
-  'fallback' => '故障转移',
-  'loadbalance' || 'load-balance' => '负载均衡',
-  'relay' => '链式代理',
-  final other => other,
-};
+/// 代理组类型的显示名，跟随设备语言（2026-11-18 用户定的，同 iOS）：中文系统写中文（手动选择 / 延迟最低…），
+/// 其它语言写配置里的英文类型名（select / url-test…）。[zh] 只给测试用，缺省看系统语言。
+String groupTypeLabel(String type, {bool? zh}) {
+  final key = type.toLowerCase();
+  if (!(zh ?? deviceIsChinese())) {
+    return switch (key) {
+      'selector' || 'select' => 'select',
+      'urltest' || 'url-test' => 'url-test',
+      'fallback' => 'fallback',
+      'loadbalance' || 'load-balance' => 'load-balance',
+      'relay' => 'relay',
+      final other => other,
+    };
+  }
+  return switch (key) {
+    'selector' || 'select' => '手动选择',
+    'urltest' || 'url-test' => '延迟最低',
+    'fallback' => '故障转移',
+    'loadbalance' || 'load-balance' => '负载均衡',
+    'relay' => '链式代理',
+    final other => other,
+  };
+}
+
+/// 设备（系统）语言是不是中文，不看 App 里的语言设置。
+bool deviceIsChinese() => WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase() == 'zh';
 
 const groupTypeNames = {'selector', 'urltest', 'fallback', 'loadbalance', 'relay'};
 
