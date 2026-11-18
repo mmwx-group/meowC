@@ -487,11 +487,9 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    return M3Card(
-      color: cs.card,
-      radius: MeowShape.lInc,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-      onTap: onTap,
+    // 一格只是合并卡片里的一栏（同 iOS：四格指标一张卡、格间细竖线），点按的水波裁在卡片里
+    final body = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -521,21 +519,31 @@ class _Tile extends StatelessWidget {
         ],
       ),
     );
+    return onTap == null ? body : InkWell(onTap: onTap, child: body);
   }
 }
 
-/// 等高并排的一行小格。外层高度无界（手机端的 ListView）时 Row 的 stretch 会把子项撑成无限高，所以套 IntrinsicHeight。
-Widget _tileRow(List<Widget> tiles, {required bool dense}) => IntrinsicHeight(
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      for (final (i, t) in tiles.indexed) ...[
-        if (i > 0) SizedBox(width: dense ? 10 : 8),
-        Expanded(child: t),
-      ],
-    ],
-  ),
-);
+/// 一行并排的几栏合成一张卡（2026-11-18 用户要求同 iOS：四格指标一张卡、出口 IP 两格一张卡），栏间一条上下留空的细竖线。
+/// 外层高度无界（手机端的 ListView）时 Row 的 stretch 会把子项撑成无限高，所以套 IntrinsicHeight。
+Widget _tileRow(BuildContext context, List<Widget> tiles) {
+  final cs = context.cs;
+  return Material(
+    color: cs.card,
+    borderRadius: BorderRadius.circular(MeowShape.lInc),
+    clipBehavior: Clip.antiAlias,
+    child: IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, t) in tiles.indexed) ...[
+            if (i > 0) VerticalDivider(width: 1, thickness: 1, indent: 14, endIndent: 14, color: cs.outlineVariant),
+            Expanded(child: t),
+          ],
+        ],
+      ),
+    ),
+  );
+}
 
 /// 指标行：代理连接 / 直连连接（点了去「动态」）/ 内存 / DNS 模式。[cards] = 开着的那几格，按这个顺序排，等分一行。
 class HomeMetricsRow extends ConsumerWidget {
@@ -549,7 +557,7 @@ class HomeMetricsRow extends ConsumerWidget {
     // 计数 / 内存每一两秒变一次：不在首页时不跟
     final stats = ref.watchOnTab(MeowTab.home, connStatsProvider);
     void toActivity() => goTab(ref, MeowTab.connections);
-    return _tileRow([
+    return _tileRow(context, [
       for (final c in cards)
         switch (c) {
           HomeCard.proxied => _Tile(
@@ -573,7 +581,7 @@ class HomeMetricsRow extends ConsumerWidget {
           ),
           _ => _DnsTile(dense: dense),
         },
-    ], dense: dense);
+    ]);
   }
 }
 
@@ -652,7 +660,6 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    final dense = widget.dense;
     final running = ref.watch(isRunningProvider);
     final st = ref.watch(exitIpProvider);
 
@@ -660,10 +667,8 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
       final text = info?.ip ?? (loading ? S.querying : placeholder);
       final style = MeowFont.mono(size: 14, weight: FontWeight.w600, color: info == null ? cs.onSurfaceVariant : cs.onSurface);
       final code = info?.countryCode.toUpperCase() ?? '';
-      return M3Card(
-        color: cs.card,
-        radius: MeowShape.lInc,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -702,7 +707,7 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
     // 标题开头是 IP 所属地区的中文名（同 iOS #1775：「香港 · 经 X」「中国大陆 · 直连出口」）；还没查到时照旧写「国内 / 国际」
     final domestic = (st.domestic != null ? regionNameZh(st.domestic!.countryCode) : null) ?? '国内';
     final international = (st.global != null ? regionNameZh(st.global!.countryCode) : null) ?? '国际';
-    return _tileRow([
+    return _tileRow(context, [
       tile('$domestic · ${S.directExit}', st.domestic, loading: st.loadingDomestic, placeholder: '—'),
       tile(
         running && via != null ? '$international · 经 $via' : '$international · ${S.proxyExit}',
@@ -710,6 +715,6 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
         loading: st.loadingGlobal,
         placeholder: running ? '—' : S.disconnected,
       ),
-    ], dense: dense);
+    ]);
   }
 }
