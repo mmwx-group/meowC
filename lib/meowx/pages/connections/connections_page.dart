@@ -449,8 +449,8 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           children: [
             PageTitle(
               MeowTab.connections.label,
-              // 标题下面一行：当前列表累计下行 / 上行
-              subtitle: running
+              // 标题右边：当前列表累计下行 / 上行（同 iOS 页头右侧）
+              trailing: running
                   ? ListenableBuilder(
                       listenable: _polled,
                       builder: (context, _) {
@@ -698,16 +698,27 @@ class _Totals extends StatelessWidget {
   final int up, down;
 
   @override
-  Widget build(BuildContext context) => Text(
-    '↓ ${fmtSize(down)} · ↑ ${fmtSize(up)}',
-    maxLines: 1,
-    overflow: TextOverflow.ellipsis,
-    style: TextStyle(
-      fontSize: MeowFont.footnote,
-      color: context.cs.onSurfaceVariant,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    ),
-  );
+  Widget build(BuildContext context) {
+    final mm = context.mm;
+    final style = MeowFont.mono(size: 12, color: mm.t2);
+    Widget part(IconData icon, Color color, int bytes) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 3),
+        Text(fmtSize(bytes), style: style),
+      ],
+    );
+    // 同 iOS 页头右侧：带色箭头（下载紫、上传主题色），下载在前（三端统一）
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        part(Icons.arrow_downward_rounded, mm.pur, down),
+        const SizedBox(width: 10),
+        part(Icons.arrow_upward_rounded, context.cs.primary, up),
+      ],
+    );
+  }
 }
 
 /// 搜索框：卡片底胶囊。
@@ -902,18 +913,7 @@ Widget _leadTag(TrackerInfo c) {
 /// 行首标了入站时，TCP / UDP 挪到规则前面。
 String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase()} · ${_ruleOf(c)}' : _ruleOf(c);
 
-/// 行首的类型块：推送 / DNS / 拒绝 / 代理 / 直连，各一种色调容器和形状（画布稿 Activity）。
-(String, Color, Color, M3TileShape) _kindTile(TrackerInfo c, ColorScheme cs) {
-  final kinds = connectionKinds(c);
-  final leaf = c.chains.firstOrNull ?? '';
-  if (kinds.contains(ActivityKind.push)) return ('推送', cs.surfaceContainerHighest, cs.onSurface, M3TileShape.leafB);
-  if (kinds.contains(ActivityKind.dns)) return ('DNS', cs.secondaryContainer, cs.onSecondaryContainer, M3TileShape.leafA);
-  if (leaf.startsWith('REJECT')) return ('拒绝', cs.errorContainer, cs.onErrorContainer, M3TileShape.rounded);
-  if (kinds.contains(ActivityKind.proxy)) return ('代理', cs.primaryContainer, cs.onPrimaryContainer, M3TileShape.rounded);
-  return ('直连', cs.tertiaryContainer, cs.onTertiaryContainer, M3TileShape.circle);
-}
-
-/// 窄屏连接行（照 iOS，2026-11-18）：类型块 + 主机:端口 / 出站（叶子节点）· 规则 / 「↓ ↑ 累计 · 时长」，行尾 ✕ 关闭（左滑也能关）；
+/// 窄屏连接行（照 iOS，2026-11-18）：TCP / UDP 小标 + 主机:端口 / 出站（叶子节点，上色）+ 规则 / 「↓ ↑ 累计 · 时长」，行尾 ✕ 关闭（左滑也能关）；
 /// 点了看详情。已关闭的（[closedAt] 不为空）末行写用时与关闭时刻，没有 ✕、不能滑。
 class _ConnRow extends StatelessWidget {
   const _ConnRow({super.key, required this.c, required this.onTap, required this.onClose, this.closedAt, this.failure});
@@ -928,7 +928,6 @@ class _ConnRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = context.cs;
     final aux = _auxScaler(context);
-    final (label, bg, fg, shape) = _kindTile(c, cs);
     // 下载在前（三端统一）；时长每轮快照（1.5s）跟着重建
     final bytes = '↓ ${fmtSize(c.download)}  ↑ ${fmtSize(c.upload)}';
     final tail = closedAt == null
@@ -938,38 +937,54 @@ class _ConnRow extends StatelessWidget {
     final footer = f != null
         ? '失败：${f.reason}${f.count > 1 ? ' ×${f.count}' : ''} · ${fmtClockTime(f.at)}'
         : '$bytes · $tail';
+    final mm = context.mm;
+    final leaf = _targetOf(c);
     final row = M3ListRow(
       title: '${_hostOf(c)}:${c.metadata.destinationPort}',
-      titleSize: 15,
-      // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：写叶子节点（实际出去的那个，同 iOS）
-      subtitle: '${_targetOf(c)} · ${_subOf(c)}',
-      subtitleMaxLines: 1,
+      titleSize: 14,
+      // 同 iOS：行首 TCP / UDP 小标 + 主机；下一行出站（叶子节点，直连绿、其余主题色）+ 规则（等宽灰字）
+      titleLeading: _leadTag(c),
+      subtitleWidget: Row(
+        children: [
+          Flexible(
+            flex: 0,
+            child: Text(
+              leaf,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textScaler: aux,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: leaf == 'DIRECT' ? mm.good : (leaf.startsWith('REJECT') ? cs.error : cs.primary),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _subOf(c),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textScaler: aux,
+              style: MeowFont.mono(size: 11, color: mm.t2),
+            ),
+          ),
+        ],
+      ),
       footer: Text(
         footer,
         maxLines: f != null ? 2 : 1,   // 失败原因常常很长：给两行，别把次数和时刻截掉
         overflow: TextOverflow.ellipsis,
         textScaler: aux,
-        style: TextStyle(
-          fontSize: 11,
-          color: f != null ? cs.error : cs.onSurfaceVariant,
-          fontWeight: f != null ? FontWeight.w600 : null,
-          fontFeatures: const [FontFeature.tabularFigures()],
+        style: MeowFont.mono(
+          size: 11,
+          color: f != null ? cs.error : mm.t2,
+          weight: f != null ? FontWeight.w600 : FontWeight.w400,
         ),
       ),
       onTap: onTap,
-      padding: EdgeInsets.fromLTRB(14, 12, closedAt == null ? 4 : 14, 12),
-      leading: M3IconTile(
-        text: label,
-        shape: shape,
-        bg: bg,
-        fg: fg,
-        child: Text(
-          label,
-          maxLines: 1,
-          textScaler: aux,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg),
-        ),
-      ),
+      padding: EdgeInsets.fromLTRB(14, 10, closedAt == null ? 4 : 14, 10),
       trailing: closedAt != null
           ? null
           : IconButton(

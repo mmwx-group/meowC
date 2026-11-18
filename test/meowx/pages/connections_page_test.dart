@@ -163,8 +163,13 @@ void main() {
     expect(find.text('www.youtube.com:443'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('全部关闭'), findsOneWidget);
-    // 第二行写叶子节点（实际出去的那个）· 规则，第三行「↓ ↑ 累计 · 时长」，行尾 ✕（同 iOS）
-    expect(find.text('香港 01 · IEPL · GEOSITE,youtube'), findsOneWidget);
+    // 行首 TCP / UDP 小标；第二行写叶子节点（实际出去的那个，主题色）+ 规则，第三行「↓ ↑ 累计 · 时长」，行尾 ✕（同 iOS）
+    expect(find.text('TCP'), findsNWidgets(2));
+    expect(find.text('UDP'), findsOneWidget);
+    final leaf = find.text('香港 01 · IEPL');
+    expect(leaf, findsOneWidget);
+    expect(tester.widget<Text>(leaf).style!.color, Theme.of(tester.element(leaf)).colorScheme.primary);
+    expect(find.text('GEOSITE,youtube'), findsOneWidget);
     expect(find.textContaining(RegExp(r'^↓ .+  ↑ .+ · 00:4\d$')), findsNWidgets(3));
     expect(find.byTooltip('关闭连接'), findsNWidgets(3));
     // 悬浮底栏的高度让进了列表底部留白
@@ -333,7 +338,7 @@ void main() {
     await tester.tap(find.text('已关闭'));
     await tester.pump();
     expect(find.text('api.example.com:443'), findsOneWidget);
-    expect(find.textContaining('伦敦 01 · '), findsOneWidget);
+    expect(find.text('伦敦 01'), findsOneWidget);
     expect(find.text('失败：i/o timeout ×3 · 10:00:05'), findsOneWidget);
     expect(find.byTooltip('关闭连接'), findsNothing);
   });
@@ -439,7 +444,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1500));
     await tester.pump();
     expect(find.textContaining('bilibili.com'), findsOneWidget);
-    expect(find.textContaining('用时 4'), findsOneWidget);   // 开始于 42 秒前
+    // 开始于 42 秒前（_conns 第一次被读时取的 now，全量跑时会往后漂，只认「用时 N 秒」这个形状）
+    expect(find.textContaining(RegExp(r'用时 \d')), findsOneWidget);
     expect(find.byTooltip('关闭连接'), findsNothing);   // 已关闭的没有 ✕
     expect(find.byType(Dismissible), findsNothing);   // 已关闭的不能滑
 
