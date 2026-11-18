@@ -1,18 +1,20 @@
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, lerpDouble;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/gestures.dart' show kTouchSlop;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
 /// iOS 27 弹出菜单 / popover 的「水滴」变形（2026-11-18 对着 iOS 27 模拟器录屏逐帧照抄，第二版）：
 /// - 从按钮中心冒出一颗小的圆形玻璃水滴（一出来就是玻璃、透出背后放大发糊的画面），不是从按钮的矩形长出来；
-/// - 约 0.3 秒长成面板、冲过头约 3% 再回来；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
+/// - 约 0.4 秒长成面板、冲过头约 10% 再弹回来（第二版只冲 3%，用户说回弹没了）；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
 /// - 内容按最终尺寸钉在最终位置，面板只是把它一点点露出来（不跟着面板拉伸——第一版拉伸了，用户说内容没有自适应）；
 ///   前三成只看得到玻璃，之后内容由糊变清；
 /// - 关：内容糊掉、面板缩回按钮中心的水滴，约 0.16 秒，最后一点淡掉。
 abstract final class DropletMorph {
-  /// 开的弹簧：约 0.3 秒停住、冲过头约 3%
-  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 300, ratio: 0.75);
+  /// 开的弹簧：约 0.4 秒停住、冲过头约 10%（看得出「啵」地弹一下）
+  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 320, ratio: 0.58);
 
   /// 关的时长与曲线
   static const closeDuration = Duration(milliseconds: 160);
@@ -69,11 +71,81 @@ abstract final class DropletMorph {
 class DropletSpringCurve extends Curve {
   const DropletSpringCurve();
 
-  static const duration = Duration(milliseconds: 500);
+  static const duration = Duration(milliseconds: 650);
 
   @override
   double transformInternal(double t) {
     final sim = SpringSimulation(DropletMorph.spring, 0, 1, 0);
     return sim.x(t * duration.inMicroseconds / 1e6);
   }
+}
+
+/// 气泡 / 菜单背后的「透明挡板」（同 iOS 27：气泡开着时照样能滑页面）：
+/// - 点外面 = 只关气泡，这一下不落到下面的按钮上（挡板的点按识别器排在手势竞技场最前面，先赢）；
+/// - 在外面拖 = 气泡马上淡掉（[onHide]），下面的列表照常滚；手指抬起后才真正关路由（[onDismiss]）——
+///   Navigator 每次 push / pop 都会取消所有进行中的触点，拖到一半关路由会把这次滚动连同惯性一起掐断。
+/// 用法：路由里 `buildModalBarrier() => DropletPassThroughBarrier(…)`。关闭动画期间路由自己会让挡板忽略指针。
+class DropletPassThroughBarrier extends StatefulWidget {
+  const DropletPassThroughBarrier({super.key, required this.onHide, required this.onDismiss});
+  final VoidCallback onHide, onDismiss;
+
+  @override
+  State<DropletPassThroughBarrier> createState() => _DropletPassThroughBarrierState();
+}
+
+class _DropletPassThroughBarrierState extends State<DropletPassThroughBarrier> {
+  final _downs = <int, Offset>{};
+  final _dragging = <int>{};
+  bool _hidden = false, _done = false;
+
+  /// 关路由放到这次指针事件分发完之后（抬起的触点已经不在 Navigator 的活动触点里，不会被取消，惯性照常）
+  void _dismissLater() {
+    if (_done) return;
+    _done = true;
+    Future.microtask(widget.onDismiss);
+  }
+
+  void _end(int pointer) {
+    _downs.remove(pointer);
+    if (_dragging.remove(pointer) && _dragging.isEmpty) _dismissLater();
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+    behavior: HitTestBehavior.translucent,
+    onPointerDown: (e) => _downs[e.pointer] = e.position,
+    onPointerMove: (e) {
+      final from = _downs[e.pointer];
+      if (from == null || _dragging.contains(e.pointer) || (e.position - from).distance <= kTouchSlop) return;
+      _dragging.add(e.pointer);
+      if (!_hidden) {
+        _hidden = true;
+        widget.onHide();
+      }
+    },
+    onPointerUp: (e) => _end(e.pointer),
+    onPointerCancel: (e) => _end(e.pointer),
+    child: GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _dismissLater,
+      child: const SizedBox.expand(),
+    ),
+  );
+}
+
+/// 被拖动「先藏起来」的气泡：[hidden] 变真时 120ms 淡掉并不再接触点（路由稍后才真正关）。
+class DropletHideOnDrag extends StatelessWidget {
+  const DropletHideOnDrag({super.key, required this.hidden, required this.child});
+  final ValueListenable<bool> hidden;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<bool>(
+    valueListenable: hidden,
+    builder: (_, h, child) => IgnorePointer(
+      ignoring: h,
+      child: AnimatedOpacity(opacity: h ? 0 : 1, duration: const Duration(milliseconds: 120), child: child),
+    ),
+    child: child,
+  );
 }

@@ -175,6 +175,24 @@ class _MeowMenuRoute<T> extends PopupRoute<T> {
   Color? get barrierColor => null;
   @override
   bool get barrierDismissible => true;
+
+  // 背后不挡手势（同 iOS 27）：点外面只关气泡，拖动外面关气泡并照常滚动页面
+  /// 在外面拖动时先把气泡藏起来（见 [DropletPassThroughBarrier]）
+  final _hidden = ValueNotifier(false);
+
+  @override
+  void dispose() {
+    _hidden.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget buildModalBarrier() => DropletPassThroughBarrier(
+    onHide: () => _hidden.value = true,
+    onDismiss: () {
+      if (isCurrent) navigator?.pop();
+    },
+  );
   @override
   String? get barrierLabel => '关闭菜单';
 
@@ -186,7 +204,7 @@ class _MeowMenuRoute<T> extends PopupRoute<T> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-      _MeowMenuPanel<T>(route: this);
+      DropletHideOnDrag(hidden: _hidden, child: _MeowMenuPanel<T>(route: this));
 }
 
 class _MeowMenuPanel<T> extends StatefulWidget {
