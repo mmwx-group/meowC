@@ -396,7 +396,7 @@ void main() {
     expect(find.text('连接 · 3'), findsOneWidget);
     final title = tester.widget(find.byType(PageTitle));
     final field = tester.widget(find.byType(TextField));
-    final segment = tester.widget(find.byWidgetPredicate((w) => w is M3ButtonGroup));
+    final segment = tester.widget(find.byWidgetPredicate((w) => w is MeowSlideSegment));
 
     // 下一拍：同样 3 条，其中一条换了
     await tester.pump(const Duration(milliseconds: 1500));
@@ -405,7 +405,7 @@ void main() {
     expect(find.textContaining('bilibili.com'), findsNothing);   // 换掉的是这条
     expect(tester.widget(find.byType(PageTitle)), same(title));
     expect(tester.widget(find.byType(TextField)), same(field));
-    expect(tester.widget(find.byWidgetPredicate((w) => w is M3ButtonGroup)), same(segment));
+    expect(tester.widget(find.byWidgetPredicate((w) => w is MeowSlideSegment)), same(segment));
 
     // 再下一拍：只剩 1 条，分段上的条数跟着变
     await tester.pump(const Duration(milliseconds: 1500));

@@ -361,11 +361,12 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final segment = _Selected<String>(
       listenable: _polled,
       select: () => running && _loaded ? '连接 · ${_conns.length}' : '连接',
-      builder: (context, label) => M3ButtonGroup<_Seg>(
+      // 同 iOS 的滑块分段（轨道 + 反色滑块，换段时滑块弹过去）
+      builder: (context, label) => MeowSlideSegment<_Seg>(
         items: [(_Seg.connections, label), (_Seg.logs, '日志')],
         selected: _seg,
         onChanged: _switchSeg,
-        height: twoPane ? 40 : 48,
+        height: twoPane ? 38 : 44,
       ),
     );
     final search = _SearchField(

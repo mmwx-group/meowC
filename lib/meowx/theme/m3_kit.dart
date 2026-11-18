@@ -5,6 +5,7 @@ import 'package:flutter/physics.dart';
 
 import 'haptics.dart';
 import 'm3.dart';
+import 'motion.dart';
 import 'tokens.dart';
 
 /// Material 3 Expressive 的元件（2026-11 改版，样子以画布稿为准：首页 / 节点 / 动态 / 我的四张）。
@@ -223,6 +224,151 @@ class M3ButtonGroup<T> extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// 滑块分段（同 iOS 的 MeowSegment，2026-11-18 用户要求首页模式与动态页分段换成它）：
+/// 一条比卡片深一档的轨道（圆角 14、内边距 3）+ 一块选中滑块（圆角 11），换段时只有滑块弹簧平移过去（弹跳弹簧，同 iOS 的 MeowMotion.slide）。
+/// 选中块用反色：浅色下深底浅字、深色下浅底深字（iOS 经典主题的 MM.strong / 深色的近白）。
+/// 选中值由外面给：别处改的（引擎回报的模式、托盘）也一样滑过去。
+class MeowSlideSegment<T> extends StatefulWidget {
+  const MeowSlideSegment({
+    super.key,
+    required this.items,
+    required this.selected,
+    required this.onChanged,
+    this.height = 44,
+    this.track,
+    this.fontSize = 14,
+    this.dimmed = const {},
+  });
+
+  final List<(T value, String label)> items;
+  final T? selected;
+  final ValueChanged<T>? onChanged;
+  final double height;
+
+  /// 轨道色；缺省比卡片深一档（cardInner）
+  final Color? track;
+  final double fontSize;
+
+  /// 画成次级字的项（如当前不可用的模式），仍然可点
+  final Set<T> dimmed;
+
+  static const pad = 3.0, gap = 3.0, trackRadius = 14.0, thumbRadius = 11.0;
+
+  @override
+  State<MeowSlideSegment<T>> createState() => _MeowSlideSegmentState<T>();
+}
+
+class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTickerProviderStateMixin {
+  int get _index => widget.items.indexWhere((e) => e.$1 == widget.selected);
+
+  /// 滑块位置（按段的序号，弹簧会稍微越过终点；画的时候夹在两端之间）
+  late final _pos = AnimationController.unbounded(vsync: this, value: math.max(0, _index).toDouble());
+
+  @override
+  void didUpdateWidget(MeowSlideSegment<T> old) {
+    super.didUpdateWidget(old);
+    final i = _index;
+    if (i >= 0 && i.toDouble() != _pos.value) {
+      MeowMotion.spring(_pos, i.toDouble(), MeowMotion.bouncy, reduce: MeowMotion.reduced(context));
+    }
+  }
+
+  @override
+  void dispose() {
+    _pos.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    final n = widget.items.length;
+    final selected = _index;
+    const p = MeowSlideSegment.pad, g = MeowSlideSegment.gap;
+    return Semantics(
+      container: true,
+      child: Container(
+        height: widget.height,
+        padding: const EdgeInsets.all(p),
+        decoration: BoxDecoration(
+          color: widget.track ?? cs.cardInner,
+          borderRadius: BorderRadius.circular(MeowSlideSegment.trackRadius),
+        ),
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final segW = n == 0 ? 0.0 : (c.maxWidth - g * (n - 1)) / n;
+            return Stack(
+              children: [
+                if (selected >= 0)
+                  AnimatedBuilder(
+                    animation: _pos,
+                    builder: (_, child) => Positioned(
+                      left: _pos.value.clamp(0, (n - 1).toDouble()) * (segW + g),
+                      top: 0,
+                      bottom: 0,
+                      width: segW,
+                      child: child!,
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: cs.inverseSurface,
+                        borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
+                      ),
+                    ),
+                  ),
+                Row(
+                  children: [
+                    for (final (i, (value, label)) in widget.items.indexed) ...[
+                      if (i > 0) const SizedBox(width: g),
+                      Expanded(child: _segment(context, i, value, label, i == selected)),
+                    ],
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _segment(BuildContext context, int i, T value, String label, bool on) {
+    final cs = context.cs;
+    final onChanged = widget.onChanged;
+    return Semantics(
+      button: true,
+      selected: on,
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onChanged == null || on
+              ? null
+              : () {
+                  MeowHaptics.select();
+                  onChanged(value);
+                },
+          child: Center(
+            child: AnimatedDefaultTextStyle(
+              duration: MeowSprings.effectsDuration,
+              style: TextStyle(
+                fontSize: widget.fontSize,
+                fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                color: on
+                    ? cs.onInverseSurface
+                    : (widget.dimmed.contains(value) ? cs.outline : cs.onSurfaceVariant),
+                fontFamilyFallback: linuxTextFallback,
+              ),
+              child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+        ),
       ),
     );
   }
