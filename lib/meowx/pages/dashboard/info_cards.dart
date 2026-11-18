@@ -219,7 +219,7 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
           child: SizedBox(
             height: 34,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+              padding: const EdgeInsets.only(left: 14, right: 10),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -228,6 +228,9 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
                     maxLines: 1,
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: chipFg),
                   ),
+                  // 同 iOS：「切换订阅 ⌄」，看得出点了是展开一个菜单
+                  const SizedBox(width: 2),
+                  Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: chipFg),
                   if (importing) ...[
                     const SizedBox(width: 6),
                     SizedBox.square(dimension: 12, child: CircularProgressIndicator(strokeWidth: 1.6, color: chipFg)),

@@ -44,127 +44,148 @@ class HomeSpeedCard extends ConsumerWidget {
     final last = traffics.isEmpty ? null : traffics.last;
     buffer.feed(traffics);
     final history = buffer.state;
-    final peak = [...history.up, ...history.down].fold<double>(0, (m, v) => v > m ? v : m);
-    final caption = TextStyle(
-      fontSize: MeowFont.caption,
-      color: cs.onSurfaceVariant,
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
+    final mm = context.mm;
+    final downColor = mm.down, upColor = cs.primary;
 
-    // 「2.4 MB/s」拆成大字数字 + 小字单位；放不下（窄屏 / 大字号）时整体缩小，不截成「12.3 M…」
-    Widget rate(IconData icon, Color color, String label, int value) {
-      final text = fmtRate(value);
-      final at = text.indexOf(' ');
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 16, color: color),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: color),
-                ),
-              ),
-            ],
-          ),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(text: at < 0 ? text : text.substring(0, at)),
-                  if (at >= 0)
-                    TextSpan(
-                      text: text.substring(at),
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
-                    ),
-                ],
-              ),
-              maxLines: 1,
-              style: TextStyle(
-                fontSize: dense ? 24 : 26,
-                fontWeight: FontWeight.w800,
-                color: cs.onSurface,
-                fontFeatures: const [FontFeature.tabularFigures()],
+    // 一栏（同 iOS 首页网速卡）：带色箭头 + 灰字标题 / 大字速率（单位同字号）/「会话 X」，整栏居中；
+    // 放不下（窄屏 / 大字号）时速率整体缩小，不截成「12.3 M…」
+    Widget rate(IconData icon, Color color, String label, int value, int session) => Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            fmtRate(value),
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: dense ? 24 : 26,
+              fontWeight: FontWeight.w800,
+              color: cs.onSurface,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-        ],
-      );
-    }
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${S.session} ${fmtSize(session)}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: MeowFont.caption,
+            color: cs.onSurfaceVariant,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
 
     final painter = _SpeedChart(
       history: history,
       // 只在首页是当前页时动：隐藏页外层虽有 TickerMode，这里自己也管住，不在首页就不要帧
       active: ref.watch(meowTabProvider.select((t) => t == MeowTab.home)),
-      upColor: cs.tertiary,
-      downColor: cs.primary,
-      idleColor: cs.outlineVariant,
+      upColor: upColor,
+      downColor: downColor,
+      // 未连接不画东西（同 iOS；以前画一条虚线）
+      idleColor: Colors.transparent,
       running: running,
       fill: true,
     );
-    final speedTest = M3IconButton(
-      icon: Icons.speed_rounded,
-      tooltip: '网络测速',
-      size: 36,
-      tonal: true,
-      onPressed: () => BaseNavigator.push(context, const SpeedTestPage()),
+    // 右上角「测速」小胶囊（同 iOS）
+    final speedTest = Tooltip(
+      message: '网络测速',
+      child: Material(
+        color: cs.secondaryContainer,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => BaseNavigator.push(context, const SpeedTestPage()),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.speed_rounded, size: 14, color: cs.onSecondaryContainer),
+                const SizedBox(width: 3),
+                Text(
+                  '测速',
+                  textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15),
+                  style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w700, color: cs.onSecondaryContainer),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
 
-    // 照 iOS 首页网速卡收紧（2026-11-18）：内边距 16 / 14、折线 40 高、行距 8
+    // 同 iOS 首页网速卡：两栏居中、右上角测速胶囊、折线贴着卡片底边左右满宽（2026-11-18）
+    final columns = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 下载在前（2026-11-18 起三端统一）
+        if (down)
+          Expanded(
+            child: rate(Icons.arrow_downward_rounded, downColor, S.download, last?.down.value ?? 0, total.down.value),
+          ),
+        // 右栏往左让一点，标题不碰右上角的测速胶囊（安卓字比 iOS 宽，实机上挨着了）
+        if (up)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 20),
+              child: rate(Icons.arrow_upward_rounded, upColor, S.upload, last?.up.value ?? 0, total.up.value),
+            ),
+          ),
+        if (!up && !down)
+          Expanded(
+            child: Text(
+              '网速',
+              style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w800, color: cs.onSurface),
+            ),
+          ),
+      ],
+    );
     return M3Card(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: expand && chart ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 下载在前（2026-11-18 起三端统一）
-              if (down) Expanded(child: rate(Icons.arrow_downward_rounded, cs.primary, S.download, last?.down.value ?? 0)),
-              if (up && down) const SizedBox(width: 12),
-              if (up) Expanded(child: rate(Icons.arrow_upward_rounded, cs.tertiary, S.upload, last?.up.value ?? 0)),
-              if (!up && !down)
-                Expanded(
-                  child: Text(
-                    '网速',
-                    style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w800, color: cs.onSurface),
-                  ),
-                ),
-              const SizedBox(width: 8),
-              speedTest,
-            ],
-          ),
-          if (chart) ...[
-            const SizedBox(height: 8),
-            if (expand)
-              Expanded(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 24), child: painter))
-            else
-              SizedBox(height: dense ? 64 : 40, child: painter),
-          ],
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${S.session} ↓ ${fmtSize(total.down.value)} · ↑ ${fmtSize(total.up.value)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: caption,
-                ),
+      padding: EdgeInsets.zero,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(MeowShape.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: expand && chart ? MainAxisSize.max : MainAxisSize.min,
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 14, 12, chart ? 6 : 14),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // 两栏的标题行给右上角的胶囊让出一点高度上的位置（胶囊不挡速率大字）
+                  Padding(padding: const EdgeInsets.only(top: 2), child: columns),
+                  Positioned(top: -6, right: -4, child: speedTest),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(chart ? (dense ? '${S.peak} ${fmtRate(peak)}' : '过去 60 秒') : '', maxLines: 1, style: caption),
-            ],
-          ),
-        ],
+            ),
+            if (chart)
+              if (expand)
+                Expanded(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 24), child: painter))
+              else
+                SizedBox(height: dense ? 56 : 44, child: painter),
+          ],
+        ),
       ),
     );
   }

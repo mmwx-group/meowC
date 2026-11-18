@@ -322,7 +322,8 @@ void main() {
     expect(find.text('香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
     expect(find.text('节点选择 › 自动选择'), findsOneWidget);
     expect(find.text('38 ms'), findsOneWidget);
-    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
+    expect(find.text('会话 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 86.2 MB'), findsOneWidget);
     expect(find.text('已用 128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
     expect(find.text('3 小时前更新'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
@@ -359,7 +360,8 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
     // 首次构建用的是当时的值
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
+    expect(find.text('会话 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 86.2 MB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     useReleaseProviderFrames();
@@ -378,20 +380,23 @@ void main() {
       await tester.pump();
     }
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
+    expect(find.text('会话 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 86.2 MB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     // 切回首页：这一帧就是最新值（数据一直在 provider 里攒着），之后照常每秒跟
     container.read(meowTabProvider.notifier).state = MeowTab.home;
     await tester.pump();
     expect(find.text('已运行 02:14:39'), findsOneWidget);
-    expect(find.text('会话 ↓ 1.42 GB · ↑ 203.0 MB'), findsOneWidget);
+    expect(find.text('会话 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 203.0 MB'), findsOneWidget);
     expect(find.text('33'), findsOneWidget);
     expect(container.read(trafficsProvider).list.last.up.value, 1024 * 3);
     tick(4);
     await tester.pump();
     expect(find.text('已运行 02:14:40'), findsOneWidget);
-    expect(find.text('会话 ↓ 1.42 GB · ↑ 204.0 MB'), findsOneWidget);
+    expect(find.text('会话 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 204.0 MB'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
 
     // 运行时长有两路在写，同一秒里的第二次写入不重建

@@ -30,7 +30,8 @@ extension on BuildContext {
 ///
 /// 以前是 FlClash 的 pill 玻璃：72% 的背景走 15.6dp 重模糊（haze）。宿主是 standard 档，standard 会把 haze 合成整块
 /// 15.6dp 模糊，再盖 58% 的底色——背后基本糊成一片，着色器边缘那一圈折射（refraction / bevel）也就看不出来。
-/// 现在：不要 haze，只留 3dp 轻模糊、底色浅 34% / 深 42%，边缘折射加大（refraction 72、bevel 24），
+/// 现在：不要 haze，只留 1dp 轻模糊、底色浅 20% / 深 25%（2026-11-18 用户：透明度不够、减少模糊；以前 3dp、浅 34% / 深 42%），
+/// 边缘折射加大（refraction 72、bevel 24），
 /// 背后的卡片颜色透得出来，滚过去的内容在边上被拉伸放大、中间保持原样。字的可读性由 contrast 管。
 ///
 /// 性能：每帧仍是「背后截一次缩小图 + 一个着色器」，和以前一样；模糊小了截图分辨率高一些
@@ -60,9 +61,9 @@ LiquidGlassStyle meowBarGlass(bool dark, {bool lowEnd = false}) {
   }
   return dark
       ? const LiquidGlassStyle(
-          tint: Color(0x6B26202D),
+          tint: Color(0x4026202D),
           contrast: -0.5,
-          blur: 3,
+          blur: 1,
           refraction: 72,
           bevel: 24,
           saturation: 1.8,
@@ -72,9 +73,9 @@ LiquidGlassStyle meowBarGlass(bool dark, {bool lowEnd = false}) {
           rimAdded: 0.38,
         )
       : const LiquidGlassStyle(
-          tint: Color(0x57FFFCFA),
+          tint: Color(0x33FFFCFA),
           contrast: 0.5,
-          blur: 3,
+          blur: 1,
           refraction: 72,
           bevel: 24,
           saturation: 1.9,
