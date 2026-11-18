@@ -5,6 +5,7 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/pages/connections/connections_page.dart';
 import 'package:bett_box/meowx/state/connection.dart';
+import 'package:bett_box/meowx/state/dial_failures.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/page_title.dart';
 import 'package:bett_box/meowx/theme/m3_kit.dart';
@@ -39,6 +40,13 @@ class _TestAppSetting extends AppSetting {
 
   @override
   void onUpdate(AppSettingProps value) {}
+}
+
+class _Failures extends DialFailuresController {
+  _Failures(this.initial);
+  final List<DialFailure> initial;
+  @override
+  List<DialFailure> build() => initial;
 }
 
 class _TestLogs extends Logs {
@@ -94,6 +102,7 @@ Future<void> _pump(
   List<Log>? logs,
   Future<List<TrackerInfo>> Function()? fetch,
   ConnSource? source,
+  List<DialFailure> failures = const [],
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -110,6 +119,7 @@ Future<void> _pump(
         appSettingProvider.overrideWith(_TestAppSetting.new),
         logsProvider.overrideWith(() => _TestLogs(logs)),
         if (source != null) connSourceProvider.overrideWithValue(source),
+        dialFailuresProvider.overrideWith(() => _Failures(failures)),
       ],
       child: MaterialApp(
         builder: (context, child) => MediaQuery(
@@ -265,6 +275,67 @@ void main() {
     await tester.tap(find.text('清空'));
     await tester.pump();
     expect(find.text('暂无日志'), findsOneWidget);
+  });
+
+  testWidgets('日志来源（同 iOS）：全部 / MeowX / 引擎；MeowX 的日志不带「[APP]」前缀；「记录日志」关着也照样显示', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(412, 892),
+      wide: false,
+      twoPane: false,
+      textScale: 1,
+      logs: [
+        const Log(logLevel: LogLevel.info, payload: '[APP] 启动代理', dateTime: '2026-11-18 10:00:01'),
+        const Log(logLevel: LogLevel.warning, payload: '[TCP] dial 伦敦 01 error: timeout', dateTime: '2026-11-18 10:00:02'),
+      ],
+    );
+    await tester.tap(find.text('日志'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('启动代理'), findsOneWidget);
+    expect(find.textContaining('[APP]'), findsNothing);
+    expect(find.textContaining('伦敦 01'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(M3FilterChip, 'MeowX'));
+    await tester.pump();
+    expect(find.text('启动代理'), findsOneWidget);
+    expect(find.textContaining('伦敦 01'), findsNothing);
+
+    await tester.tap(find.widgetWithText(M3FilterChip, '引擎'));
+    await tester.pump();
+    expect(find.text('启动代理'), findsNothing);
+    expect(find.textContaining('伦敦 01'), findsOneWidget);
+  });
+
+  testWidgets('拨号失败（同 iOS）：「已关闭」里一行红色「失败：原因 ×N · 时刻」，没有 ✕', (tester) async {
+    await _pump(
+      tester,
+      size: const Size(412, 892),
+      wide: false,
+      twoPane: false,
+      textScale: 1,
+      failures: [
+        DialFailure(
+          seq: 1,
+          network: 'TCP',
+          proxy: '伦敦 01',
+          rule: 'Match',
+          payload: '',
+          host: 'api.example.com',
+          port: '443',
+          reason: 'i/o timeout',
+          at: DateTime(2026, 11, 18, 10, 0, 5),
+          count: 3,
+        ),
+      ],
+    );
+    await tester.ensureVisible(find.text('已关闭'));
+    await tester.tap(find.text('已关闭'));
+    await tester.pump();
+    expect(find.text('api.example.com:443'), findsOneWidget);
+    expect(find.textContaining('伦敦 01 · '), findsOneWidget);
+    expect(find.text('失败：i/o timeout ×3 · 10:00:05'), findsOneWidget);
+    expect(find.byTooltip('关闭连接'), findsNothing);
   });
 
   testWidgets('两栏：连接表 + 右侧汇总 / 详情，窄窗口大字号不溢出', (tester) async {

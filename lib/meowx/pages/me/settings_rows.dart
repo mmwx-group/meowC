@@ -11,6 +11,7 @@ import '../../app/strings.dart';
 import '../advanced/advanced_page.dart';
 import '../../config/meow_patch.dart';
 import '../../state/app_icon.dart';
+import '../../state/log_source.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/tokens.dart';
@@ -291,13 +292,18 @@ class LogSwitchRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final openLogs = ref.watch(appSettingProvider.select((s) => s.openLogs));
+    // 关着照样看得到日志（警告 / 错误与 MeowX 的事件），开关只是调内核日志等级，见 log_source.dart
+    final on = ref.watch(patchClashConfigProvider.select((s) => logDetailsOn(s.logLevel)));
     return MeSwitchRow(
       leading: leading,
       label: '记录日志',
       subtitle: '开启后额外记录每条连接的分流与 DNS 详情',
-      value: openLogs,
-      onChanged: (v) => ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(openLogs: v)),
+      value: on,
+      onChanged: (v) {
+        final app = ref.read(appSettingProvider.notifier);
+        if (!ref.read(appSettingProvider).openLogs) app.updateState((s) => s.copyWith(openLogs: true));
+        ref.read(patchClashConfigProvider.notifier).updateState((s) => s.copyWith(logLevel: logLevelForDetails(v)));
+      },
     );
   }
 }

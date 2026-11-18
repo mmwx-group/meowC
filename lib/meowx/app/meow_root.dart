@@ -20,6 +20,7 @@ import '../panel/po0.dart';
 import '../state/akile_reporter.dart';
 import '../state/battery_prompt.dart';
 import '../state/connection.dart';
+import '../state/dial_failures.dart';
 import '../state/ggy_reporter.dart';
 import '../state/home_widget.dart';
 import '../state/mesh.dart';
@@ -227,6 +228,14 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     if (mode != LatencyMode.tcping && ref.read(patchClashConfigProvider).unifiedDelay != (mode == LatencyMode.url)) {
       ref.read(patchClashConfigProvider.notifier).updateState((c) => c.copyWith(unifiedDelay: mode == LatencyMode.url));
     }
+    // 「记录日志」改成只调内核日志等级（2026-11-18，同 iOS，见 log_source.dart）：内核日志一直订阅着，
+    // 老版本关着开关的用户在这里打开订阅，等级从缺省的 error 放到 warning（关着的开关 = warning）
+    if (!ref.read(appSettingProvider).openLogs) {
+      ref.read(appSettingProvider.notifier).updateState((s) => s.copyWith(openLogs: true));
+      if (ref.read(patchClashConfigProvider).logLevel == LogLevel.error) {
+        ref.read(patchClashConfigProvider.notifier).updateState((c) => c.copyWith(logLevel: LogLevel.warning));
+      }
+    }
     try {
       final profiles = ref.read(profilesProvider);
       final added = await ensureDirectProfile(profiles);
@@ -288,6 +297,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     final mm = context.mm;
     // 连接数 / 内存的轮询挂在壳上：首页指标、侧栏角标共用；连接数只在有界面显示它时才问核心（见 ConnStatsController）
     ref.listen(connStatsProvider, (_, _) {});
+    ref.listen(dialFailuresProvider, (_, _) {});   // 拨号失败常驻记着（不在动态页时也记）
     // 网速的两份数据也在壳上留住：它们是 autoDispose 的，首页网速卡不在树上时（关掉了、滚出了列表）没人听，
     // 控制器每秒写一次、Riverpod 就排一次回收——它排回收靠的是让 ProviderScope 重建，等于连接着就每秒白出一两帧
     ref.listen(trafficsProvider, (_, _) {});

@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
 import '../../panel/account.dart';
+import '../../state/log_source.dart';
 import '../../state/meow_settings.dart';
 import '../../state/proxy_providers.dart';
 import '../../state/status.dart';
@@ -174,8 +175,10 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
     if (_testingAll) return;
     MeowHaptics.tap();
     setState(() => _testingAll = true);
+    final leaves = allLeafProxies(groups);
+    meowLog('全部测速：${leaves.length} 个节点');
     try {
-      await delayTest(allLeafProxies(groups));
+      await delayTest(leaves);
     } finally {
       if (mounted) setState(() => _testingAll = false);
     }

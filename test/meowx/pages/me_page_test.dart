@@ -487,12 +487,18 @@ void main() {
   testWidgets('手机 · 「记录日志」直接是列表里的开关行：点了当场切换，不进二级页', (tester) async {
     await _pump(tester, const MePage(), size: const Size(412, 1500), overrides: _overrides(), textScale: 1);
     expect(find.text('开启后额外记录每条连接的分流与 DNS 详情'), findsOneWidget);
-    final before = _container(tester, MePage).read(appSettingProvider).openLogs;
+    // 开关只调内核日志等级（开 = debug、关 = warning），内核日志一直订阅着（openLogs 打开）
+    bool shown() => tester.widget<Switch>(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(Switch))).value;
+    final before = shown();
     await tester.tap(find.text('记录日志'));
     await tester.pumpAndSettle();
     expect(find.byType(MeSubPage), findsNothing);
-    expect(_container(tester, MePage).read(appSettingProvider).openLogs, !before);
-    expect(tester.widget<Switch>(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(Switch))).value, !before);
+    expect(shown(), !before);
+    expect(_container(tester, MePage).read(patchClashConfigProvider).logLevel, before ? LogLevel.warning : LogLevel.debug);
+    expect(_container(tester, MePage).read(appSettingProvider).openLogs, isTrue);
+    await tester.tap(find.text('记录日志'));
+    await tester.pumpAndSettle();
+    expect(shown(), before);
   });
 
   testWidgets('宽屏三列：最小窗口 1.4 倍字号不溢出；设置分组直接铺开，「高级设置」在标题行', (tester) async {

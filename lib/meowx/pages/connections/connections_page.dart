@@ -18,7 +18,9 @@ import '../../app/strings.dart';
 import '../../state/closed_connections.dart';
 import '../../state/connection.dart';
 import '../../state/custom_rules.dart';
+import '../../state/dial_failures.dart';
 import '../../state/format.dart';
+import '../../state/log_source.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
 import '../../theme/m3.dart';
@@ -73,6 +75,36 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
 
   bool get _closedMode => _kind == ActivityKind.closed;
 
+  // 「已关闭」= 关闭的连接 + 拨号失败（同 iOS），按时刻新的在前；两份输入都没变就用上一份（筛选按 identical 判断要不要重算）
+  List<ClosedConnection>? _mergedClosed;
+  List<DialFailure>? _mergedFailures;
+  List<TrackerInfo> _merged = const [];
+  final Map<String, DialFailure> _failureById = {};
+  final Map<String, DateTime> _endedAt = {};
+
+  List<TrackerInfo> get _closedSource {
+    final closed = _closed.items;
+    final failures = ref.read(dialFailuresProvider);
+    if (identical(closed, _mergedClosed) && identical(failures, _mergedFailures)) return _merged;
+    _mergedClosed = closed;
+    _mergedFailures = failures;
+    _failureById.clear();
+    _endedAt.clear();
+    final rows = <(DateTime, TrackerInfo)>[
+      for (final c in closed) (c.closedAt, c.info),
+      for (final f in failures) (f.at, f.info),
+    ];
+    for (final f in failures) {
+      _failureById['fail:${f.seq}'] = f;
+    }
+    for (final (at, info) in rows) {
+      _endedAt[info.id] = at;
+    }
+    rows.sort((a, b) => b.$1.compareTo(a.$1));
+    _merged = List.unmodifiable([for (final r in rows) r.$2]);
+    return _merged;
+  }
+
   ClosedConnections get _closed => ref.read(_closedConnsProvider);
   List<TrackerInfo> _conns = const [];
   String? _selectedId;
@@ -123,6 +155,10 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     ref.listenManual(isRestartingCoreProvider, (prev, next) {
       _polledAt = null;
       _polled.fire();
+    });
+    // 拨号失败记在壳上（见 dial_failures.dart）：来了新的，「已关闭」那份跟着刷
+    ref.listenManual(dialFailuresProvider, (prev, next) {
+      if (_closedMode) _polled.fire();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(_poll()));
   }
@@ -225,7 +261,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   ({List<TrackerInfo> items, _Sum sum}) _view(bool filtered) {
     final query = filtered ? _query : '';
     final kind = filtered ? _kind : ActivityKind.all;
-    final source = kind == ActivityKind.closed ? _closed.connections : _conns;
+    final source = kind == ActivityKind.closed ? _closedSource : _conns;
     if (!identical(_viewOf, source) || _viewQuery != query || _viewKind != kind) {
       _viewOf = source;
       _viewQuery = query;
@@ -360,7 +396,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           };
     // 日志不认「已关闭」，按「全部」
     final logKind = _closedMode ? ActivityKind.all : _kind;
-    DateTime? closedAtOf(TrackerInfo c) => _closedMode ? _closed.byId(c.id)?.closedAt : null;
+    DateTime? closedAtOf(TrackerInfo c) => _closedMode ? _endedAt[c.id] : null;
     // 等第一份快照。本页被别的 Tab 盖着时（IndexedStack 里还挂着）不画转圈：隐藏页里的动画照样逼着整个 App 每个 vsync 出一帧
     final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
@@ -395,6 +431,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                       key: ValueKey(items[i].id),
                       c: items[i],
                       closedAt: closedAt,
+                      failure: _closedMode ? _failureById[items[i].id] : null,
                       onTap: () => unawaited(_openSheet(items[i], closedAt: closedAt)),
                       onClose: () => _close(items[i].id),
                     ),
@@ -462,7 +499,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
         builder: (context, _) {
           if (!_loaded) return loading;
           final (:items, :sum) = _view(true);
-          final selected = (_closedMode ? _closed.connections : _conns).firstWhereOrNull((c) => c.id == _selectedId);
+          final selected = (_closedMode ? _closedSource : _conns).firstWhereOrNull((c) => c.id == _selectedId);
           final selectedClosedAt = selected == null ? null : closedAtOf(selected);
           return Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -475,6 +512,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                     selectedId: _selectedId,
                     emptyText: emptyText,
                     closedAtOf: _closedMode ? closedAtOf : null,
+                    failureOf: _closedMode ? (c) => _failureById[c.id] : null,
                     // 再点一次选中的行 = 取消选中，右栏回到汇总
                     onSelect: (id) => setState(() => _selectedId = _selectedId == id ? null : id),
                   ),
@@ -878,10 +916,13 @@ String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase(
 /// 窄屏连接行（照 iOS，2026-11-18）：类型块 + 主机:端口 / 出站（叶子节点）· 规则 / 「↓ ↑ 累计 · 时长」，行尾 ✕ 关闭（左滑也能关）；
 /// 点了看详情。已关闭的（[closedAt] 不为空）末行写用时与关闭时刻，没有 ✕、不能滑。
 class _ConnRow extends StatelessWidget {
-  const _ConnRow({super.key, required this.c, required this.onTap, required this.onClose, this.closedAt});
+  const _ConnRow({super.key, required this.c, required this.onTap, required this.onClose, this.closedAt, this.failure});
   final TrackerInfo c;
   final VoidCallback onTap, onClose;
   final DateTime? closedAt;
+
+  /// 拨号失败的记录：没有流量，末行换成红色「失败：原因 ×N · 时刻」（同 iOS）
+  final DialFailure? failure;
 
   @override
   Widget build(BuildContext context) {
@@ -893,6 +934,10 @@ class _ConnRow extends StatelessWidget {
     final tail = closedAt == null
         ? _age(c.start)
         : '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt!).duration)} · ${fmtClockTime(closedAt!)}';
+    final f = failure;
+    final footer = f != null
+        ? '失败：${f.reason}${f.count > 1 ? ' ×${f.count}' : ''} · ${fmtClockTime(f.at)}'
+        : '$bytes · $tail';
     final row = M3ListRow(
       title: '${_hostOf(c)}:${c.metadata.destinationPort}',
       titleSize: 15,
@@ -900,11 +945,16 @@ class _ConnRow extends StatelessWidget {
       subtitle: '${_targetOf(c)} · ${_subOf(c)}',
       subtitleMaxLines: 1,
       footer: Text(
-        '$bytes · $tail',
-        maxLines: 1,
+        footer,
+        maxLines: f != null ? 2 : 1,   // 失败原因常常很长：给两行，别把次数和时刻截掉
         overflow: TextOverflow.ellipsis,
         textScaler: aux,
-        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()]),
+        style: TextStyle(
+          fontSize: 11,
+          color: f != null ? cs.error : cs.onSurfaceVariant,
+          fontWeight: f != null ? FontWeight.w600 : null,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
       ),
       onTap: onTap,
       padding: EdgeInsets.fromLTRB(14, 12, closedAt == null ? 4 : 14, 12),
@@ -989,12 +1039,14 @@ class _ConnTable extends StatelessWidget {
     required this.emptyText,
     required this.onSelect,
     this.closedAtOf,
+    this.failureOf,
   });
   final List<TrackerInfo> items;
   final String? selectedId;
   final String emptyText;
   final ValueChanged<String> onSelect;
   final DateTime? Function(TrackerInfo c)? closedAtOf;
+  final DialFailure? Function(TrackerInfo c)? failureOf;
 
   @override
   Widget build(BuildContext context) {
@@ -1039,6 +1091,7 @@ class _ConnTable extends StatelessWidget {
                     itemBuilder: (_, i) => _ConnTableRow(
                       c: items[i],
                       closedAt: closedAtOf?.call(items[i]),
+                      failure: failureOf?.call(items[i]),
                       selected: items[i].id == selectedId,
                       rateWidth: rateW,
                       ageWidth: ageW,
@@ -1060,9 +1113,11 @@ class _ConnTableRow extends StatelessWidget {
     required this.ageWidth,
     required this.onTap,
     this.closedAt,
+    this.failure,
   });
   final TrackerInfo c;
   final DateTime? closedAt;
+  final DialFailure? failure;
   final bool selected;
   final double rateWidth, ageWidth;
   final VoidCallback onTap;
@@ -1118,7 +1173,24 @@ class _ConnTableRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                if (closedAt case final at?) ...[
+                if (failure case final f?) ...[
+                  fit(fmtClockTime(f.at), rateWidth),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: ageWidth,
+                    child: Tooltip(
+                      message: f.reason,
+                      child: Text(
+                        f.count > 1 ? '失败×${f.count}' : '失败',
+                        maxLines: 1,
+                        textAlign: TextAlign.end,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: aux,
+                        style: num.copyWith(color: context.cs.error, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ] else if (closedAt case final at?) ...[
                   fit(fmtClockTime(at), rateWidth),
                   const SizedBox(width: 10),
                   fit(fmtClosedDuration(ClosedConnection(c, at).duration), ageWidth),
@@ -1396,6 +1468,9 @@ class _LogListState extends ConsumerState<_LogList> {
   /// 列表上显示的那一份；日志来了不直接重建，经 [_onLogs] 合并着刷
   List<Log> _all = const [];
 
+  /// 来源筛选（全部 / MeowX / 引擎，同 iOS），只作用于日志
+  LogSource _source = LogSource.all;
+
   /// 刚刷过：这段时间里再来的日志等它到点一起刷
   Timer? _cooldown;
 
@@ -1481,22 +1556,21 @@ class _LogListState extends ConsumerState<_LogList> {
 
   @override
   Widget build(BuildContext context) {
-    final open = ref.watch(appSettingProvider.select((s) => s.openLogs));
     final all = _all;
     final q = widget.query.toLowerCase();
     final kind = widget.kind;
+    final source = _source;
     // 列表每 250ms 重建一次：小写 payload 与类型按日志对象缓存，每行只算一次（以前每次重建对全部日志跑一遍正则）
-    final logs = q.isEmpty && kind == ActivityKind.all
+    final logs = q.isEmpty && kind == ActivityKind.all && source == LogSource.all
         ? all
         : all
               .where((l) =>
+                  logMatchesSource(l, source) &&
                   (q.isEmpty || (_lower[l] ??= l.payload.toLowerCase()).contains(q)) &&
                   (kind == ActivityKind.all || (_kinds[l] ??= logKinds(l.payload)).contains(kind)))
               .toList();
-    final filtering = q.isNotEmpty || kind != ActivityKind.all;
-    if (!open) {
-      return const _Empty(icon: Icons.notes_rounded, text: '日志已关闭 · 在「我的 → 设置」打开「记录日志」');
-    }
+    final filtering = q.isNotEmpty || kind != ActivityKind.all || source != LogSource.all;
+    // 「记录日志」关着也照样显示（警告 / 错误与 MeowX 的事件），开关只决定额外记不记分流与 DNS（同 iOS）
     // 列表不在（刚进来、清空了、搜不到）：回到跟随
     if (!_scroll.hasClients) _follow = true;
     // 还在跟才跟到底：往上翻着看旧日志时，不被新来的日志拽回去
@@ -1504,6 +1578,25 @@ class _LogListState extends ConsumerState<_LogList> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          children: [
+            for (final (i, s) in LogSource.values.indexed) ...[
+              if (i > 0) const SizedBox(width: 6),
+              M3FilterChip(
+                label: s.label,
+                selected: s == source,
+                height: 32,
+                onTap: s == source
+                    ? null
+                    : () => setState(() {
+                        _source = s;
+                        _follow = true;
+                      }),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 10),
         Expanded(
           child: logs.isEmpty
               ? _Empty(icon: Icons.notes_rounded, text: filtering ? '无匹配日志' : '暂无日志')
@@ -1562,7 +1655,7 @@ class _LogListState extends ConsumerState<_LogList> {
             style: mono,
           ),
           const SizedBox(width: 10),
-          Expanded(child: Text(l.payload, style: mono)),
+          Expanded(child: Text(logMessage(l), style: mono)),
         ],
       ),
     );

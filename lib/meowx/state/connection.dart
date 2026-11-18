@@ -14,6 +14,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/meow_tab.dart';
 import '../app/window_controls.dart' show isLinuxDesktop;
+import 'log_source.dart';
 import 'meow_settings.dart';
 import 'status.dart';
 import 'wifi_switch.dart';
@@ -55,10 +56,11 @@ class PowerController extends Notifier<PowerState> {
     }
     final isStart = ref.read(isRunningProvider);
     state = PowerState(busy: true, optimistic: !isStart);
+    meowLog(isStart ? '断开代理' : '启动代理');
     try {
       await globalState.appController.updateStatus(!isStart);
     } catch (e) {
-      commonPrint.log('updateStatus failed: $e');
+      meowLog('${isStart ? '断开' : '启动'}失败：$e');
     } finally {
       state = const PowerState();
     }
