@@ -296,6 +296,9 @@ Future<void> _pump(
 DashboardPage _page() => DashboardPage(fetchConnections: () async => _conns);
 
 void main() {
+  // 连接主卡的电源键连上后一直转：这里关掉，否则 pumpAndSettle 等不到停（一直转本身在 m3_kit_test 里测）
+  setUpAll(() => M3PowerButton.debugSpinWhileOn = false);
+
   testWidgets('手机 · 已连接：窄屏 1.4 倍字号不溢出；主卡 / 当前节点 / 网速 / 订阅 / 指标 / 出口 IP', (tester) async {
     await _pump(
       tester,
@@ -688,7 +691,7 @@ void main() {
     expect(find.text('黑名单 · 2 个应用不走代理'), findsOneWidget);
   });
 
-  testWidgets('连接主卡：连上是主色容器底、没连是次级底', (tester) async {
+  testWidgets('连接主卡：底色和其它卡片一样，连上时大字换成主题色', (tester) async {
     Future<void> pump({required bool running}) => _pump(
       tester,
       const SingleChildScrollView(child: HomeHeroCard()),
@@ -703,10 +706,13 @@ void main() {
         as BoxDecoration;
 
     final cs = MeowColors.scheme(MeowColors.brandSeed, Brightness.light);
+    Color? status(String text) => tester.widget<Text>(find.text(text)).style?.color;
     await pump(running: true);
-    expect(card().color, cs.primaryContainer);
+    expect(card().color, cs.card);
+    expect(status('已连接'), cs.primary);
     await pump(running: false);
-    expect(card().color, cs.surfaceContainerHighest);
+    expect(card().color, cs.card);
+    expect(status('未连接'), cs.onSurface);
   });
 
   // 放在最后：要给 globalState 装一个真的 AppController（切模式经它改配置），装上就撤不掉

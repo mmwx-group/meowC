@@ -17,7 +17,7 @@ import '../../theme/latency_badge.dart';
 import '../../theme/m3_kit.dart';
 
 /// 连接主卡（M3 Expressive，画布稿 Main）：状态（提示 / 大字 / 已运行）+ 饼干形电源键；「当前节点」行；「规则 | 全局 | 直连」连接式按钮组。
-/// 已连接 = primaryContainer 底，其余 = surfaceContainerHighest；圆角 36。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
+/// 底色与首页其它卡片相同（2026-11-18 用户要求，以前已连接时换成主色容器）：状态靠大字的颜色（连上是主题色）与电源键表达；圆角 36。[dense] = 宽屏（侧栏右边的窄列）用的小一号尺寸。
 class HomeHeroCard extends ConsumerWidget {
   const HomeHeroCard({super.key, this.dense = false});
   final bool dense;
@@ -31,7 +31,7 @@ class HomeHeroCard extends ConsumerWidget {
     // Android 上启动 = 建立 VPN（关了「VPN」只起核心和本地端口）；Windows 上电源键只拉起核心，流量怎么进来看接管方式
     final vpn = system.isAndroid && !isDesktopUi && ref.watch(vpnSettingProvider.select((s) => s.enable));
     final on = phase == ConnPhase.on;
-    final fg = on ? cs.onPrimaryContainer : cs.onSurface;
+    final fg = cs.onSurface;
     final (hint, dot, status) = switch (phase) {
       ConnPhase.on => ('${modeLabel(mode)}模式 · ${vpn ? 'VPN 已建立' : '核心运行中'}', x.ok, S.connected),
       ConnPhase.connecting => ('${modeLabel(mode)}模式 · 正在启动', x.warn, S.connecting),
@@ -39,13 +39,14 @@ class HomeHeroCard extends ConsumerWidget {
       ConnPhase.off => (hasProfile ? S.ready : S.notConfigured, cs.onSurfaceVariant, S.disconnected),
     };
     final gap = dense ? 14.0 : 18.0;
-    final track = cs.surfaceContainerLowest.withValues(alpha: 0.72);
+    // 卡内的节点行与没选中的模式按钮：比卡片深一档
+    final track = cs.cardInner;
 
     return AnimatedContainer(
       duration: MeowSprings.effectsDuration,
       padding: dense ? const EdgeInsets.fromLTRB(16, 18, 16, 16) : const EdgeInsets.fromLTRB(20, 22, 20, 20),
       decoration: BoxDecoration(
-        color: on ? cs.primaryContainer : cs.surfaceContainerHighest,
+        color: cs.card,
         borderRadius: BorderRadius.circular(dense ? MeowShape.xlInc : 36),
       ),
       child: Column(
@@ -76,7 +77,7 @@ class HomeHeroCard extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: dense ? 12 : 13,
                               fontWeight: FontWeight.w600,
-                              color: fg.withValues(alpha: 0.85),
+                              color: cs.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -94,12 +95,13 @@ class HomeHeroCard extends ConsumerWidget {
                           height: dense ? 40 / 34 : 52 / 46,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.5,
-                          color: fg,
+                          // 连上之后大字换成主题色（卡片底色不再随状态变，状态靠它与电源键表达）
+                          color: on ? cs.primary : fg,
                         ),
                       ),
                     ),
                     SizedBox(height: dense ? 4 : 6),
-                    _SubLine(dense: dense, color: fg.withValues(alpha: 0.8)),
+                    _SubLine(dense: dense, color: cs.onSurfaceVariant),
                   ],
                 ),
               ),
@@ -108,6 +110,7 @@ class HomeHeroCard extends ConsumerWidget {
                 size: _powerSize(context, dense),
                 on: on,
                 busy: phase == ConnPhase.connecting,
+                spinWhileOn: true,
                 enabled: ref.watch(powerEnabledProvider),
                 onTap: () => unawaited(ref.read(powerProvider.notifier).toggle()),
               ),

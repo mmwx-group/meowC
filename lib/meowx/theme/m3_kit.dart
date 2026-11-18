@@ -528,10 +528,7 @@ class M3ListRow extends StatelessWidget {
           final rr = _nonNegative(r!);
           return AnimatedContainer(
             duration: MeowSprings.effectsDuration,
-            decoration: BoxDecoration(
-              color: selected ? cs.secondaryContainer : (color ?? cs.card),
-              borderRadius: rr,
-            ),
+            decoration: BoxDecoration(color: selected ? cs.secondaryContainer : (color ?? cs.card), borderRadius: rr),
             child: Material(
               type: MaterialType.transparency,
               borderRadius: rr,
@@ -701,8 +698,9 @@ class M3Cookie extends StatelessWidget {
   );
 }
 
-/// 电源键（M3E 的饼干形按钮）：已连接 = 主色八瓣饼干、白色图标；没连 = 圆角方块、最浅的底、主色图标；
-/// 连接 / 断开中是半开的花瓣慢慢转（同 M3E 的加载指示器）。
+/// 电源键（M3E 的饼干形按钮）：已连接 = 主色八瓣饼干、白色图标；没连 = 圆角方块、主色容器底（随主题色变）、主色图标；
+/// 连接中是半开的花瓣转得快一点（同 M3E 的加载指示器），连上之后花瓣全开、一直慢慢转（2026-11-18 用户要求「启动后一直旋转」）。
+/// 一直转的时候只重画这颗按钮自己（外面一层 RepaintBoundary）；首页不在前台时外层的 TickerMode 停掉它；系统「移除动画」时不转。
 ///
 /// 形变（2026-11-17 用户在四个方案里选的「A 同族八瓣」，以前是九瓣 ↔ 方块直接按半径插值）：
 /// - 八瓣：方块每条边正好变成两瓣，整个过程保持四重对称（九瓣对四个角，中间形状歪、鼓包）；
@@ -718,11 +716,19 @@ class M3PowerButton extends StatefulWidget {
     required this.onTap,
     this.size = 116,
     this.enabled = true,
+    this.spinWhileOn = false,
   });
 
   final bool on, busy, enabled;
   final VoidCallback onTap;
   final double size;
+
+  /// 连上之后也一直慢慢转（首页连接主卡用；侧栏的小电源键不转，免得一直要帧）
+  final bool spinWhileOn;
+
+  /// 测试里关掉「连上一直转」：一直转的话 pumpAndSettle 等不到停
+  @visibleForTesting
+  static bool debugSpinWhileOn = true;
 
   @override
   State<M3PowerButton> createState() => _M3PowerButtonState();
@@ -733,10 +739,16 @@ class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateM
   late final AnimationController _morph = AnimationController.unbounded(vsync: this, value: _morphTarget);
   // 花瓣深浅：0 = 没有花瓣，0.45 = 连接中半开，1 = 已连全开
   late final AnimationController _depth = AnimationController.unbounded(vsync: this, value: _depthTarget);
-  // 转动：忙的时候一直转（一圈 5.2 秒），停下时转到最近的 1/4 圈
-  late final AnimationController _spin = AnimationController(vsync: this, duration: _spinTurn);
+  // 转动：连接中一圈 5.2 秒，连上之后一圈 12 秒一直转；断开时转到最近的 1/4 圈停下
+  late final AnimationController _spin = AnimationController(vsync: this, duration: _spinPeriod);
 
-  static const _spinTurn = Duration(milliseconds: 5200);
+  static const _busyTurn = Duration(milliseconds: 5200);
+  static const _onTurn = Duration(seconds: 12);
+  Duration get _spinPeriod => widget.busy ? _busyTurn : _onTurn;
+  // 系统「移除动画」时不转（也不空跑 Ticker）
+  bool get _spinning =>
+      (widget.busy || (widget.on && widget.spinWhileOn && M3PowerButton.debugSpinWhileOn)) &&
+      !MediaQuery.disableAnimationsOf(context);
   static final _morphSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 300, ratio: 0.62);
   static final _depthSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 420, ratio: 0.45);
 
@@ -744,9 +756,19 @@ class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateM
   double get _depthTarget => widget.on ? 1 : (widget.busy ? 0.45 : 0);
 
   @override
-  void initState() {
-    super.initState();
-    if (widget.busy) _spin.repeat();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncSpin();
+  }
+
+  void _syncSpin() {
+    if (_spinning && !_spin.isAnimating) {
+      _spin.repeat(period: _spinPeriod);
+    } else if (!_spinning && _spin.isAnimating && MediaQuery.disableAnimationsOf(context)) {
+      _spin
+        ..stop()
+        ..value = 0;
+    }
   }
 
   void _springTo(AnimationController c, double target, SpringDescription spring) {
@@ -762,15 +784,16 @@ class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateM
     super.didUpdateWidget(old);
     _springTo(_morph, _morphTarget, _morphSpring);
     _springTo(_depth, _depthTarget, _depthSpring);
-    if (widget.busy && !_spin.isAnimating) {
-      _spin.repeat();
-    } else if (!widget.busy && _spin.isAnimating) {
+    if (_spinning && (!_spin.isAnimating || old.busy != widget.busy || old.on != widget.on)) {
+      // 从当前角度接着转，只换转速（连接中 → 已连接变慢）
+      _spin.repeat(period: _spinPeriod);
+    } else if (!_spinning && _spin.isAnimating) {
       // 转到下一个 1/4 圈停下：八瓣与方块都对齐，不突然跳回
       const step = 0.25;
       final end = ((_spin.value / step).ceil() * step).clamp(0.0, 1.0);
-      final ms = ((end - _spin.value) * _spinTurn.inMilliseconds).round() + 1;
+      final ms = ((end - _spin.value) * _busyTurn.inMilliseconds).round() + 1;
       _spin.animateTo(end, duration: Duration(milliseconds: ms)).then((_) {
-        if (mounted && !widget.busy) _spin.value = 0;
+        if (mounted && !_spinning) _spin.value = 0;
       });
     }
   }
@@ -802,27 +825,31 @@ class _M3PowerButtonState extends State<M3PowerButton> with TickerProviderStateM
                   widget.onTap();
                 }
               : null,
-          child: SizedBox.square(
-            dimension: size,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_morph, _depth, _spin]),
-              builder: (_, _) {
-                final m = (reduce ? _morphTarget : _morph.value).clamp(0.0, 1.0);
-                final d = reduce ? _depthTarget : _depth.value;
-                final fill = Color.lerp(cs.primary, cs.surfaceContainerLowest, m)!;
-                final iconColor = Color.lerp(cs.onPrimary, cs.primary, m)!;
-                return CustomPaint(
-                  painter: _PowerShapePainter(
-                    color: fill,
-                    morph: m,
-                    depth: d,
-                    rotation: (reduce ? 0 : _spin.value * 2 * math.pi) + (1 - m) * math.pi / 8,
-                  ),
-                  child: Center(
-                    child: Icon(Icons.power_settings_new_rounded, size: size * 0.36, color: iconColor),
-                  ),
-                );
-              },
+          // 一直转：只重画这一颗
+          child: RepaintBoundary(
+            child: SizedBox.square(
+              dimension: size,
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_morph, _depth, _spin]),
+                builder: (_, _) {
+                  final m = (reduce ? _morphTarget : _morph.value).clamp(0.0, 1.0);
+                  final d = reduce ? _depthTarget : _depth.value;
+                  // 两头都随主题色：没连是主色容器底 + 主色图标，连上是主色底 + 主色上的字色
+                  final fill = Color.lerp(cs.primary, cs.primaryContainer, m)!;
+                  final iconColor = Color.lerp(cs.onPrimary, cs.primary, m)!;
+                  return CustomPaint(
+                    painter: _PowerShapePainter(
+                      color: fill,
+                      morph: m,
+                      depth: d,
+                      rotation: (reduce ? 0 : _spin.value * 2 * math.pi) + (1 - m) * math.pi / 8,
+                    ),
+                    child: Center(
+                      child: Icon(Icons.power_settings_new_rounded, size: size * 0.36, color: iconColor),
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ),

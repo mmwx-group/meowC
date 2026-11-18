@@ -156,6 +156,31 @@ void main() {
     expect(find.bySemanticsLabel('断开连接'), findsOneWidget);
   });
 
+  testWidgets('电源键 spinWhileOn：连上之后一直转（一直要帧），断开后停在整 1/4 圈、不再要帧；默认不转', (tester) async {
+    var on = true;
+    late StateSetter set;
+    await tester.pumpWidget(
+      _app(
+        StatefulBuilder(
+          builder: (_, s) {
+            set = s;
+            return M3PowerButton(on: on, busy: false, spinWhileOn: true, onTap: () {});
+          },
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.binding.hasScheduledFrame, isTrue);
+    set(() => on = false);
+    await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+
+    // 不开 spinWhileOn（侧栏的小电源键）：连上也不转
+    await tester.pumpWidget(_app(M3PowerButton(on: true, busy: false, onTap: () {})));
+    await tester.pumpAndSettle();
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
   testWidgets('波浪进度条：值变化动画到位，进行中一直动（pumpAndSettle 会超时）、静止时停', (tester) async {
     var animate = false;
     late StateSetter set;
