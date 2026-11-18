@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:flutter/material.dart';
@@ -28,12 +27,11 @@ class HomeHeroCard extends ConsumerWidget {
     final phase = ref.watch(connPhaseProvider);
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
     final hasProfile = ref.watch(hasProfileProvider);
-    // Android 上启动 = 建立 VPN（关了「VPN」只起核心和本地端口）；Windows 上电源键只拉起核心，流量怎么进来看接管方式
-    final vpn = system.isAndroid && !isDesktopUi && ref.watch(vpnSettingProvider.select((s) => s.enable));
     final on = phase == ConnPhase.on;
     final fg = cs.onSurface;
     final (hint, dot, status) = switch (phase) {
-      ConnPhase.on => ('${modeLabel(mode)}模式 · ${vpn ? 'VPN 已建立' : '核心运行中'}', x.ok, S.connected),
+      // 用语同 iOS（2026-11-18）：已连接「X模式 · 保护中」、未连接「已就绪 / 未配置」
+      ConnPhase.on => ('${modeLabel(mode)}模式 · 保护中', x.ok, S.connected),
       ConnPhase.connecting => ('${modeLabel(mode)}模式 · 正在启动', x.warn, S.connecting),
       ConnPhase.off when ref.watch(wifiPausedProvider) => ('Wi-Fi 规则暂停中 · 点电源键恢复', x.warn, '已暂停'),
       ConnPhase.off => (hasProfile ? S.ready : S.notConfigured, cs.onSurfaceVariant, S.disconnected),

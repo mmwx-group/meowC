@@ -18,6 +18,7 @@ import '../../state/connection.dart';
 import '../../state/exit_ip.dart';
 import '../../state/format.dart';
 import '../../state/meow_settings.dart';
+import '../../state/region_names.dart';
 import '../../state/status.dart';
 import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
@@ -610,7 +611,7 @@ class _DnsTile extends ConsumerWidget {
   }
 }
 
-/// 出口 IP：两格「国内 · 直连出口」|「国际 · 经 {出站}」，地区码 + 等宽 IP。
+/// 出口 IP：两格「中国大陆 · 直连出口」|「香港 · 经 {出站}」（地区没查到时「国内 / 国际」），国旗 + 等宽 IP。
 /// 连接状态或节点变化（checkIpNum）后延迟 1.5s 重查；国内格不需要连接。手动重查在页面标题行的圆钮上。
 /// 这个 widget 不在树上（「首页卡片」里关掉了出口 IP）就不查。
 class HomeExitIp extends ConsumerStatefulWidget {
@@ -699,10 +700,13 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
     }
 
     final via = st.globalVia;
+    // 标题开头是 IP 所属地区的中文名（同 iOS #1775：「香港 · 经 X」「中国大陆 · 直连出口」）；还没查到时照旧写「国内 / 国际」
+    final domestic = (st.domestic != null ? regionNameZh(st.domestic!.countryCode) : null) ?? '国内';
+    final international = (st.global != null ? regionNameZh(st.global!.countryCode) : null) ?? '国际';
     return _tileRow([
-      tile(S.domesticDirect, st.domestic, loading: st.loadingDomestic, placeholder: '—'),
+      tile('$domestic · ${S.directExit}', st.domestic, loading: st.loadingDomestic, placeholder: '—'),
       tile(
-        running ? '${S.globalVia} ${via ?? '代理'}' : '国际 · 代理出口',
+        running && via != null ? '$international · 经 $via' : '$international · ${S.proxyExit}',
         st.global,
         loading: st.loadingGlobal,
         placeholder: running ? '—' : S.disconnected,

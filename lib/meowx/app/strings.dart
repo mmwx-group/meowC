@@ -26,8 +26,8 @@ class S {
   static const modeDirect = '直连';
   static const modeGlobal = '全局';
   static const peak = '峰值';
-  static const domesticDirect = '国内 · 直连出口';
-  static const globalVia = '国际 · 经';
+  static const directExit = '直连出口';
+  static const proxyExit = '代理出口';
   static const querying = '查询中…';
   static const noSubscription = '还没有订阅';
   static const unlimited = '无限';

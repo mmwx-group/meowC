@@ -268,7 +268,7 @@ class _RequestRow extends ConsumerWidget {
     final progress = info.progressText.isNotEmpty ? '${info.progressText} · ' : '';
     final up = TrafficValue(value: info.upload).toString();
     final down = TrafficValue(value: info.download).toString();
-    return '$progress$up↑ $down↓';
+    return '$progress$down↓ $up↑';   // 下载在前（三端统一）
   }
 
   @override

@@ -70,8 +70,8 @@ enum NodeCardSize {
 /// 列表顺序 = 「首页卡片」设置里的顺序；[apps] 只在 Android 手机 / 平板上有（Windows 没有分应用代理）；
 /// [mesh] 只在喵窝可用（管理员账号或已经开着）时才列出来（2026-11-17 加：以前喵窝卡没法隐藏）。
 enum HomeCard {
-  upload,
   download,
+  upload,
   chart,
   mesh,
   apps,
@@ -82,8 +82,8 @@ enum HomeCard {
   ip;
 
   String get label => switch (this) {
-    HomeCard.upload => '上传',
     HomeCard.download => '下载',
+    HomeCard.upload => '上传',
     HomeCard.chart => '网速图',
     HomeCard.mesh => '喵窝',
     HomeCard.apps => '代理应用',

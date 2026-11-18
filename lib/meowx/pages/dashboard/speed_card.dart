@@ -15,7 +15,7 @@ import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
 import '../speedtest/speed_test_page.dart';
 
-/// 网速卡（画布稿 Main）：上传（第三色）/ 下载（主色）两列大字 + 右上角网络测速圆钮 + 近 60 秒折线 + 本次累计。
+/// 网速卡（画布稿 Main）：下载（主色）/ 上传（第三色）两列大字 + 右上角网络测速圆钮 + 近 60 秒折线 + 本次累计。
 /// [up] / [down] / [chart] 对应「首页卡片」里的三个开关，调用方保证至少开着一个。
 /// [expand]：外层给了定高（宽屏左列撑满），折线吃掉剩余高度；否则折线定高。
 class HomeSpeedCard extends ConsumerWidget {
@@ -127,9 +127,10 @@ class HomeSpeedCard extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (up) Expanded(child: rate(Icons.arrow_upward_rounded, cs.tertiary, S.upload, last?.up.value ?? 0)),
-              if (up && down) const SizedBox(width: 12),
+              // 下载在前（2026-11-18 起三端统一）
               if (down) Expanded(child: rate(Icons.arrow_downward_rounded, cs.primary, S.download, last?.down.value ?? 0)),
+              if (up && down) const SizedBox(width: 12),
+              if (up) Expanded(child: rate(Icons.arrow_upward_rounded, cs.tertiary, S.upload, last?.up.value ?? 0)),
               if (!up && !down)
                 Expanded(
                   child: Text(
@@ -153,7 +154,7 @@ class HomeSpeedCard extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${S.session} ↑ ${fmtSize(total.up.value)} · ↓ ${fmtSize(total.down.value)}',
+                  '${S.session} ↓ ${fmtSize(total.down.value)} · ↑ ${fmtSize(total.up.value)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: caption,

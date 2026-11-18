@@ -309,7 +309,7 @@ void main() {
     );
 
     expect(find.text('MeowX'), findsOneWidget);
-    expect(find.text('规则模式 · 核心运行中'), findsOneWidget);
+    expect(find.text('规则模式 · 保护中'), findsOneWidget);
     expect(find.text('已连接'), findsOneWidget);
     expect(find.text('已运行 02:14:36'), findsOneWidget);
     // 当前节点：名字连国旗原样显示，路径是组链
@@ -318,14 +318,16 @@ void main() {
     expect(find.text('香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
     expect(find.text('节点选择 › 自动选择'), findsOneWidget);
     expect(find.text('38 ms'), findsOneWidget);
-    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
     expect(find.text('已用 128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
     expect(find.text('3 小时前更新'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
     expect(find.text('41'), findsOneWidget);
     expect(find.text('58.0 MB'), findsOneWidget);
     expect(find.text('Fake-IP'), findsOneWidget);
-    expect(find.text('国际 · 经 🇭🇰 香港 01 · IEPL'), findsOneWidget);
+    // 出口 IP 标题以地区中文名开头（同 iOS）
+    expect(find.text('香港 · 经 🇭🇰 香港 01 · IEPL'), findsOneWidget);
+    expect(find.text('中国大陆 · 直连出口'), findsOneWidget);
     expect(find.text('198.51.100.7'), findsOneWidget);
     // 长的 IPv6 折成两行完整显示
     expect(find.text('2408:8207:1234:5678:\n9abc:def0:1234:5678'), findsOneWidget);
@@ -353,7 +355,7 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
     // 首次构建用的是当时的值
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     useReleaseProviderFrames();
@@ -372,20 +374,20 @@ void main() {
       await tester.pump();
     }
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 ↓ 1.42 GB · ↑ 86.2 MB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     // 切回首页：这一帧就是最新值（数据一直在 provider 里攒着），之后照常每秒跟
     container.read(meowTabProvider.notifier).state = MeowTab.home;
     await tester.pump();
     expect(find.text('已运行 02:14:39'), findsOneWidget);
-    expect(find.text('会话 ↑ 203.0 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 ↓ 1.42 GB · ↑ 203.0 MB'), findsOneWidget);
     expect(find.text('33'), findsOneWidget);
     expect(container.read(trafficsProvider).list.last.up.value, 1024 * 3);
     tick(4);
     await tester.pump();
     expect(find.text('已运行 02:14:40'), findsOneWidget);
-    expect(find.text('会话 ↑ 204.0 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('会话 ↓ 1.42 GB · ↑ 204.0 MB'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
 
     // 运行时长有两路在写，同一秒里的第二次写入不重建
@@ -477,7 +479,8 @@ void main() {
     expect(find.text('没有代理组'), findsOneWidget);
     expect(find.text('正在加载…'), findsNothing);
     expect(find.text('还没有订阅'), findsOneWidget);
-    expect(find.text('国际 · 代理出口'), findsOneWidget);
+    expect(find.text('国际 · 代理出口'), findsOneWidget);   // 还没查到：照旧写「国内 / 国际」
+    expect(find.text('中国大陆 · 直连出口'), findsOneWidget);
     expect(find.text('—'), findsOneWidget);   // 内存
   });
 
@@ -490,7 +493,7 @@ void main() {
       textScale: 1,
     );
 
-    expect(find.text('直连模式 · 核心运行中'), findsOneWidget);
+    expect(find.text('直连模式 · 保护中'), findsOneWidget);
     expect(find.text('全部流量不经过代理'), findsOneWidget);
     expect(find.text('38 ms'), findsNothing);
   });
