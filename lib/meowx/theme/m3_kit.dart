@@ -508,7 +508,8 @@ class M3ListRow extends StatelessWidget {
   final int titleMaxLines, subtitleMaxLines;
   final double titleSize;
 
-  static const outer = 24.0, inner = 6.0, selectedRadius = MeowShape.xl;
+  // 分段清单里的每一行四角都是完整的大圆角（2026-11-18 用户要求，以前相邻行之间的内角只有 6，看着像直角）
+  static const outer = 24.0, inner = outer, selectedRadius = MeowShape.xl;
 
   @override
   Widget build(BuildContext context) {

@@ -357,7 +357,10 @@ class _EditableItemsCard extends StatelessWidget {
                 if (i > 0) const MeSegmentGap(),
                 InkWell(
                   onTap: () => onTap(i),
-                  child: Padding(
+                  child: Container(
+                    // 至少 48 高：分段的凹角是 24，矮了上下两个圆角会叠在一起
+                    constraints: const BoxConstraints(minHeight: 48),
+                    alignment: Alignment.centerLeft,
                     padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
                     child: Row(
                       children: [

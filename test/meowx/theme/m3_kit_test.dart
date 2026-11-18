@@ -52,7 +52,7 @@ void main() {
     expect(picked, 'direct');
   });
 
-  testWidgets('分段清单：首行上大下小、中间四角小、末行上小下大；选中的行四角 28、次色容器底', (tester) async {
+  testWidgets('分段清单：每一行四角都是完整的 24 圆角（2026-11-18 起）；选中的行四角 28、次色容器底', (tester) async {
     await tester.pumpWidget(
       _app(
         const M3SegmentedList(
@@ -66,9 +66,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(_decorationAbove(tester, find.text('A')).borderRadius, MeowShape.segment(0, 4, outer: 24, inner: 6));
-    expect(_decorationAbove(tester, find.text('B')).borderRadius, BorderRadius.circular(6));
-    expect(_decorationAbove(tester, find.text('D')).borderRadius, MeowShape.segment(3, 4, outer: 24, inner: 6));
+    for (final t in ['A', 'B', 'D']) {
+      expect(_decorationAbove(tester, find.text(t)).borderRadius, BorderRadius.circular(24));
+    }
     final c = _decorationAbove(tester, find.text('C'));
     expect(c.borderRadius, BorderRadius.circular(MeowShape.xl));
     expect(c.color, _cs.secondaryContainer);

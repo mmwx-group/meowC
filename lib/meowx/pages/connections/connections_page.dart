@@ -1328,7 +1328,7 @@ class _ConnDetail extends StatelessWidget {
         const SizedBox(height: 10),
         _StatPair(up: c.upload, down: c.download),
         const SizedBox(height: 10),
-        // 分段清单的样子：各行之间 3 的间隔（页面底色、内角小圆角）
+        // 分段清单的样子：各行之间 3 的间隔（页面底色），每行四角都是完整圆角
         Material(
           color: context.cs.card,
           borderRadius: BorderRadius.circular(MeowShape.lInc + 4),
@@ -1338,7 +1338,7 @@ class _ConnDetail extends StatelessWidget {
               for (final (i, f) in facts.indexed) ...[
                 if (i > 0) const MeSegmentGap(),
                 Container(
-                  constraints: const BoxConstraints(minHeight: 44),
+                  constraints: const BoxConstraints(minHeight: 48),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [

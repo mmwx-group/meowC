@@ -613,7 +613,9 @@ class _KvRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    return Padding(
+    return Container(
+      constraints: const BoxConstraints(minHeight: 48),   // 分段的凹角是 24：矮了上下圆角会叠在一起
+      alignment: Alignment.centerLeft,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

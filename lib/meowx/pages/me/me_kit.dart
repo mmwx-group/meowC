@@ -125,7 +125,7 @@ class MeSubPage extends StatelessWidget {
 Future<void> mePush(BuildContext context, Widget page) => BaseNavigator.push(context, page);
 
 /// 设置分组（M3 分段清单）：可选小标题（主色；[accent] = 平台专属分组，用第三色）在卡片外，
-/// 卡片里的各块之间隔 3、内角小圆角、外角 24——看起来就是一组连着的行（[meDivided]）。
+/// 卡片里的各块之间隔 3、每块四角都是外角那么大的圆角（24）——看起来就是一组连着的行（[meDivided]）。
 /// [note] 是标题右侧的小字；[info] 不为 null 时标题旁画一个 ⓘ，点了弹出这段说明。
 class MeSection extends StatelessWidget {
   const MeSection({super.key, this.title, this.note, this.info, this.accent = false, required this.children});
@@ -216,7 +216,7 @@ class MeInfoButton extends StatelessWidget {
   }
 }
 
-/// 在相邻两项之间插一道 3 高的间隔（页面底色，两端带 6 的内圆角）：一张卡片里的各块因此像分段清单里各自独立的行。
+/// 在相邻两项之间插一道 3 高的间隔（页面底色，两端挖出与卡片外角一样大的凹角）：一张卡片里的各块因此像分段清单里各自独立的行。
 /// [leading] = 第一项上面也画（卡片里有自己的标题行时）。
 List<Widget> meDivided(BuildContext context, List<Widget> children, {bool leading = false}) => [
   for (final (i, c) in children.indexed) ...[
@@ -225,25 +225,29 @@ List<Widget> meDivided(BuildContext context, List<Widget> children, {bool leadin
   ],
 ];
 
-/// 分组卡片里两块之间的间隔：一条页面底色的 3 高横条，两端往上下各画一个 6 的凹角，把两块的内角「挖」圆。
+/// 分组卡片里两块之间的间隔：一条页面底色的 3 高横条，两端往上下各画一个凹角，把两块的内角「挖」圆。
 /// 间隔的颜色取页面底（[ColorScheme.surface]）；画在两块上面，不占它们的位置以外的地方。
+/// 凹角的半径 = 卡片的外角（宽屏 20、其余 24）：每一块的四角都是完整的大圆角（2026-11-18 用户要求，以前是 6，看着像直角）。
 class MeSegmentGap extends StatelessWidget {
   const MeSegmentGap({super.key});
 
-  static const height = 3.0, radius = 6.0;
+  static const height = 3.0;
+
+  static double radiusOf(BuildContext context) => MeDense.of(context) ? 20 : 24;
 
   @override
   Widget build(BuildContext context) =>
-      CustomPaint(size: const Size.fromHeight(height), painter: _GapPainter(context.cs.surface));
+      CustomPaint(size: const Size.fromHeight(height), painter: _GapPainter(context.cs.surface, radiusOf(context)));
 }
 
 class _GapPainter extends CustomPainter {
-  const _GapPainter(this.color);
+  const _GapPainter(this.color, this.radius);
   final Color color;
+  final double radius;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const r = MeSegmentGap.radius;
+    final r = radius;
     final paint = Paint()..color = color;
     canvas.drawRect(Offset.zero & size, paint);
     final w = size.width, h = size.height;
@@ -254,14 +258,14 @@ class _GapPainter extends CustomPainter {
       return Path.combine(PathOperation.difference, sq, circle);
     }
 
-    canvas.drawPath(corner(Offset.zero, const Offset(r, -r)), paint);
+    canvas.drawPath(corner(Offset.zero, Offset(r, -r)), paint);
     canvas.drawPath(corner(Offset(w, 0), Offset(w - r, -r)), paint);
     canvas.drawPath(corner(Offset(0, h), Offset(r, h + r)), paint);
     canvas.drawPath(corner(Offset(w, h), Offset(w - r, h + r)), paint);
   }
 
   @override
-  bool shouldRepaint(_GapPainter old) => old.color != color;
+  bool shouldRepaint(_GapPainter old) => old.color != color || old.radius != radius;
 }
 
 /// 一组设置行：行间 1px 分隔线；[footer] 是组末的小字说明（[onFooterTap] 可点）。

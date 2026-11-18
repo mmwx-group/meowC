@@ -468,7 +468,7 @@ void main() {
     expect(find.text('关闭于'), findsOneWidget);
     expect(find.text('已结束'), findsWidgets);   // 详情里
     expect(find.text('关闭这条连接'), findsNothing);
-    await tester.tapAt(const Offset(10, 10));
+    await tester.binding.handlePopRoute();   // 关掉详情弹层（它高到盖住屏幕顶部时点外面点不到）
     await tester.pumpAndSettle();
 
     // 日志段不按「已关闭」筛
