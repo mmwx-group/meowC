@@ -186,7 +186,6 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
     final importing = ref.watch(importingSubProvider) != null;
 
     Widget menu({required bool alignEnd, required Widget Function(VoidCallback open) trigger}) => MeowMenuButton<_SubPick>(
-      width: 240,
       alignEnd: alignEnd,
       onSelected: _onPick,
       entries: () => _entries(profile.id),

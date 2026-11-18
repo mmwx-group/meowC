@@ -310,9 +310,9 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
             );
             final Widget panel = glass
                 ? MeowGlassBox(
-                    style: MeowGlassStyles.menu(context).scale(pc),
+                    style: MeowGlassStyles.menu(context).scale(DropletMorph.glassAmount(p)),
                     radius: radius,
-                    rim: MeowGlassStyles.menuRim(context).scale(pc),
+                    rim: MeowGlassStyles.menuRim(context).scale(DropletMorph.glassAmount(p)),
                     shadows: MeowGlassStyles.menuShadows(context, pc),
                     child: clipped,
                   )

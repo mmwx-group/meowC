@@ -78,6 +78,35 @@ Rect meowMenuRect({
   return Rect.fromLTWH(left, top, w, h);
 }
 
+/// 菜单按内容该有的宽度：最长一项的字宽 + 行内边距（6 + 10，两侧）+ 勾的位置（8 + 18），夹在 180 到屏宽 − 16 之间。
+/// 小标题按它自己的字号量。字号跟系统缩放走（同菜单里的上限 1.3）。
+double meowMenuIntrinsicWidth(BuildContext context, List<MeowMenuEntry<Object?>> entries) {
+  final scaler = MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.3);
+  double measure(String text, double size, FontWeight weight) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: TextStyle(fontSize: size, fontWeight: weight, fontFamilyFallback: linuxTextFallback)),
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return w;
+  }
+
+  var widest = 0.0;
+  for (final e in entries) {
+    final w = switch (e) {
+      MeowMenuItem(:final label) => measure(label, MeowFont.subheadline, FontWeight.w600) + (6 + 10) * 2 + 8 + 18,
+      MeowMenuCaption(:final text) => measure(text, MeowFont.caption, FontWeight.w400) + 16 * 2,
+      MeowMenuDivider() => 0.0,
+    };
+    widest = math.max(widest, w);
+  }
+  final screen = MediaQuery.sizeOf(context).width;
+  return widest.ceilToDouble().clamp(180.0, math.max(180.0, screen - _margin * 2));
+}
+
 /// 弹出菜单（「按钮变形」）：面板从 [anchor]（全局坐标；不给就取 [context] 这个控件的矩形）连续变形成菜单——
 /// 位置、宽高、圆角从 [fromRadius]（缺省 = 按钮高的一半，胶囊）到 16、底色从 [fromColor]（缺省淡粉）到卡片白，soft 弹簧；
 /// 菜单项在变形后半段错峰淡入。关闭：菜单项 90ms 淡出，面板 260ms 缩回按钮矩形。点选一项：选中块 snap 弹簧滑过去，220ms 后自动关。
@@ -110,7 +139,8 @@ Future<T?> showMeowMenu<T>(
     _MeowMenuRoute<T>(
       anchor: local,
       entries: entries,
-      width: width ?? math.max(local.width, 200),
+      // 宽度跟着内容走（同 iOS 的菜单：按最长那一项定），[width] 只当下限
+      width: math.max(width ?? 0, meowMenuIntrinsicWidth(context, entries)),
       alignEnd: alignEnd,
       fromColor: fromColor ?? context.mm.soft,
       fromRadius: fromRadius ?? local.shortestSide / 2,
@@ -393,9 +423,9 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
                 child: Opacity(
                   opacity: fade,
                   child: MeowGlassBox(
-                    style: menuStyle!.scale(pc),
+                    style: menuStyle!.scale(DropletMorph.glassAmount(p)),
                     radius: radius,
-                    rim: menuRim!.scale(pc),
+                    rim: menuRim!.scale(DropletMorph.glassAmount(p)),
                     shadows: MeowGlassStyles.menuShadows(context, pc),
                     child: clipped(),
                   ),
