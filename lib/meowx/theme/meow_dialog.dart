@@ -1,8 +1,8 @@
-import 'dart:ui' show lerpDouble;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
+import '../app/glass_host.dart' show MeowGlassDevice;
+import 'droplet_morph.dart';
 import 'glass.dart';
 import 'haptics.dart';
 
@@ -129,9 +129,9 @@ class MeowDialogLabel extends StatelessWidget {
 Color meowDialogRowColor(ColorScheme cs) =>
     cs.brightness == Brightness.dark ? cs.surfaceContainerLow : cs.surfaceContainerLowest;
 
-/// 锚定在按钮上的气泡（iOS 27 新版菜单那种，2026-11-18 用户要求两端一致）：点按钮后，气泡**从按钮本身变形出来**——
-/// 面板的位置、宽高、圆角从按钮的矩形（胶囊 / 圆）按欠阻尼弹簧（[_PopoverSpring]，冲过头一点再回）长成气泡，
-/// 内容钉在气泡的最终位置、面板只是裁出它的一部分，后半段淡入；关时缩回按钮。弹出时轻震一下。
+/// 锚定在按钮上的气泡（iOS 27 的 popover，2026-11-18 对着 iOS 模拟器录屏逐帧照抄，见 [DropletMorph]）：
+/// 从按钮中心冒出一颗水滴、弹簧长成气泡（冲过头一点再回），内容跟着面板拉伸、先糊后清；关时糊掉缩回水滴。弹出时轻震一下。
+/// 气泡盖住按钮（顶边对齐按钮顶边，同 iOS），背后不压暗。
 /// 有玻璃宿主（手机，底栏的那一套）时面板是液态玻璃（菜单那一档），否则是实色 surfaceContainerHigh。
 /// 放在按钮下方（下面放不下放上方），水平方向贴着按钮那一侧的边。点气泡外面关闭；里面的开关点了不收。
 /// 系统「移除动画」时只淡入淡出、不震。
@@ -178,15 +178,15 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   final Color fromColor;
 
   @override
-  Color? get barrierColor => Colors.black.withValues(alpha: 0.08);
+  Color? get barrierColor => null;
   @override
   bool get barrierDismissible => true;
   @override
   String? get barrierLabel => '关闭';
   @override
-  Duration get transitionDuration => reduce ? const Duration(milliseconds: 150) : _PopoverSpring.duration;
+  Duration get transitionDuration => reduce ? const Duration(milliseconds: 150) : DropletSpringCurve.duration;
   @override
-  Duration get reverseTransitionDuration => Duration(milliseconds: reduce ? 120 : 260);
+  Duration get reverseTransitionDuration => reduce ? const Duration(milliseconds: 120) : DropletMorph.closeDuration;
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
@@ -211,8 +211,8 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
 
   late final CurvedAnimation _morph = CurvedAnimation(
     parent: widget.animation,
-    curve: widget.route.reduce ? Curves.linear : const _PopoverSpring(),
-    reverseCurve: Curves.easeInCubic,
+    curve: widget.route.reduce ? Curves.linear : const DropletSpringCurve(),
+    reverseCurve: DropletMorph.closeCurve,
   );
 
   @override
@@ -247,13 +247,13 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
     final cs = context.cs;
     final screen = MediaQuery.sizeOf(context);
     final pad = MediaQuery.paddingOf(context);
-    const margin = 12.0, gap = 8.0;
+    const margin = 12.0, gap = 0.0;   // gap 0：盖住按钮（同 iOS）
     final w = route.width.clamp(220.0, screen.width - margin * 2);
     // 水平：按钮在右半边就右边对齐按钮右沿，否则左边对齐左沿
     final rightSide = anchor.center.dx > screen.width / 2;
     final left = (rightSide ? anchor.right - w : anchor.left).clamp(margin, screen.width - w - margin);
-    final spaceBelow = screen.height - pad.bottom - anchor.bottom - gap - margin;
-    final spaceAbove = anchor.top - pad.top - gap - margin;
+    final spaceBelow = screen.height - pad.bottom - anchor.top - margin;
+    final spaceAbove = anchor.bottom - pad.top - margin;
     final below = spaceBelow >= 240 || spaceBelow >= spaceAbove;
     final maxH = (below ? spaceBelow : spaceAbove).clamp(160.0, screen.height * 0.75);
     final glass = meowPopupGlassOn(context);
@@ -291,8 +291,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
     }
     // 内容尺寸变了（打开后有行出现 / 消失）：下一帧按新尺寸
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-    final target = Rect.fromLTWH(left, below ? anchor.bottom + gap : anchor.top - gap - size.height, w, size.height);
-    final fromRadius = anchor.shortestSide / 2;
+    final target = Rect.fromLTWH(left, below ? anchor.top + gap : anchor.bottom - gap - size.height, w, size.height);
 
     return Stack(
       children: [
@@ -301,23 +300,13 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
           builder: (context, child) {
             final p = route.reduce ? 1.0 : _morph.value;
             final pc = p.clamp(0.0, 1.0);
-            final r = Rect.lerp(anchor, target, p)!;
-            final radius = BorderRadius.circular(lerpDouble(fromRadius, MeowShape.xl, pc)!);
-            // 内容后半段淡入（移除动画时整体淡入淡出）
-            final contentOpacity = route.reduce ? widget.animation.value : ((pc - 0.35) / 0.65).clamp(0.0, 1.0);
+            final r = DropletMorph.rect(anchor, target, p);
+            final radius = BorderRadius.circular(DropletMorph.radius(r, MeowShape.xl, p));
             final clipped = ClipRRect(
               borderRadius: radius,
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: target.width,
-                maxWidth: target.width,
-                minHeight: target.height,
-                maxHeight: target.height,
-                child: Transform.translate(
-                  offset: target.topLeft - r.topLeft,
-                  child: Opacity(opacity: contentOpacity, child: child),
-                ),
-              ),
+              child: route.reduce
+                  ? Opacity(opacity: widget.animation.value, child: child)
+                  : DropletMorph.content(child: child!, r: r, target: target, p: p, blur: !MeowGlassDevice.lowEnd),
             );
             final Widget panel = glass
                 ? MeowGlassBox(
@@ -339,7 +328,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
                   );
             return Positioned.fromRect(
               rect: r,
-              child: route.reduce ? Opacity(opacity: widget.animation.value, child: panel) : panel,
+              child: Opacity(opacity: route.reduce ? widget.animation.value : DropletMorph.panelOpacity(p), child: panel),
             );
           },
           // 内容自成一层：变形每帧只改面板的矩形 / 圆角和内容的位移，内容不跟着重画
@@ -350,7 +339,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> {
   }
 }
 
-/// 气泡弹出用的欠阻尼弹簧（质量 1、刚度 400、阻尼比 0.55）：约 0.17 秒到位、冲过头约 12%、再小幅回摆一下停住，
+/// 对话框弹出用的欠阻尼弹簧（质量 1、刚度 400、阻尼比 0.55）：约 0.17 秒到位、冲过头约 12%、再小幅回摆一下停住，
 /// 是 iOS 弹出菜单那种明显的「啵」一下。按 [duration] 归一成曲线交给路由动画，末尾钉在 1（那时余振已不到 0.5%）。
 class _PopoverSpring extends Curve {
   const _PopoverSpring();

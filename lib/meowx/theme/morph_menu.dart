@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show lerpDouble;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 
 import '../glass/liquid_glass.dart';
+import '../app/glass_host.dart' show MeowGlassDevice;
+import 'droplet_morph.dart';
 import 'glass.dart';
 import 'motion.dart';
 import 'm3.dart';
@@ -58,7 +60,10 @@ Rect meowMenuRect({
   required EdgeInsets safe,
 }) {
   final w = math.min(width, screen.width - _margin * 2);
-  final double left = (alignEnd ? anchor.right - w : anchor.left).clamp(_margin, math.max(_margin, screen.width - _margin - w));
+  final double left = (alignEnd ? anchor.right - w : anchor.left).clamp(
+    _margin,
+    math.max(_margin, screen.width - _margin - w),
+  );
   final top0 = safe.top + _margin;
   final bottom0 = screen.height - safe.bottom - _margin;
   final h = math.max(0.0, math.min(contentHeight, bottom0 - top0));
@@ -215,8 +220,9 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
         AnimationController.unbounded(vsync: this, value: _checked[k] == null ? 0 : _y[_checked[k]!]),
     ];
     if (!_route.reduce) {
-      MeowMotion.spring(_morph, 1, MeowMotion.soft);
-      _clock.forward();
+      // 同 iOS 27：水滴从按钮中心弹出来，菜单项一开始就在（跟着面板拉伸、先糊后清），不再逐项错峰淡入
+      _clock.value = 1;
+      _morph.animateWith(SpringSimulation(DropletMorph.spring, 0, 1, 0));
     }
     _routeAnimation = _route.animation?..addStatusListener(_onRouteStatus);
   }
@@ -228,8 +234,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
     _autoClose?.cancel();
     _route.onClosing?.call();
     if (_route.reduce) return;
-    _out.reverse();
-    _morph.animateTo(0, duration: MeowMotion.menuPanelClose, curve: MeowMotion.standard);
+    _morph.animateTo(0, duration: DropletMorph.closeDuration, curve: DropletMorph.closeCurve);
   }
 
   void _pick(int index) {
@@ -238,7 +243,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
     final s = _section[index];
     final reduce = _route.reduce;
     if (_checked[s] == null) {
-      _hl[s].value = _y[index];   // 这段原来没有选中块：直接出现在点的这一项
+      _hl[s].value = _y[index]; // 这段原来没有选中块：直接出现在点的这一项
     } else {
       MeowMotion.spring(_hl[s], _y[index], MeowMotion.snap, reduce: reduce);
     }
@@ -350,8 +355,13 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
     if (contentH > target.height) {
       // 放不下：可滚动，打开时让第一个选中项落在可见范围里
       final first = _checked.nonNulls.firstOrNull;
-      final initial = first == null ? 0.0 : (_y[first] + _itemH / 2 - target.height / 2).clamp(0.0, contentH - target.height);
-      content = SingleChildScrollView(controller: _scroll ??= ScrollController(initialScrollOffset: initial), child: content);
+      final initial = first == null
+          ? 0.0
+          : (_y[first] + _itemH / 2 - target.height / 2).clamp(0.0, contentH - target.height);
+      content = SingleChildScrollView(
+        controller: _scroll ??= ScrollController(initialScrollOffset: initial),
+        child: content,
+      );
     }
     content = MediaQuery.withClampedTextScaling(
       maxScaleFactor: 1.3,
@@ -367,48 +377,50 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
           builder: (_, child) {
             final p = _morph.value;
             final pc = p.clamp(0.0, 1.0);
-            final r = Rect.lerp(route.anchor, target, p)!;
-            final radius = BorderRadius.circular(lerpDouble(route.fromRadius, _radius, pc)!);
-            // 内容始终按菜单的最终尺寸排、钉在最终位置，面板只是裁出它的一部分
+            // iOS 27 的水滴变形（见 DropletMorph）：从按钮中心的一颗圆长成菜单，菜单项跟着面板拉伸、先糊后清
+            final r = DropletMorph.rect(route.anchor, target, p);
+            final radius = BorderRadius.circular(DropletMorph.radius(r, _radius, p));
             Widget clipped() => ClipRRect(
               borderRadius: radius,
-              child: OverflowBox(
-                alignment: Alignment.topLeft,
-                minWidth: target.width,
-                maxWidth: target.width,
-                minHeight: target.height,
-                maxHeight: target.height,
-                child: Transform.translate(offset: target.topLeft - r.topLeft, child: child),
-              ),
+              child: route.reduce
+                  ? child
+                  : DropletMorph.content(child: child!, r: r, target: target, p: p, blur: !MeowGlassDevice.lowEnd),
             );
+            final fade = route.reduce ? 1.0 : DropletMorph.panelOpacity(p);
             if (glass) {
               return Positioned.fromRect(
                 rect: r,
-                child: MeowGlassBox(
-                  style: menuStyle!.scale(pc),
-                  radius: radius,
-                  rim: menuRim!.scale(pc),
-                  shadows: MeowGlassStyles.menuShadows(context, pc),
-                  child: clipped(),
+                child: Opacity(
+                  opacity: fade,
+                  child: MeowGlassBox(
+                    style: menuStyle!.scale(pc),
+                    radius: radius,
+                    rim: menuRim!.scale(pc),
+                    shadows: MeowGlassStyles.menuShadows(context, pc),
+                    child: clipped(),
+                  ),
                 ),
               );
             }
             return Positioned.fromRect(
               rect: r,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color.lerp(route.fromColor, context.cs.surfaceContainer, pc),
-                  borderRadius: radius,
-                  // 阴影只淡入、半径不变
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.16 * pc),
-                      blurRadius: 24,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+              child: Opacity(
+                opacity: fade,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color.lerp(route.fromColor, context.cs.surfaceContainer, pc),
+                    borderRadius: radius,
+                    // 阴影只淡入、半径不变
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.16 * pc),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: clipped(),
                 ),
-                child: clipped(),
               ),
             );
           },
@@ -449,7 +461,7 @@ class _ItemRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: MeowFont.subheadline,
                     fontWeight: checked ? FontWeight.w600 : FontWeight.w500,
-                    fontFamilyFallback: linuxTextFallback,   // 这里另起一份样式、不继承主题
+                    fontFamilyFallback: linuxTextFallback, // 这里另起一份样式、不继承主题
                     color: checked ? mm.accent : color,
                   ),
                   child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -557,7 +569,7 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with SingleTicker
     );
     _open = false;
     if (!mounted) return;
-    if (!closing) _fade.value = 1;   // 菜单没打开成（拿不到位置）：按钮直接回来
+    if (!closing) _fade.value = 1; // 菜单没打开成（拿不到位置）：按钮直接回来
     if (value != null) widget.onSelected(value);
   }
 
