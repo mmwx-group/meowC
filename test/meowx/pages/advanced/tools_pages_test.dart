@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:bett_box/common/common.dart';
@@ -186,7 +187,11 @@ void main() {
       const MethodChannel('plugins.flutter.io/path_provider'),
       (call) async => home.path,
     );
-    await appPath.homeDirPath;
+    // path_provider 的通道实现只在 macOS 上支持「下载目录」，Linux（CI）上 AppPath 构造时取它会抛 UnsupportedError，
+    // 且是没人接的异步错误：在这个 zone 里吞掉它（这里的用例用不到下载目录）
+    await runZonedGuarded(() => appPath.homeDirPath, (e, _) {
+      if (e is! UnsupportedError) throw e;
+    });
   });
 
   tearDownAll(() {

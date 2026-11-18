@@ -19,9 +19,10 @@ void main() {
     double? up,
     int? latency,
     String? error,
+    DateTime? base,
   }) => SpeedTestRecord(
     id: SpeedTestRecord.newId(),
-    date: now.subtract(Duration(minutes: (hoursAgo * 60).round())),
+    date: (base ?? now).subtract(Duration(minutes: (hoursAgo * 60).round())),
     source: SpeedTestSource.cloudflare,
     connections: 8,
     outbound: outbound,
@@ -260,10 +261,12 @@ void main() {
 
   testWidgets('记录页：汇总卡、筛选胶囊、最快角标；左滑删除；清空要确认', (tester) async {
     final c = SpeedTestController(call: (_, _) async => '');
+    // 页面按真实的当前时间算「最近 30 天」：这里的记录也按真实时间往前推（用固定日期的话过了 30 天就数不到了）
+    final realNow = DateTime.now();
     c.history
-      ..add(record(3, '香港 01', down: 80, up: 20, latency: 40))
-      ..add(record(2, '日本 02', error: '超时'))
-      ..add(record(1, kSpeedTestDirect, down: 300, up: 50, latency: 9));
+      ..add(record(3, '香港 01', down: 80, up: 20, latency: 40, base: realNow))
+      ..add(record(2, '日本 02', error: '超时', base: realNow))
+      ..add(record(1, kSpeedTestDirect, down: 300, up: 50, latency: 9, base: realNow));
     await tester.pumpWidget(app(SpeedTestHistoryPage(controller: c)));
     expect(find.text('最近 30 天 · 3 次'), findsOneWidget);
     expect(find.text('全部节点'), findsOneWidget);
