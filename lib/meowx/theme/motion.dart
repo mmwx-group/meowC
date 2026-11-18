@@ -21,9 +21,6 @@ abstract final class MeowMotion {
   /// 收起 / 关闭
   static const standard = Cubic(.4, 0, .2, 1);
 
-  /// 排空（电源键断开）
-  static const drain = Cubic(.5, 0, .8, .4);
-
   /// 系统设置了「移除动画」。
   static bool reduced(BuildContext context) => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
@@ -41,16 +38,8 @@ abstract final class MeowMotion {
     return c.animateWith(SpringSimulation(spring, c.value, target, c.velocity));
   }
 
-  // ── 电源键 ──
-  static const pourFast = Duration(milliseconds: 1200);
-  static const pourCreep = Duration(seconds: 6);
-  static const pourFastLevel = 0.7;
-  static const pourMaxLevel = 0.92;
-  static const ripple = Duration(milliseconds: 650);
-  static const drainDuration = Duration(milliseconds: 350);
-  static const iconPopFrom = 0.6;
-
   // ── 切 Tab 的内容平推（同 iOS：新页整宽推入、旧页反向退 30% 并淡出，背景不动）──
+  // M3 改版时一度换成淡入淡出（fade through），2026-11-17 用户要回左右平推。
   static const tabSlide = Duration(milliseconds: 380);
 
   /// 同 iOS 的 cubic-bezier(.32,.72,0,1)（位移与淡出共用）
@@ -144,35 +133,4 @@ abstract final class Stagger {
     final t = Curves.easeIn.transform(((elapsedMs - outStart(index, count)) / outDuration).clamp(0.0, 1.0));
     return (opacity: 1 - t, dy: outShift * t);
   }
-}
-
-/// 电源键「连接中」的液面：[from] 起 1.2s 先快后慢注到七成，之后 6s 线性涨到 0.92，停在那里（久连不上也不会注满）。
-double pourLevel(double from, Duration elapsed) {
-  final ms = elapsed.inMicroseconds / 1000;
-  final fast = MeowMotion.pourFast.inMilliseconds;
-  if (ms < fast) {
-    final start = math.min(from, MeowMotion.pourFastLevel);
-    return start + (MeowMotion.pourFastLevel - start) * MeowMotion.emphasized.transform(ms / fast);
-  }
-  final creep = ((ms - fast) / MeowMotion.pourCreep.inMilliseconds).clamp(0.0, 1.0);
-  return MeowMotion.pourFastLevel + (MeowMotion.pourMaxLevel - MeowMotion.pourFastLevel) * creep;
-}
-
-/// [pourLevel] 的模拟版，交给 `AnimationController.animateWith`。
-class PourSimulation extends Simulation {
-  PourSimulation(this.from);
-  final double from;
-
-  static final _end = MeowMotion.pourFast + MeowMotion.pourCreep;
-
-  Duration _at(double t) => Duration(microseconds: (t * 1e6).round());
-
-  @override
-  double x(double time) => pourLevel(from, _at(time));
-
-  @override
-  double dx(double time) => (x(time + 0.001) - x(time)) / 0.001;
-
-  @override
-  bool isDone(double time) => _at(time) >= _end;
 }

@@ -293,12 +293,7 @@ class _AkileNodePickerPageState extends ConsumerState<AkileNodePickerPage> {
   );
 
   void _back() {
-    final sheet = MeSheetScope.maybeOf(context);
-    if (sheet != null) {
-      sheet.navigator.back();
-    } else {
-      Navigator.of(context).maybePop();
-    }
+    Navigator.of(context).maybePop();
   }
 
   Future<void> _pick(AkileCandidate c) async {

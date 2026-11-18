@@ -140,10 +140,10 @@ class _ProxyAppsPageState extends ConsumerState<ProxyAppsPage> with WidgetsBindi
       });
 
     final small = TextStyle(fontSize: MeowFont.caption, color: mm.t2);
-    // 总开关 + 模式（樱粉主卡；液态玻璃主题下和其它卡片一样是磨砂玻璃卡片）
+    // 总开关 + 模式（主卡）
     final hero = MeowCard(
       radius: BorderRadius.circular(24),
-      color: mm.glass ? null : mm.hero,
+      color: mm.hero,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

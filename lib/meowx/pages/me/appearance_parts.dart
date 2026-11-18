@@ -1,25 +1,28 @@
 import 'dart:io';
 
+import 'package:bett_box/common/constant.dart' show minTextScale, maxTextScale;
 import 'package:bett_box/models/models.dart';
+import 'package:bett_box/providers/providers.dart' show themeSettingProvider;
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
-import '../../theme/button_fill.dart';
-import '../../theme/card_surface.dart';
 import '../../theme/color_picker.dart';
-import '../../theme/glass_art.dart';
+import '../../theme/m3.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart';
 import 'me_kit.dart';
 
-/// 「我的 › 外观」里主题风格 / 玻璃样式 / 卡片颜色 / 启动卡片颜色 / 强调色 / App 图标几行（[AppearanceRows] 用；手机在底部卡片里，宽屏铺在「外观 · 关于」分组里）。
+/// 「我的 › 外观」里主题色 / 跟随系统取色 / App 图标几行（[AppearanceRows] 用）。M3 改版（2026-11）后外观只剩这几项：
+/// 整套配色由一个种子色生成（[MeowColors.scheme]），深浅色沿用 Bettbox 的 themeMode。
 
 void _update(WidgetRef ref, MeowSettings Function(MeowSettings s) f) =>
     ref.read(meowSettingProvider.notifier).updateState(f);
+
+/// 这台设备能不能跟随系统取色：安卓 12+ 有桌布色板，Windows 有系统强调色
+bool get meowSystemColorAvailable => globalState.corePalette != null || Platform.isWindows;
 
 /// 一行的骨架：标题（+ 右侧小字）在上，控件在下（这几项的控件都比一行宽，不放行尾）。
 class _StackedRow extends StatelessWidget {
@@ -32,10 +35,10 @@ class _StackedRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final dense = MeDense.of(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(14, dense ? 8 : 12, 12, dense ? 10 : 14),
+      padding: EdgeInsets.fromLTRB(16, dense ? 10 : 14, 16, dense ? 12 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -44,9 +47,9 @@ class _StackedRow extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: dense ? MeowFont.footnote : MeowFont.subheadline,
-                  fontWeight: FontWeight.w500,
-                  color: mm.t1,
+                  fontSize: dense ? MeowFont.callout : MeowFont.body,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
                 ),
               ),
               const SizedBox(width: 8),
@@ -56,16 +59,16 @@ class _StackedRow extends StatelessWidget {
                   maxLines: 1,
                   textAlign: TextAlign.end,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: dense ? MeowFont.caption : MeowFont.footnote, color: mm.t2),
+                  style: TextStyle(fontSize: MeowFont.footnote, color: cs.onSurfaceVariant),
                 ),
               ),
             ],
           ),
-          SizedBox(height: dense ? 8 : 10),
+          SizedBox(height: dense ? 10 : 12),
           child,
           if (caption != null) ...[
-            const SizedBox(height: 8),
-            Text(caption!, style: TextStyle(fontSize: dense ? MeowFont.caption2 : MeowFont.caption, color: mm.t2)),
+            const SizedBox(height: 10),
+            Text(caption!, style: TextStyle(fontSize: MeowFont.caption, color: cs.onSurfaceVariant)),
           ],
         ],
       ),
@@ -73,73 +76,208 @@ class _StackedRow extends StatelessWidget {
   }
 }
 
-/// 主题风格：经典 / 液态玻璃两张小缩略图（选中 = 玫红描边 + 淡粉底）。
-class ThemeStyleRow extends ConsumerWidget {
-  const ThemeStyleRow({super.key});
+/// 跟随系统取色（只在设备支持时出现）：打开后主题色那一行变灰。
+class FollowSystemColorRow extends ConsumerWidget {
+  const FollowSystemColorRow({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final style = ref.watch(meowSettingProvider.select((s) => s.themeStyle));
+    final on = ref.watch(meowSettingProvider.select((s) => s.followSystemColor));
+    return MeSwitchRow(
+      label: '跟随系统取色',
+      subtitle: Platform.isWindows ? '用 Windows 的强调色生成配色' : '用桌布的颜色生成配色',
+      value: on,
+      onChanged: (v) => _update(ref, (s) => s.copyWith(followSystemColor: v)),
+    );
+  }
+}
+
+/// 主题色：八个预设（每个画成「主色 / 次色容器 / 第三色容器」三分圆，同安卓「壁纸与风格」的取色块）+ 自定义。
+class ThemeColorRow extends ConsumerWidget {
+  const ThemeColorRow({super.key});
+
+  static const _swatch = 44.0;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final seed = ref.watch(meowSettingProvider.select((s) => s.accentColor));
+    final follow = meowSystemColorAvailable && ref.watch(meowSettingProvider.select((s) => s.followSystemColor));
+    final name = MeowColors.nameOf(seed);
+    final brightness = Theme.of(context).brightness;
     return _StackedRow(
-      label: '主题风格',
-      child: Row(
-        children: [
-          for (final (i, v) in MeowThemeStyle.values.indexed) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(
-              child: _StyleChoice(
-                style: v,
-                selected: v == style,
-                onTap: () => _update(ref, (s) => s.copyWith(themeStyle: v)),
+      label: '主题色',
+      value: follow ? '跟随系统' : (name ?? '自定义 #${meowHexDigits(Color(seed))}'),
+      caption: follow ? '正在跟随系统取色，关掉上面的开关后才用这里选的颜色。' : '整套界面的配色都由它生成，深色下自动换成同色相的深色调。',
+      child: IgnorePointer(
+        ignoring: follow,
+        child: AnimatedOpacity(
+          opacity: follow ? 0.38 : 1,
+          duration: MeowSprings.effectsDuration,
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              for (final (label, c) in MeowColors.presets)
+                SeedSwatch(
+                  label: label,
+                  seed: Color(c),
+                  brightness: brightness,
+                  selected: !follow && c == seed,
+                  size: _swatch,
+                  onTap: () => _update(ref, (s) => s.copyWith(accentColor: c)),
+                ),
+              _CustomSwatch(
+                selected: !follow && name == null,
+                size: _swatch,
+                onTap: () => mePush(context, ColorPickerPage(initial: Color(seed))),
               ),
-            ),
-          ],
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _StyleChoice extends StatelessWidget {
-  const _StyleChoice({required this.style, required this.selected, required this.onTap});
+/// 一个种子色的取色块：上半是主色、左下次色容器、右下第三色容器；选中 = 由圆变成圆角方块 + 中间一个勾（弹簧插值）。
+class SeedSwatch extends StatelessWidget {
+  const SeedSwatch({
+    super.key,
+    required this.label,
+    required this.seed,
+    required this.brightness,
+    required this.selected,
+    required this.size,
+    required this.onTap,
+  });
 
-  final MeowThemeStyle style;
+  final String label;
+  final Color seed;
+  final Brightness brightness;
   final bool selected;
+  final double size;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    final dense = MeDense.of(context);
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: style.label,
-      excludeSemantics: true,
-      child: Material(
-        color: selected ? mm.buttonFill(MeowButtonFill.accent) : mm.card2,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
+    final cs = MeowColors.scheme(seed, brightness);
+    return Tooltip(
+      message: label,
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Column(
-              children: [
-                SizedBox(height: dense ? 48 : 64, child: _StyleThumb(glass: style == MeowThemeStyle.glass)),
-                const SizedBox(height: 6),
-                Text(
-                  style.label,
-                  style: TextStyle(
-                    fontSize: MeowFont.caption,
-                    fontWeight: FontWeight.w700,
-                    color: selected ? mm.accent : mm.t1,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(end: selected ? 1 : 0),
+            duration: MeowSprings.shapeDuration,
+            curve: MeowSprings.shapeCurve,
+            builder: (_, t, _) {
+              final k = t.clamp(0.0, 1.0);
+              return SizedBox.square(
+                dimension: size,
+                child: CustomPaint(
+                  painter: _SeedPainter(
+                    top: cs.primary,
+                    left: cs.secondaryContainer,
+                    right: cs.tertiaryContainer,
+                    // 圆角：半径（圆）→ 30% 边长（圆角方块）；回弹越过 1 时不让它比方块更方
+                    radius: size / 2 - (size / 2 - size * 0.3) * k,
+                  ),
+                  child: Center(
+                    child: Opacity(
+                      opacity: k,
+                      child: Container(
+                        width: size * 0.46,
+                        height: size * 0.46,
+                        decoration: BoxDecoration(color: cs.primaryContainer, shape: BoxShape.circle),
+                        child: Icon(Icons.check_rounded, size: size * 0.3, color: cs.onPrimaryContainer),
+                      ),
+                    ),
                   ),
                 ),
-              ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SeedPainter extends CustomPainter {
+  const _SeedPainter({required this.top, required this.left, required this.right, required this.radius});
+
+  final Color top, left, right;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    final half = size.height / 2;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, half), Paint()..color = top);
+    canvas.drawRect(Rect.fromLTWH(0, half, size.width / 2, half), Paint()..color = left);
+    canvas.drawRect(Rect.fromLTWH(size.width / 2, half, size.width / 2, half), Paint()..color = right);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_SeedPainter old) =>
+      old.top != top || old.left != left || old.right != right || old.radius != radius;
+}
+
+/// 「自定义」取色块：彩虹圈 + 中间一支笔；选中同 [SeedSwatch]。
+class _CustomSwatch extends StatelessWidget {
+  const _CustomSwatch({required this.selected, required this.size, required this.onTap});
+
+  final bool selected;
+  final double size;
+  final VoidCallback onTap;
+
+  static const _rainbow = SweepGradient(
+    colors: [
+      Color(0xFFF3A6BF),
+      Color(0xFFB3A2FF),
+      Color(0xFF7CCFE0),
+      Color(0xFF57D292),
+      Color(0xFFF2B257),
+      Color(0xFFF3A6BF),
+    ],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    return Tooltip(
+      message: '自定义',
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: '自定义',
+        excludeSemantics: true,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: MeowSprings.shapeDuration,
+            curve: MeowSprings.shapeCurve,
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              gradient: _rainbow,
+              borderRadius: BorderRadius.circular(selected ? size * 0.3 : size / 2),
+            ),
+            child: Center(
+              child: Container(
+                width: size * 0.46,
+                height: size * 0.46,
+                decoration: BoxDecoration(color: cs.surfaceContainerLowest, shape: BoxShape.circle),
+                child: Icon(selected ? Icons.check_rounded : Icons.edit_rounded, size: size * 0.26, color: cs.onSurface),
+              ),
             ),
           ),
         ),
@@ -148,76 +286,7 @@ class _StyleChoice extends StatelessWidget {
   }
 }
 
-/// 缩略图（设计稿同款）：页面底 + 主卡 + 一张卡片 + 底栏胶囊；液态玻璃那张的主卡与卡片一样是玻璃（全部卡片一致），底栏是带高光的半透明玻璃。
-/// 只是示意图：用普通的半透明与描边画，不放真玻璃（设置页不多出玻璃层）。
-class _StyleThumb extends StatelessWidget {
-  const _StyleThumb({required this.glass});
-
-  final bool glass;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = context.isDarkMode;
-    final base = dark ? MeowTokens.dark : MeowTokens.light;
-    final spec = MeowGlassSpec.of(dark);
-    final shades = MeowTokens.glassShades(const Color(MeowCardColors.white), dark: dark);
-    final bg = glass ? spec.bg : base.bg;
-    // 液态玻璃那张的卡片也是半透明的玻璃（白卡 + 亮边）
-    final card = glass ? shades.card : base.elev;
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: ColoredBox(
-        color: bg,
-        child: Stack(
-          children: [
-            Positioned(
-              left: 8,
-              right: 8,
-              top: 8,
-              height: 16,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: glass ? card : base.hero,
-                  borderRadius: BorderRadius.circular(5),
-                  border: glass ? Border.all(color: shades.rim, width: 0.8) : null,
-                ),
-              ),
-            ),
-            Positioned(
-              left: 8,
-              right: 8,
-              top: 28,
-              height: 12,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: card,
-                  borderRadius: BorderRadius.circular(5),
-                  border: glass ? Border.all(color: shades.rim, width: 0.8) : null,
-                ),
-              ),
-            ),
-            Positioned(
-              left: 14,
-              right: 14,
-              bottom: 6,
-              height: 14,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: glass ? Colors.white.withValues(alpha: dark ? 0.12 : 0.3) : card,
-                  borderRadius: BorderRadius.circular(7),
-                  border: glass ? Border.all(color: Colors.white.withValues(alpha: dark ? 0.25 : 0.7), width: 0.8) : null,
-                  boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 6, offset: Offset(0, 2))],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// App 图标（只 Android）：默认（猫娘）/ M · 深色 / M · 浅色三张圆角缩略图，选中样式同主题风格。
+/// App 图标（只 Android）：几种图标并排，选中 = 主色描边 + 次色容器底。
 class AppIconRow extends ConsumerWidget {
   const AppIconRow({super.key});
 
@@ -227,16 +296,26 @@ class AppIconRow extends ConsumerWidget {
     return _StackedRow(
       label: 'App 图标',
       caption: _appIconCaption,
-      child: Row(
+      // 六款排两行、每行三个（2026-11-17 加了「X」三款）
+      child: Column(
         children: [
-          for (final (i, v) in MeowAppIcon.values.indexed) ...[
-            if (i > 0) const SizedBox(width: 8),
-            Expanded(
-              child: _AppIconChoice(
-                icon: v,
-                selected: v == current,
-                onTap: () => ref.read(appIconProvider.notifier).select(v),
-              ),
+          for (var row = 0; row * 3 < MeowAppIcon.values.length; row++) ...[
+            if (row > 0) const SizedBox(height: 8),
+            Row(
+              children: [
+                for (var col = 0; col < 3; col++) ...[
+                  if (col > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: row * 3 + col < MeowAppIcon.values.length
+                        ? _AppIconChoice(
+                            icon: MeowAppIcon.values[row * 3 + col],
+                            selected: MeowAppIcon.values[row * 3 + col] == current,
+                            onTap: () => ref.read(appIconProvider.notifier).select(MeowAppIcon.values[row * 3 + col]),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
             ),
           ],
         ],
@@ -258,7 +337,7 @@ class _AppIconChoice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final dense = MeDense.of(context);
     final side = dense ? 44.0 : 56.0;
     return Semantics(
@@ -267,10 +346,10 @@ class _AppIconChoice extends StatelessWidget {
       label: icon.label,
       excludeSemantics: true,
       child: Material(
-        color: selected ? mm.buttonFill(MeowButtonFill.accent) : mm.card2,
+        color: selected ? cs.secondaryContainer : cs.surfaceContainerHigh,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
+          borderRadius: BorderRadius.circular(MeowShape.l),
+          side: BorderSide(color: selected ? cs.primary : Colors.transparent, width: 2),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -295,7 +374,7 @@ class _AppIconChoice extends StatelessWidget {
                   style: TextStyle(
                     fontSize: MeowFont.caption,
                     fontWeight: FontWeight.w700,
-                    color: selected ? mm.accent : mm.t1,
+                    color: selected ? cs.onSecondaryContainer : cs.onSurface,
                   ),
                 ),
               ],
@@ -307,408 +386,10 @@ class _AppIconChoice extends StatelessWidget {
   }
 }
 
-/// 液态玻璃的背景：平涂 / 光斑 / 插画 三选一（缺省光斑）。颜色仍来自「底色」。
-class GlassPatternRow extends ConsumerWidget {
-  const GlassPatternRow({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pattern = ref.watch(meowSettingProvider.select((s) => s.bgPattern));
-    final dense = MeDense.of(context);
-    return _StackedRow(
-      label: '背景',
-      caption: switch (pattern) {
-        MeowBgPattern.flat => '只有底色，卡片照样磨砂（底下没有东西可模糊）。',
-        MeowBgPattern.blobs => '单色是主控同款的几团大光晕（主色光 + 互补光），渐变是两种颜色化成的几团光斑；卡片透出模糊后的光。',
-        MeowBgPattern.art => '自己选的图片铺满整屏、压一层底色，卡片透出模糊后的图片；磨砂调低时那层底色跟着变淡。还没选图时先按光斑画。',
-      },
-      child: MeowSegment<MeowBgPattern>(
-        items: [for (final v in MeowBgPattern.values) (v, v.label)],
-        value: pattern,
-        onCard: true,
-        height: dense ? 32 : 38,
-        fontSize: dense ? 12 : 13,
-        onChanged: (v) => _update(ref, (s) => s.copyWith(bgPattern: v)),
-      ),
-    );
-  }
-}
-
-/// 插画背景用的图片（背景选了插画才出现）：缩略图 + 选择 / 更换。安卓从系统相册选（不要存储权限），Windows 选文件；
-/// 同一时间只存一张（见 [MeowGlassArt]）。
-class GlassArtRow extends ConsumerStatefulWidget {
-  const GlassArtRow({super.key});
-
-  @override
-  ConsumerState<GlassArtRow> createState() => _GlassArtRowState();
-}
-
-class _GlassArtRowState extends ConsumerState<GlassArtRow> {
-  bool _busy = false;
-  String? _fileId;
-  Future<File>? _file;
-
-  Future<void> _pick() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final id = await MeowGlassArt.pick();
-      if (id != null) _update(ref, (s) => s.copyWith(glassArtImage: id));
-    } catch (e) {
-      globalState.showNotifier(e is MeowGlassArtError ? e.message : '选择图片失败：$e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final id = ref.watch(meowSettingProvider.select((s) => s.glassArtImage));
-    if (id != _fileId) {
-      _fileId = id;
-      _file = id == null ? null : MeowGlassArt.file(id);
-    }
-    final dense = MeDense.of(context);
-    final side = dense ? 48.0 : 56.0;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    return _StackedRow(
-      label: '插画图片',
-      value: id == null ? '未选择' : null,
-      caption: id == null ? '选一张自己的图片铺在背景上。' : null,
-      child: Row(
-        children: [
-          if (_file != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: SizedBox.square(
-                  dimension: side,
-                  child: FutureBuilder<File>(
-                    future: _file,
-                    builder: (_, snap) => snap.data == null
-                        ? ColoredBox(color: mm.card2)
-                        // 只按缩略图的大小解码
-                        : Image.file(
-                            snap.data!,
-                            fit: BoxFit.cover,
-                            cacheWidth: (side * dpr).round(),
-                            gaplessPlayback: true,
-                            errorBuilder: (_, _, _) => ColoredBox(color: mm.card2),
-                          ),
-                  ),
-                ),
-              ),
-            ),
-          const Spacer(),
-          MePill(label: _busy ? '正在读取…' : (id == null ? '选择图片' : '更换图片'), height: dense ? 34 : 38, onTap: _busy ? null : _pick),
-        ],
-      ),
-    );
-  }
-}
-
-/// 卡片的磨砂强度（0 透明 – 1 厚，缺省 0.5）：拖动时只改这一行的数，松手才存（存了才重画背景与主题）。
-class GlassFrostRow extends ConsumerStatefulWidget {
-  const GlassFrostRow({super.key});
-
-  @override
-  ConsumerState<GlassFrostRow> createState() => _GlassFrostRowState();
-}
-
-class _GlassFrostRowState extends ConsumerState<GlassFrostRow> {
-  double? _dragging;
-
-  static String _label(double v) => v < 0.05 ? '透明' : (v < 0.34 ? '通透' : (v < 0.67 ? '适中' : '厚'));
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final saved = ref.watch(meowSettingProvider.select((s) => s.glassFrost));
-    final value = (_dragging ?? saved).clamp(0.0, 1.0);
-    return _StackedRow(
-      label: '磨砂强度',
-      value: '${_label(value)} · ${(value * 100).round()}%',
-      caption: '越往右卡片越厚、背后越模糊；拉到最左是透明玻璃，插画背景上的罩色也一起去掉（深色模式下照片仍会压暗）。卡片压在太暗（深色下是太亮）的地方会自动加厚到字看得清，别处保持透明。',
-      child: SliderTheme(
-        data: SliderTheme.of(context).copyWith(
-          activeTrackColor: mm.accent,
-          inactiveTrackColor: mm.card2,
-          thumbColor: mm.accent,
-          overlayColor: mm.accent.withValues(alpha: 0.12),
-          trackHeight: 4,
-        ),
-        child: Slider(
-          value: value,
-          onChanged: (v) => setState(() => _dragging = v),
-          onChangeEnd: (v) {
-            _update(ref, (s) => s.copyWith(glassFrost: v));
-            setState(() => _dragging = null);
-          },
-        ),
-      ),
-    );
-  }
-}
-
-/// 玻璃样式：透明 / 着色（只在液态玻璃下出现）。
-class GlassTintRow extends ConsumerWidget {
-  const GlassTintRow({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tint = ref.watch(meowSettingProvider.select((s) => s.glassTint));
-    final dense = MeDense.of(context);
-    return _StackedRow(
-      label: '玻璃样式',
-      caption: '透明更通透；着色更不透明、对比度更高（同 iOS 26.1 的系统选项）。',
-      child: MeowSegment<MeowGlassTint>(
-        items: [for (final v in MeowGlassTint.values) (v, v.label)],
-        value: tint,
-        onCard: true,
-        height: dense ? 32 : 38,
-        fontSize: dense ? 12 : 13,
-        onChanged: (v) => _update(ref, (s) => s.copyWith(glassTint: v)),
-      ),
-    );
-  }
-}
-
-/// 三种可调颜色（卡片 / 启动卡片 / 强调色）：行的标题、预设、说明、取色页的标题与预览、存到哪个字段。
-/// 液态玻璃主题下「卡片颜色」改叫「底色」（存的仍是 cardColor）：铺成整页的底，内容卡片变成玻璃（见 [MeowTokens.glassShades]）。
-enum MeowColorKind {
-  card('卡片颜色', '自定义卡片颜色', '只改内容卡片，玻璃控件不变；深色下取同色相的深色卡片。'),
-  hero('启动卡片颜色', '自定义启动卡片颜色', '首页连接主卡与电源键；深色下取同色相的深色。'),
-  accent('强调色', '自定义强调色', '强调文字、选中态、底栏选中项与进度条；对比度不够时自动压暗 / 提亮。');
-
-  const MeowColorKind(this._label, this._pickerTitle, this._caption);
-  final String _label, _pickerTitle, _caption;
-
-  /// [glass] = 液态玻璃主题
-  String label(bool glass) => glass && this == card ? '底色' : _label;
-  String pickerTitle(bool glass) => glass && this == card ? '自定义底色' : _pickerTitle;
-  String caption(bool glass) => switch (this) {
-    card when glass => '铺满整页的底色（取同色相的柔和渐层），内容卡片是半透明的玻璃；选「白」保持原来的底色。深色下取同色相的深底。',
-    hero when glass => '电源键的液面颜色（液态玻璃下连接主卡和其它卡片一样是玻璃）；深色下取同色相的深色。',
-    _ => _caption,
-  };
-
-  List<(String, int)> get presets => switch (this) {
-    card => MeowCardColors.presets,
-    hero => MeowHeroColors.presets,
-    accent => MeowAccentColors.presets,
-  };
-
-  int of(MeowSettings s) => switch (this) {
-    card => s.cardColor,
-    hero => s.heroColor,
-    accent => s.accentColor,
-  };
-
-  MeowSettings apply(MeowSettings s, int color) => switch (this) {
-    card => s.copyWith(cardColor: color),
-    hero => s.copyWith(heroColor: color),
-    accent => s.copyWith(accentColor: color),
-  };
-}
-
-/// 一种颜色的一行：6 个预设 + 自定义取色（两种主题都生效）。
-class ColorChoiceRow extends ConsumerWidget {
-  const ColorChoiceRow(this.kind, {super.key});
-
-  final MeowColorKind kind;
-
-  static const _swatch = 28.0;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final color = ref.watch(meowSettingProvider.select(kind.of));
-    final glass = context.mm.glass;
-    final name = kind.presets.where((p) => p.$2 == color).firstOrNull?.$1;
-    return _StackedRow(
-      label: kind.label(glass),
-      value: name ?? '自定义 #${meowHexDigits(Color(color))}',
-      caption: kind.caption(glass),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final (label, c) in kind.presets)
-            _Swatch(
-              label: label,
-              selected: c == color,
-              size: _swatch,
-              fill: BoxDecoration(color: Color(c), shape: BoxShape.circle),
-              onTap: () => _update(ref, (s) => kind.apply(s, c)),
-            ),
-          _Swatch(
-            label: '自定义',
-            selected: name == null,
-            size: _swatch,
-            fill: const BoxDecoration(shape: BoxShape.circle, gradient: _rainbow),
-            onTap: () => mePush(context, ColorPickerPage(kind: kind, initial: Color(color))),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 液态玻璃的「底色」：单色 / 渐变两种，上面一个分段切换，下面是对应的预设（单色同「卡片颜色」那一组，渐变是 [MeowBgGradients]）+ 自定义。
-/// 存的仍是 cardColor（单色）与 bgStyle / bgGradientFrom / bgGradientTo（渐变），老配置没有后几项 = 单色。
-class GlassBgRow extends ConsumerWidget {
-  const GlassBgRow({super.key});
-
-  static const _swatch = 28.0;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final style = ref.watch(meowSettingProvider.select((s) => s.bgStyle));
-    final solid = ref.watch(meowSettingProvider.select((s) => s.cardColor));
-    final from = ref.watch(meowSettingProvider.select((s) => s.bgGradientFrom));
-    final to = ref.watch(meowSettingProvider.select((s) => s.bgGradientTo));
-    final dense = MeDense.of(context);
-    final gradient = style == MeowBgStyle.gradient;
-    final String value;
-    if (gradient) {
-      value = MeowBgGradients.nameOf(from, to) ?? '自定义渐变';
-    } else {
-      value = MeowCardColors.nameOf(solid) ?? '自定义 #${meowHexDigits(Color(solid))}';
-    }
-    return _StackedRow(
-      label: '底色',
-      value: value,
-      caption: gradient
-          ? '两种颜色从左上到右下铺满整页，内容卡片是半透明的玻璃；深色下取同色相的深色渐变。'
-          : MeowColorKind.card.caption(true),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MeowSegment<MeowBgStyle>(
-            items: [for (final v in MeowBgStyle.values) (v, v.label)],
-            value: style,
-            onCard: true,
-            height: dense ? 32 : 38,
-            fontSize: dense ? 12 : 13,
-            onChanged: (v) => _update(ref, (s) => s.copyWith(bgStyle: v)),
-          ),
-          SizedBox(height: dense ? 8 : 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: gradient
-                ? [
-                    for (final (label, a, b) in MeowBgGradients.presets)
-                      _Swatch(
-                        label: label,
-                        selected: a == from && b == to,
-                        size: _swatch,
-                        fill: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [Color(a), Color(b)],
-                          ),
-                        ),
-                        onTap: () => _update(ref, (s) => s.copyWith(bgGradientFrom: a, bgGradientTo: b)),
-                      ),
-                    _customSwatch(
-                      selected: MeowBgGradients.nameOf(from, to) == null,
-                      onTap: () => mePush(context, GradientPickerPage(from: Color(from), to: Color(to))),
-                    ),
-                  ]
-                : [
-                    for (final (label, c) in MeowCardColors.presets)
-                      _Swatch(
-                        label: label,
-                        selected: c == solid,
-                        size: _swatch,
-                        fill: BoxDecoration(color: Color(c), shape: BoxShape.circle),
-                        onTap: () => _update(ref, (s) => s.copyWith(cardColor: c)),
-                      ),
-                    _customSwatch(
-                      selected: MeowCardColors.nameOf(solid) == null,
-                      onTap: () => mePush(context, ColorPickerPage(kind: MeowColorKind.card, initial: Color(solid))),
-                    ),
-                  ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _customSwatch({required bool selected, required VoidCallback onTap}) => _Swatch(
-    label: '自定义',
-    selected: selected,
-    size: _swatch,
-    fill: const BoxDecoration(shape: BoxShape.circle, gradient: _rainbow),
-    onTap: onTap,
-  );
-}
-
-/// 「自定义」色块的彩虹圈
-const _rainbow = SweepGradient(
-  colors: [
-    Color(0xFFF3A6BF),
-    Color(0xFFB3A2FF),
-    Color(0xFF7CCFE0),
-    Color(0xFF57D292),
-    Color(0xFFF2B257),
-    Color(0xFFF3A6BF),
-  ],
-);
-
-class _Swatch extends StatelessWidget {
-  const _Swatch({required this.label, required this.selected, required this.size, required this.fill, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final double size;
-  final BoxDecoration fill;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return Tooltip(
-      message: label,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onTap,
-          // 选中 = 外面隔一圈玫红描边（不改色块本身的大小，换选中时整行不跳）
-          child: Container(
-            width: size + 8,
-            height: size + 8,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
-            ),
-            child: Container(
-              width: size,
-              height: size,
-              foregroundDecoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: const Color(0x1F000000))),
-              decoration: fill,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 自定义颜色：浅 / 深两种外观下推出来的样子 + 取色器（移植自 FlClash 的 iOS 风格取色器）+ 十六进制输入，右上角确定。
-/// 手机上在设置卡片里推入下一层，宽屏整页推入。
+/// 自定义主题色：上面是浅 / 深两种外观下生成的配色样子 + 取色器 + 十六进制输入，右上角确定。
 class ColorPickerPage extends ConsumerStatefulWidget {
-  const ColorPickerPage({super.key, required this.kind, required this.initial});
+  const ColorPickerPage({super.key, required this.initial});
 
-  final MeowColorKind kind;
   final Color initial;
 
   @override
@@ -726,24 +407,19 @@ class _ColorPickerPageState extends ConsumerState<ColorPickerPage> {
 
   void _confirm() {
     final color = _controller.value.toARGB32() | 0xFF000000;
-    _update(ref, (s) => widget.kind.apply(s, color));
-    final sheet = MeSheetScope.maybeOf(context);
-    if (sheet != null) {
-      sheet.navigator.back();
-    } else {
-      Navigator.of(context).maybePop();
-    }
+    _update(ref, (s) => s.copyWith(accentColor: color));
+    Navigator.of(context).maybePop();
   }
 
   @override
   Widget build(BuildContext context) {
     return MeSubPage.list(
-      title: widget.kind.pickerTitle(context.mm.glass),
+      title: '自定义主题色',
       actions: [RoundGlassButton(icon: Icons.check_rounded, filled: true, tooltip: '确定', onTap: _confirm)],
       children: [
         ValueListenableBuilder(
           valueListenable: _controller,
-          builder: (_, color, _) => ColorPreview(kind: widget.kind, color: color),
+          builder: (_, color, _) => SchemePreview(seed: color),
         ),
         MeSection(
           children: [
@@ -766,303 +442,129 @@ class _ColorPickerPageState extends ConsumerState<ColorPickerPage> {
   }
 }
 
-/// 自定义渐变底色：上面是浅 / 深两种外观下铺出来的样子，「起始色 / 结束色」切换正在调的那一端，取色器与十六进制输入同 [ColorPickerPage]。
-/// 右上角确定后存两种颜色并切到「渐变」。
-class GradientPickerPage extends ConsumerStatefulWidget {
-  const GradientPickerPage({super.key, required this.from, required this.to});
+/// 一个种子色在浅色 / 深色下生成的配色：一张卡片上放主按钮、色调胶囊、第三色圆点与一段进度条。
+class SchemePreview extends StatelessWidget {
+  const SchemePreview({super.key, required this.seed});
 
-  final Color from, to;
-
-  @override
-  ConsumerState<GradientPickerPage> createState() => _GradientPickerPageState();
-}
-
-class _GradientPickerPageState extends ConsumerState<GradientPickerPage> {
-  late Color _from = widget.from.withValues(alpha: 1), _to = widget.to.withValues(alpha: 1);
-
-  /// 0 = 起始色，1 = 结束色
-  var _end = 0;
-  late final _controller = ValueNotifier<Color>(_from)..addListener(_onPick);
-
-  void _onPick() {
-    final c = _controller.value;
-    setState(() => _end == 0 ? _from = c : _to = c);
-  }
-
-  void _switch(int end) {
-    setState(() => _end = end);
-    _controller.value = end == 0 ? _from : _to;
-  }
+  final Color seed;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _confirm() {
-    _update(
-      ref,
-      (s) => s.copyWith(
-        bgStyle: MeowBgStyle.gradient,
-        bgGradientFrom: _from.toARGB32() | 0xFF000000,
-        bgGradientTo: _to.toARGB32() | 0xFF000000,
+  Widget build(BuildContext context) {
+    Widget pill(String text, Color bg, Color fg) => Flexible(
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(MeowShape.full)),
+        child: Text(
+          text,
+          maxLines: 1,
+          style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w700, color: fg),
+        ),
       ),
     );
-    final sheet = MeSheetScope.maybeOf(context);
-    if (sheet != null) {
-      sheet.navigator.back();
-    } else {
-      Navigator.of(context).maybePop();
-    }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    final dense = MeDense.of(context);
-    return MeSubPage.list(
-      title: '自定义渐变底色',
-      actions: [RoundGlassButton(icon: Icons.check_rounded, filled: true, tooltip: '确定', onTap: _confirm)],
-      children: [
-        GradientPreview(from: _from, to: _to),
-        MeSection(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  MeowSegment<int>(
-                    items: const [(0, '起始色（左上）'), (1, '结束色（右下）')],
-                    value: _end,
-                    onCard: true,
-                    height: dense ? 32 : 38,
-                    fontSize: dense ? 12 : 13,
-                    onChanged: _switch,
-                  ),
-                  const SizedBox(height: 10),
-                  MeowPalette(controller: _controller),
-                ],
-              ),
-            ),
-          ],
-        ),
-        MeSection(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: ValueListenableBuilder(
-                valueListenable: _controller,
-                builder: (_, color, _) => MeowHexColorField(color: color, onChanged: (c) => _controller.value = c),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// 渐变底色在浅色 / 深色下铺出来的样子：斜向渐变的底上放一张玻璃卡片（跟着当前的玻璃样式）。
-class GradientPreview extends StatelessWidget {
-  const GradientPreview({super.key, required this.from, required this.to});
-
-  final Color from, to;
-
-  @override
-  Widget build(BuildContext context) {
-    final tinted = context.mm.glassTinted;
-    Widget sample(String label, bool dark) {
-      final base = dark ? MeowTokens.dark : MeowTokens.light;
-      final g = MeowTokens.glassGradientShades(from, to, dark: dark, tinted: tinted);
+    Widget sample(String label, Brightness brightness) {
+      final cs = MeowColors.scheme(seed, brightness);
       return Expanded(
         child: Container(
-          height: 76,
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: g.gradient!),
-            borderRadius: BorderRadius.circular(18),
-          ),
+          decoration: BoxDecoration(color: cs.surface, borderRadius: BorderRadius.circular(MeowShape.lInc)),
           child: Container(
-            padding: const EdgeInsets.all(10),
-            decoration: MeowCardDecoration(
-              color: g.card,
-              borderRadius: BorderRadius.circular(12),
-              rim: g.rim,
-              sheen: g.sheen,
-              shadow: g.shadow,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: base.t1),
-                  ),
-                ),
-                Container(
-                  width: 34,
-                  height: 20,
-                  decoration: BoxDecoration(color: g.card2, borderRadius: BorderRadius.circular(10)),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Row(children: [sample('浅色', false), const SizedBox(width: 10), sample('深色', true)]);
-  }
-}
-
-/// 选的颜色在浅色 / 深色下实际推出来的样子：卡片色 = 一张卡片配次级底（液态玻璃下是底色上放一张玻璃卡片）；
-/// 启动卡片 = 主卡配电源键；强调色 = 强调字配淡底胶囊与进度条。
-class ColorPreview extends StatelessWidget {
-  const ColorPreview({super.key, required this.kind, required this.color});
-
-  final MeowColorKind kind;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final glass = context.mm.glass;
-    Widget sample(String label, bool dark) {
-      final base = dark ? MeowTokens.dark : MeowTokens.light;
-      final white = MeowTokens.glassShades(const Color(MeowCardColors.white), dark: dark);
-      var bg = glass ? white.bg : base.bg;
-      List<Color>? bgGradient;
-      final card = glass ? Color.alphaBlend(white.card, white.bg) : base.elev;
-      final text = TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: base.t1);
-      final Widget inner;
-      switch (kind) {
-        case MeowColorKind.card when glass:
-          final g = MeowTokens.glassShades(color, dark: dark, tinted: context.mm.glassTinted);
-          bg = g.bg;
-          bgGradient = g.gradient;
-          inner = Container(
-            padding: const EdgeInsets.all(10),
-            decoration: MeowCardDecoration(
-              color: g.card,
-              borderRadius: BorderRadius.circular(12),
-              rim: g.rim,
-              sheen: g.sheen,
-              shadow: g.shadow,
-            ),
-            child: Row(
-              children: [
-                Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
-                Container(
-                  width: 34,
-                  height: 20,
-                  decoration: BoxDecoration(color: g.card2, borderRadius: BorderRadius.circular(10)),
-                ),
-              ],
-            ),
-          );
-        case MeowColorKind.card:
-          final shades = MeowTokens.cardShades(color, dark: dark);
-          inner = Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: shades.card, borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
-                Container(
-                  width: 34,
-                  height: 20,
-                  decoration: BoxDecoration(color: shades.card2, borderRadius: BorderRadius.circular(10)),
-                ),
-              ],
-            ),
-          );
-        case MeowColorKind.hero:
-          // 液态玻璃下连接主卡和其它卡片一样是玻璃，启动卡片颜色只给电源键的液面
-          final hero = MeowTokens.heroShades(color, dark: dark);
-          inner = Container(
-            padding: const EdgeInsets.all(10),
-            decoration: glass
-                ? MeowCardDecoration(
-                    color: white.card,
-                    borderRadius: BorderRadius.circular(12),
-                    rim: white.rim,
-                    sheen: white.sheen,
-                    shadow: white.shadow,
-                  )
-                : BoxDecoration(color: hero.hero, borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                Expanded(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text)),
-                Container(
-                  width: 28,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(color: hero.btnOn, borderRadius: BorderRadius.circular(9)),
-                  child: MeowIcon(MeowGlyph.power, size: 14, color: base.onBtn, stroke: 2.4),
-                ),
-              ],
-            ),
-          );
-        case MeowColorKind.accent:
-          final accent = MeowTokens.accentShades(color, dark: dark);
-          inner = Container(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-            decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(12)),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: cs.card, borderRadius: BorderRadius.circular(MeowShape.l)),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
                     Expanded(
-                      child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.copyWith(color: accent.accent)),
+                      child: Text(
+                        label,
+                        style: TextStyle(fontSize: MeowFont.subheadline, fontWeight: FontWeight.w800, color: cs.onSurface),
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: accent.soft,
-                        border: Border.all(color: accent.accent, width: 1.5),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('选中', style: TextStyle(fontSize: MeowFont.caption2, color: accent.accent)),
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(color: cs.tertiary, shape: BoxShape.circle),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: SizedBox(
-                    height: 5,
-                    child: Row(
-                      children: [
-                        Expanded(flex: 2, child: ColoredBox(color: accent.fill)),
-                        Expanded(flex: 3, child: ColoredBox(color: base.card2)),
-                      ],
-                    ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    pill('连接', cs.primary, cs.onPrimary),
+                    const SizedBox(width: 6),
+                    pill('规则', cs.secondaryContainer, cs.onSecondaryContainer),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 4,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        flex: 2,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-          );
-      }
-      return Expanded(
-        child: Container(
-          height: 76,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: bgGradient == null ? bg : null,
-            gradient: bgGradient == null
-                ? null
-                : LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: bgGradient),
-            borderRadius: BorderRadius.circular(18),
           ),
-          child: inner,
         ),
       );
     }
 
-    return Row(children: [sample('浅色', false), const SizedBox(width: 10), sample('深色', true)]);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(children: [sample('浅色', Brightness.light), const SizedBox(width: 10), sample('深色', Brightness.dark)]),
+    );
+  }
+}
+
+/// 文字缩放（原 Bettbox「主题」页）：开关 + 打开后下面一条滑杆（80%–140%）。
+class TextScaleRow extends ConsumerWidget {
+  const TextScaleRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scale = ref.watch(themeSettingProvider.select((s) => s.textScale));
+    void update(TextScale Function(TextScale) f) =>
+        ref.read(themeSettingProvider.notifier).updateState((s) => s.copyWith(textScale: f(s.textScale)));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MeSwitchRow(
+          label: '文字缩放',
+          subtitle: scale.enable ? '${(scale.scale * 100).round()}%' : '跟随系统字号',
+          value: scale.enable,
+          onChanged: (v) => update((t) => t.copyWith(enable: v)),
+        ),
+        if (scale.enable)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Slider(
+              min: minTextScale,
+              max: maxTextScale,
+              divisions: ((maxTextScale - minTextScale) / 0.05).round(),
+              label: '${(scale.scale * 100).round()}%',
+              value: scale.scale.clamp(minTextScale, maxTextScale),
+              onChanged: (v) => update((t) => t.copyWith(scale: v)),
+            ),
+          ),
+      ],
+    );
   }
 }

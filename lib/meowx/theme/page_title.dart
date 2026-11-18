@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/window_controls.dart';
-import 'button_fill.dart';
-import 'glass.dart';
+import 'm3.dart';
 import 'tokens.dart';
 import 'widgets.dart';
 
@@ -33,8 +32,9 @@ class PageTitle extends StatelessWidget {
                   child: Text(
                     title,
                     style: TextStyle(
-                      fontSize: MeowFont.pageTitle,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.2,
                       color: mm.t1,
                       height: 1.15,
                     ),
@@ -51,8 +51,7 @@ class PageTitle extends StatelessWidget {
   }
 }
 
-/// 标题右侧的圆形按钮（44，卡片底；[filled] = 墨色实底，用于该页的主操作）。
-/// 液态玻璃主题下非实底的那种换成玻璃圆钮（[MeowGlassButton]）；主操作不再是墨色实心块，是按钮那档静态半透明（[MeowButtonFill.prominent]，墨色图标）。
+/// 标题右侧的圆形按钮（48，M3 的 surfaceContainerHighest 底；[filled] = 主色实底，用于该页的主操作）。
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
@@ -76,44 +75,26 @@ class RoundGlassButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    if (!filled && meowGlassOn(context)) {
-      return MeowGlassButton(
-        onTap: busy ? null : onTap,
-        tooltip: tooltip,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(child: _content(mm)),
-        ),
-      );
-    }
+    final cs = context.cs;
+    final fg = color ?? (filled ? cs.onPrimary : cs.onSurface);
     final btn = Material(
-      color: mm.buttonFill(filled ? MeowButtonFill.prominent : MeowButtonFill.plain),
-      shape: CircleBorder(side: mm.buttonSide),
+      color: filled ? cs.primary : cs.surfaceContainerHighest,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        customBorder: const CircleBorder(),
         onTap: busy ? null : onTap,
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Center(child: _content(mm)),
+        child: SizedBox.square(
+          dimension: 48,
+          child: Center(
+            child: busy
+                ? SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: fg))
+                : glyph != null
+                ? MeowIcon(glyph!, size: 22, color: fg)
+                : Icon(icon, size: 24, color: fg),
+          ),
         ),
       ),
     );
     return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
   }
-
-  Widget _content(MeowTokens mm) => busy
-      ? SizedBox(
-          width: 14,
-          height: 14,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: filled ? mm.onProminent : mm.t2,
-          ),
-        )
-      : glyph != null
-      ? MeowIcon(glyph!, size: 20, color: color ?? (filled ? mm.onProminent : mm.t1))
-      : Icon(icon, size: 20, color: color ?? (filled ? mm.onProminent : mm.t1));
 }

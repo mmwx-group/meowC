@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../state/speed_board.dart';
 import '../../state/speed_test.dart';
+import '../../theme/m3.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart' show BrandHead, meowRounded;
 import 'speed_test_history_page.dart' show SpeedTestRecordChartPainter;
@@ -41,10 +42,9 @@ class SpeedTestShareImage {
   static String iconAsset(Brightness brightness) =>
       brightness == Brightness.dark ? 'assets/images/icon_256.png' : 'assets/images/icon_light_256.png';
 
-  /// 分享图用的配色：App 当前的外观（[look]，「我的 › 外观」）在实际深浅色下解析，只把磨砂强度换成缺省 0.5。
-  /// 经典主题不受磨砂影响，就是 App 当前那一份。
-  static MeowTokens tokensFor(Brightness brightness, MeowLook look) =>
-      MeowTokens.resolve(brightness, look.withGlassFrost(0.5));
+  /// 分享图用的配色：App 当前的主题色（[seed]，跟随系统时是系统取色）在实际深浅色下生成的那份色板
+  static MeowTokens tokensFor(Brightness brightness, Color seed) =>
+      MeowTokens.fromScheme(MeowColors.scheme(seed, brightness));
 
   /// 失败的记录不给分享
   static bool canShare(SpeedTestRecord record) => !record.failed;
@@ -56,11 +56,11 @@ class SpeedTestShareImage {
     return 'MeowX-speedtest-${d.year}${two(d.month)}${two(d.day)}-${two(d.hour)}${two(d.minute)}.png';
   }
 
-  /// 生成 PNG；失败的记录返回 null。[look] / [brightness] = App 当前的外观与实际深浅（配色按 [tokensFor] 推）；
+  /// 生成 PNG；失败的记录返回 null。[seed] / [brightness] = App 当前的主题色与实际深浅（配色按 [tokensFor] 推）；
   /// [textStyle] 是 App 正文的字族（含回落字族），图里的字都用它；[icon] 缺省按深浅读 [iconAsset]。
   static Future<Uint8List?> render(
     SpeedTestRecord record, {
-    required MeowLook look,
+    required Color seed,
     required Brightness brightness,
     TextStyle? textStyle,
     ui.Image? icon,
@@ -71,7 +71,7 @@ class SpeedTestShareImage {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
-      _SharePainter(record, content, tokensFor(brightness, look), textStyle ?? const TextStyle(), logo).paint(canvas);
+      _SharePainter(record, content, tokensFor(brightness, seed), textStyle ?? const TextStyle(), logo).paint(canvas);
       final picture = recorder.endRecording();
       final image = await picture.toImage(width, height);
       picture.dispose();
@@ -265,16 +265,12 @@ class _SharePainter {
 
   double _baseline(TextPainter p) => p.computeDistanceToActualBaseline(TextBaseline.alphabetic);
 
-  /// 卡片：不透明的实色（液态玻璃下 [MeowTokens.elev] 是半透明的，用叠好的 [MeowTokens.elevSolid]）
+  /// 卡片：不透明的实色
   void _card(Canvas canvas, Rect rect) =>
       canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(radius)), Paint()..color = mm.elevSolid);
 
-  /// 页面底：平涂 [MeowTokens.bg]；液态玻璃是底色渐层，按整张图铺（斜向 = 左上 → 右下，否则自上而下，同 App 里按整屏铺）
-  Paint _page() {
-    final g = mm.bgGradient;
-    if (g == null) return Paint()..color = mm.bg;
-    return Paint()..shader = ui.Gradient.linear(Offset.zero, mm.bgDiagonal ? const Offset(w, h) : const Offset(0, h), g);
-  }
+  /// 页面底：平涂 [MeowTokens.bg]
+  Paint _page() => Paint()..color = mm.bg;
 
   Paint get _line => Paint()
     ..color = mm.line

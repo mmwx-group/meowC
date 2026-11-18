@@ -12,7 +12,7 @@ import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/plugins/service.dart' as vpn_service;
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/widgets/dialog.dart';
+import 'package:bett_box/meowx/theme/common_dialog.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -34,7 +34,6 @@ import 'meowx/update/update_dialog.dart';
 import 'meowx/update/update_state.dart';
 import 'meowx/update/update_manifest.dart';
 import 'models/models.dart';
-import 'views/profiles/override_profile.dart';
 
 class AppController {
   int? lastProfileModified;
@@ -1889,32 +1888,6 @@ class AppController {
       }
       final nextIndex = index + 1 > Mode.values.length - 1 ? 0 : index + 1;
       return state.copyWith(mode: Mode.values[nextIndex]);
-    });
-  }
-
-  Future<void> handleAddOrUpdate(WidgetRef ref, [Rule? rule]) async {
-    final res = await globalState.showCommonDialog<Rule>(
-      child: AddRuleDialog(
-        rule: rule,
-        snippet: ref.read(
-          profileOverrideStateProvider.select((state) => state.snippet!),
-        ),
-      ),
-    );
-    if (res == null) {
-      return;
-    }
-    ref.read(profileOverrideStateProvider.notifier).updateState((state) {
-      final model = state.copyWith.overrideData!(
-        rule: state.overrideData!.rule.updateRules((rules) {
-          final index = rules.indexWhere((item) => item.id == res.id);
-          if (index == -1) {
-            return List.from([res, ...rules]);
-          }
-          return List.from(rules)..[index] = res;
-        }),
-      );
-      return model;
     });
   }
 

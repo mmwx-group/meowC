@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../glass/liquid_glass.dart';
+import 'glass_host.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 
@@ -24,27 +25,66 @@ extension on BuildContext {
   ColorScheme get colorScheme => Theme.of(this).colorScheme;
 }
 
-/// 底栏胶囊的玻璃：FlClash 的 pill 玻璃，底色换成 MeowX 的暖白 / 深紫灰（与原 liquid_glass_widgets 底栏同一组不透明度，
-/// 内容滚到下面时不透出一片灰，对齐 Surfing 底栏）。
-LiquidGlassStyle meowBarGlass(bool dark) => dark
-    ? const LiquidGlassStyle(
-        tint: Color(0xF226202D),
-        contrast: -0.4,
-        blur: 0,
-        haze: 0.72,
-        hazeBlur: 15.6,
-        saturation: 1.925,
-        rim: 0.35,
-      )
-    : const LiquidGlassStyle(
-        tint: Color(0xF2FFFCFA),
-        contrast: 0.4,
-        blur: 0,
-        haze: 0.72,
-        hazeBlur: 15.6,
-        saturation: 2.1,
-        hairline: 0.35,
-      );
+/// 底栏胶囊的玻璃（2026-11-17 改成 iOS 26 底栏那种「清透 + 边缘折射」：用户反馈以前像一块磨砂板，
+/// 看不出边缘放大、中间正常的液态玻璃）。
+///
+/// 以前是 FlClash 的 pill 玻璃：72% 的背景走 15.6dp 重模糊（haze）。宿主是 standard 档，standard 会把 haze 合成整块
+/// 15.6dp 模糊，再盖 58% 的底色——背后基本糊成一片，着色器边缘那一圈折射（refraction / bevel）也就看不出来。
+/// 现在：不要 haze，只留 3dp 轻模糊、底色浅 34% / 深 42%，边缘折射加大（refraction 72、bevel 24），
+/// 背后的卡片颜色透得出来，滚过去的内容在边上被拉伸放大、中间保持原样。字的可读性由 contrast 管。
+///
+/// 性能：每帧仍是「背后截一次缩小图 + 一个着色器」，和以前一样；模糊小了截图分辨率高一些
+/// （3dp × 3 倍屏 → 缩小 4 倍，以前 8 倍），对一条底栏的面积影响很小。
+/// 低端机（[lowEnd]：系统标为低内存，或物理内存不到 2.5GB）保留以前的重磨砂：截图缩到最小、最省。
+LiquidGlassStyle meowBarGlass(bool dark, {bool lowEnd = false}) {
+  if (lowEnd) {
+    return dark
+        ? const LiquidGlassStyle(
+            tint: Color(0x7A26202D),
+            contrast: -0.4,
+            blur: 0,
+            haze: 0.72,
+            hazeBlur: 15.6,
+            saturation: 1.925,
+            rim: 0.35,
+          )
+        : const LiquidGlassStyle(
+            tint: Color(0x94FFFCFA),
+            contrast: 0.4,
+            blur: 0,
+            haze: 0.72,
+            hazeBlur: 15.6,
+            saturation: 2.1,
+            hairline: 0.35,
+          );
+  }
+  return dark
+      ? const LiquidGlassStyle(
+          tint: Color(0x6B26202D),
+          contrast: -0.5,
+          blur: 3,
+          refraction: 72,
+          bevel: 24,
+          saturation: 1.8,
+          rim: 0.42,
+          rimWidth: 1.2,
+          rimTail: 0.17,
+          rimAdded: 0.38,
+        )
+      : const LiquidGlassStyle(
+          tint: Color(0x57FFFCFA),
+          contrast: 0.5,
+          blur: 3,
+          refraction: 72,
+          bevel: 24,
+          saturation: 1.9,
+          rim: 0.5,
+          rimWidth: 1.2,
+          rimTail: 0.17,
+          rimAdded: 0.38,
+          hairline: 0.3,
+        );
+}
 
 /// 原 liquid_glass_widgets 底栏的投影（24dp 柔和投影）。
 const meowBarShadows = [BoxShadow(color: Color(0x1F000000), blurRadius: 24, offset: Offset(0, 4))];
@@ -922,7 +962,7 @@ class _FloatingNavigationBarState extends State<FloatingNavigationBar>
         LiquidGlassScope.qualityOf(context) == LiquidGlassQuality.ultra;
     final bar = _DockSurface(
       glass: glass,
-      style: meowBarGlass(context.isDarkMode),
+      style: meowBarGlass(context.isDarkMode, lowEnd: MeowGlassDevice.lowEnd),
       shadows: meowBarShadows,
       glow: _touchGlow,
       child: Material(

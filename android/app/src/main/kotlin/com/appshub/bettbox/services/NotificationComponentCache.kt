@@ -42,8 +42,14 @@ object NotificationComponentCache {
             packageManager.getComponentEnabledSetting(lightComponent)
         }.getOrDefault(PackageManager.COMPONENT_ENABLED_STATE_DEFAULT)
 
-        // MeowX：换成 M 猫脸图标时 MainActivity 是停用的，通知要点开开着的那个 alias
-        val mAlias = listOf("com.appshub.bettbox.MainActivityMDark", "com.appshub.bettbox.MainActivityMLight")
+        // MeowX：换成 M 猫脸 / X 图标时 MainActivity 是停用的，通知要点开开着的那个 alias
+        val mAlias = listOf(
+            "com.appshub.bettbox.MainActivityMDark",
+            "com.appshub.bettbox.MainActivityMLight",
+            "com.appshub.bettbox.MainActivityXDuo",
+            "com.appshub.bettbox.MainActivityXInk",
+            "com.appshub.bettbox.MainActivityXGradient",
+        )
             .map { ComponentName(defaultComponent.packageName, it) }
             .firstOrNull {
                 runCatching { packageManager.getComponentEnabledSetting(it) }

@@ -18,7 +18,9 @@ import '../../state/speed_board.dart';
 import '../../state/speed_test.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
-import '../../theme/button_fill.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
+import '../../theme/meow_dialog.dart';
 import '../../theme/haptics.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
@@ -233,7 +235,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                       child: MeowCard(
                         key: const ValueKey('speedtest-dial-card'),
                         padding: const EdgeInsets.all(16),
-                        radius: BorderRadius.circular(24),
+                        radius: BorderRadius.circular(MeowShape.xl),
                         child: FillColumn(
                           spacing: 6,
                           children: [
@@ -257,7 +259,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                       child: MeowCard(
                         key: const ValueKey('speedtest-readouts-card'),
                         padding: const EdgeInsets.all(16),
-                        radius: BorderRadius.circular(24),
+                        radius: BorderRadius.circular(MeowShape.xl),
                         child: FillColumn(
                           spacing: 10,
                           children: [
@@ -291,7 +293,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               children: [
                 MeowCard(
                   padding: const EdgeInsets.all(18),
-                  radius: BorderRadius.circular(24),
+                  radius: BorderRadius.circular(MeowShape.xl),
                   child: Column(
                     children: [
                       nodePicker,
@@ -328,8 +330,8 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
       opacity: running ? 0.5 : 1,
       child: MeowCard(
         key: wide ? const ValueKey('speedtest-settings-card') : null,
-        padding: const EdgeInsets.all(16),
-        radius: BorderRadius.circular(18),
+        padding: const EdgeInsets.all(18),
+        radius: BorderRadius.circular(MeowShape.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -338,7 +340,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
-                    Text('测速源', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
+                    Text('测速源', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.cs.primary)),
                     const MeInfoButton(title: '关于测速', text: _caption),
                   ],
                 ),
@@ -352,13 +354,10 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               items: const [(false, '单线程'), (true, '多线程（${SpeedTestController.multiConnections}）')],
               value: c.multiThread,
               onChanged: c.setMultiThread,
-              height: 38,
-              fontSize: 13,
+              height: 40,
               onCard: true,
             ),
-            const SizedBox(height: 12),
-            Container(height: 1, color: mm.line),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             SpeedBoardSettingRow(
               value: c.boardConsent == true,
               onChanged: c.setBoardConsent,
@@ -370,23 +369,17 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
     ),
   );
 
-  Widget _webRow(MeowTokens mm) => MeowCardMaterial(
-    borderRadius: BorderRadius.circular(18),
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: () => globalState.openUrl(SpeedTestController.webUrl),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(Icons.public_rounded, size: 20, color: mm.accent),
-            const SizedBox(width: 10),
-            Expanded(child: Text('在浏览器打开网页测速', style: TextStyle(fontSize: 15, color: mm.t1))),
-            Icon(Icons.north_east_rounded, size: 16, color: mm.t2),
-          ],
-        ),
-      ),
+  Widget _webRow(MeowTokens mm) => M3ListRow(
+    title: '在浏览器打开网页测速',
+    titleSize: 15,
+    onTap: () => globalState.openUrl(SpeedTestController.webUrl),
+    leading: M3IconTile(
+      icon: Icons.public_rounded,
+      shape: M3TileShape.leafA,
+      bg: context.cs.tertiaryContainer,
+      fg: context.cs.onTertiaryContainer,
     ),
+    trailing: Icon(Icons.north_east_rounded, size: 18, color: context.cs.onSurfaceVariant),
   );
 
   /// 宽版右栏还没开测时，曲线那一块的说明（不然是一大块空白）。窗口矮、曲线区小时先去掉图标，再小就不写
@@ -405,7 +398,7 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
               Text('逐秒速率', maxLines: 1, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1)),
               const SizedBox(height: 2),
               Text(
-                '开始测速后，下载（紫）与上传（玫红）的曲线画在这里',
+                '开始测速后，下载与上传的曲线画在这里',
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -420,15 +413,15 @@ class _SpeedTestPageState extends ConsumerState<SpeedTestPage> {
 
   Widget _label(MeowTokens mm, String text) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
+    child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.cs.primary)),
   );
 
   Widget _infoLine(MeowTokens mm) {
     final p = c.progress;
     final style = TextStyle(fontSize: 12, color: mm.t2);
-    if (c.message != null) return Text(c.message!, style: style.copyWith(color: mm.slow));
+    if (c.message != null) return Text(c.message!, style: style.copyWith(color: context.cs.error));
     if (p.phase == 'failed' && p.error != null) {
-      return Text(p.error!, textAlign: TextAlign.center, style: style.copyWith(color: mm.slow));
+      return Text(p.error!, textAlign: TextAlign.center, style: style.copyWith(color: context.cs.error));
     }
     // 服务器 · 经由 一行、已用 一行，各自不折行：以前三段拼成一句，窄屏上「已用」涨到某个数就折成两行、码表卡跟着上下跳
     final parts = [
@@ -497,8 +490,7 @@ class _SourcePicker extends StatelessWidget {
     items: [for (final s in row) (s, s.title)],
     value: value,
     onChanged: onChanged,
-    height: 38,
-    fontSize: 13,
+    height: 40,
     onCard: true,
   );
 
@@ -527,26 +519,30 @@ class _StartButton extends StatelessWidget {
   final bool running, enabled;
   final VoidCallback onTap;
 
+  /// 开始 = 主色实心的大胶囊；测速中换成次色容器的「停止」
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
+    final (bg, fg) = running ? (cs.secondaryContainer, cs.onSecondaryContainer) : (cs.primary, cs.onPrimary);
     return AnimatedOpacity(
       duration: const Duration(milliseconds: 150),
       opacity: enabled ? 1 : 0.45,
       child: Material(
-        color: mm.buttonFill(running ? MeowButtonFill.plain : MeowButtonFill.prominent),
-        shape: StadiumBorder(side: mm.buttonSide),
+        color: bg,
+        shape: const StadiumBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: enabled ? onTap : null,
           child: SizedBox(
-            height: 50,
+            height: 56,
             width: double.infinity,
-            child: Center(
-              child: Text(
-                running ? '停止' : '开始测速',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: running ? mm.t1 : mm.onProminent),
-              ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(running ? Icons.stop_rounded : Icons.speed_rounded, color: fg),
+                const SizedBox(width: 8),
+                Text(running ? '停止' : '开始测速', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: fg)),
+              ],
             ),
           ),
         ),
@@ -576,14 +572,14 @@ class _NodePicker extends StatelessWidget {
     final found = p != null && SpeedTestExitLine.visible(p.exit, pending: pending);
     final showExit = p != null && (found || p.isRunning);
     return Material(
-      color: mm.card2,
-      borderRadius: BorderRadius.circular(14),
+      color: context.cs.cardInner,
+      borderRadius: BorderRadius.circular(MeowShape.lInc),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: enabled ? () => _pick(context) : null,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           // 出口两行（ASN + 运营商、IP）占满整行宽度，「更换」放在节点名那一行（同 iOS）：挤在一行时运营商名只剩一半
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -601,9 +597,8 @@ class _NodePicker extends StatelessWidget {
                   ),
                   if (enabled) ...[
                     const SizedBox(width: 8),
-                    Text('更换', style: TextStyle(fontSize: 13, color: mm.t2)),
-                    const SizedBox(width: 2),
-                    MeowChipChevron(color: mm.t2),
+                    Text('更换', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.primary)),
+                    Icon(Icons.chevron_right_rounded, size: 20, color: context.cs.primary),
                   ],
                 ],
               ),
@@ -635,56 +630,58 @@ class _NodePicker extends StatelessWidget {
   }
 
   Future<void> _pick(BuildContext context) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: context.mm.bg,
+    // 带回弹的对话框（2026-11-17 起，以前是底部抽屉）：最上面固定一行「直连」，下面是节点（分段清单）
+    final picked = await showMeowDialog<String>(
+      context,
+      title: '测速节点',
       builder: (ctx) {
-        final mm = ctx.mm;
-        return ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.75),
-          child: ListView.builder(
-            shrinkWrap: true,
-            padding: EdgeInsets.fromLTRB(12, 0, 12, 16 + MediaQuery.paddingOf(ctx).bottom),
-            // 0 = 直连，1 = 「节点」小标题，之后是节点
-            itemCount: nodes.length + 2,
-            itemBuilder: (_, i) {
-              if (i == 0) {
-                final selected = node == kSpeedTestDirect;
-                return ListTile(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  tileColor: selected ? mm.soft : null,
-                  leading: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: BoxDecoration(color: mm.soft, borderRadius: BorderRadius.circular(9)),
-                    child: Icon(Icons.north_east_rounded, size: 16, color: mm.accent),
-                  ),
-                  title: Text('直连',
-                      style: TextStyle(color: selected ? mm.accent : mm.t1, fontWeight: selected ? FontWeight.w600 : null)),
-                  subtitle: Text('不经节点，测本机网络（DIRECT）', style: TextStyle(fontSize: 12, color: mm.t2)),
-                  onTap: () => Navigator.of(ctx).pop(kSpeedTestDirect),
-                );
-              }
-              if (i == 1) {
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                  child: Text('节点', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
-                );
-              }
-              final name = nodes[i - 2];
-              final selected = name == node;
-              return ListTile(
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                tileColor: selected ? mm.soft : null,
-                title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: selected ? mm.accent : mm.t1, fontWeight: selected ? FontWeight.w600 : null)),
-                onTap: () => Navigator.of(ctx).pop(name),
-              );
-            },
-          ),
+        final cs = ctx.cs;
+        Widget row(String value, String title, {String? subtitle, required Widget leading}) {
+          final selected = value == node;
+          return M3ListRow(
+            title: title,
+            titleSize: 15,
+            subtitle: subtitle,
+            selected: selected,
+            color: meowDialogRowColor(cs),
+            leading: leading,
+            trailing: selected ? Icon(Icons.check_rounded, color: cs.onSecondaryContainer) : null,
+            onTap: () => Navigator.of(ctx).pop(value),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            row(
+              kSpeedTestDirect,
+              '直连',
+              subtitle: '不经节点，测本机网络（DIRECT）',
+              leading: M3IconTile(
+                icon: Icons.alt_route_rounded,
+                shape: M3TileShape.leafA,
+                bg: cs.tertiaryContainer,
+                fg: cs.onTertiaryContainer,
+              ),
+            ),
+            if (nodes.isNotEmpty) ...[
+              const M3SectionLabel('节点'),
+              M3SegmentedList(
+                children: [
+                  for (final name in nodes)
+                    row(
+                      name,
+                      nodeTitleWithoutFlag(name),
+                      leading: M3IconTile(
+                        text: nodeTileLabel(name),
+                        bg: cs.surfaceContainerHighest,
+                        fg: cs.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
         );
       },
     );
@@ -710,47 +707,20 @@ class _LastResult extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return MeowCardMaterial(
-      borderRadius: BorderRadius.circular(18),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => BaseNavigator.push(context, SpeedTestRecordPage(controller: controller, id: record.id)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              const IconTile(icon: Icons.history_rounded, size: 32),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '上次结果 · ${record.displayName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.t1),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _summary,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: mm.t2),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              MeowChipChevron(color: mm.t2),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => M3ListRow(
+    title: '上次结果 · ${record.displayName}',
+    titleSize: 15,
+    subtitle: _summary,
+    subtitleMaxLines: 1,
+    onTap: () => BaseNavigator.push(context, SpeedTestRecordPage(controller: controller, id: record.id)),
+    leading: M3IconTile(
+      icon: Icons.history_rounded,
+      shape: M3TileShape.circle,
+      bg: context.cs.secondaryContainer,
+      fg: context.cs.onSecondaryContainer,
+    ),
+    trailing: Icon(Icons.chevron_right_rounded, color: context.cs.onSurfaceVariant),
+  );
 }
 
 /// 读数区（设计稿 Design/ui-redesign/speedtest-gauge-preview.html「方案 A · 指针码表」）：270° 指针码表 + 表盘下方的大号 Mbps 与阶段，
@@ -769,13 +739,16 @@ class SpeedTestGauge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    final cs = context.cs;
+    // 下载主色、上传第三色（同首页网速卡）
+    final down = cs.primary, up = cs.tertiary;
     final p = progress;
     final Color tint = switch (p.phase) {
-      'download' => mm.down,
-      'upload' => mm.accent,
-      'done' => mm.good,
-      'failed' => mm.slow,
-      _ => mm.t2,
+      'download' => down,
+      'upload' => up,
+      'done' => context.m3.ok,
+      'failed' => cs.error,
+      _ => cs.onSurfaceVariant,
     };
     final title = switch (p.phase) {
       'preparing' => p.source == SpeedTestSource.speedtest ? '挑选测速服务器…' : '连接测速服务器…',
@@ -797,7 +770,7 @@ class SpeedTestGauge extends StatelessWidget {
       // 指针只在下载 / 上传时指着当前速度，其余时候回到 0（测完的平均值在数字和三格里）
       mbps: transferring ? p.currentMbps : 0,
       scale: speedGaugeTiers[speedGaugeTierFor(p)],
-      color: p.phase == 'upload' ? mm.accent : mm.down,
+      color: p.phase == 'upload' ? up : down,
       value: big == null ? '0' : fmtMbps(big),
       dimmed: big == null,
       phase: title,
@@ -807,10 +780,10 @@ class SpeedTestGauge extends StatelessWidget {
       children: [
         _tile(mm, '延迟', p.latencyMs?.toString(), 'ms', mm.t1),
         const SizedBox(width: 8),
-        _tile(mm, '下载', p.downloadMbps == null ? null : fmtMbps(p.downloadMbps!), 'Mbps', mm.down,
+        _tile(mm, '下载', p.downloadMbps == null ? null : fmtMbps(p.downloadMbps!), 'Mbps', down,
             peak: p.downloadPeakMbps),
         const SizedBox(width: 8),
-        _tile(mm, '上传', p.uploadMbps == null ? null : fmtMbps(p.uploadMbps!), 'Mbps', mm.accent,
+        _tile(mm, '上传', p.uploadMbps == null ? null : fmtMbps(p.uploadMbps!), 'Mbps', up,
             peak: p.uploadPeakMbps, note: p.source?.hasUpload == false ? '不支持' : null),
       ],
     );
@@ -819,9 +792,9 @@ class SpeedTestGauge extends StatelessWidget {
       download: p.downloadSamples,
       upload: p.uploadSamples,
       animating: p.isRunning,
-      downColor: mm.down,
-      upColor: mm.accent,
-      baseColor: mm.line,
+      downColor: down,
+      upColor: up,
+      baseColor: cs.outlineVariant,
     );
     return switch (part) {
       // 在给的空间里按 300 : 270 等比放到最大（不超过 [maxDialScale] 倍）、居中；码表自己只会缩小，放大在外面做
@@ -856,8 +829,8 @@ class SpeedTestGauge extends StatelessWidget {
   Widget _tile(MeowTokens mm, String title, String? value, String unit, Color tint, {double? peak, String? note}) =>
       Expanded(
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(12)),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(MeowShape.l)),
           child: Column(
             children: [
               Text(title, style: TextStyle(fontSize: 11, color: mm.t2)),
@@ -868,9 +841,8 @@ class SpeedTestGauge extends StatelessWidget {
                     text: value ?? '—',
                     style: TextStyle(
                       fontSize: 19,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       color: value == null ? mm.t2 : tint,
-                      fontFamilyFallback: meowRounded,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),

@@ -3,7 +3,6 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/meowx/pages/me/account_card.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
 import 'package:bett_box/meowx/pages/me/me_page.dart';
-import 'package:bett_box/meowx/pages/me/me_sheet.dart';
 import 'package:bett_box/meowx/pages/me/platform_rows.dart';
 import 'package:bett_box/meowx/pages/me/settings_rows.dart';
 import 'package:bett_box/meowx/pages/me/subscriptions_card.dart';
@@ -24,7 +23,6 @@ import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
 import 'package:bett_box/meowx/theme/tokens.dart';
-import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -238,20 +236,14 @@ Future<void> _pump(
 
 const _phone = Size(412, 892);
 
-/// 卡片的内容区（页头 + 正文，不含抓手）：它的高度就是卡片随内容变化的那部分。
-Finder _sheetBody() => find.ancestor(of: find.byType(MeSheetScope).first, matching: find.byType(AnimatedSize));
-
-/// 卡片内容区的最高高度：屏幕 88% 减去抓手那一条（测试里没有顶部安全区）。
-double _maxBody(Size screen) => screen.height * MeowMotion.sheetMaxHeight - 15;
-
-/// 滚到入口行、点开它的设置卡片，等卡片完全升起。
+/// 滚到入口行、点开它的设置页（整页推入），等转场播完。
 Future<void> _openSheet(WidgetTester tester, String entry) async {
   final row = find.widgetWithText(MeRow, entry).first;
   await tester.ensureVisible(row);
   await tester.pumpAndSettle();
   await tester.tap(row);
   await tester.pumpAndSettle();
-  expect(find.byType(MeSheetScope), findsOneWidget);
+  expect(find.byType(MeSubPage), findsOneWidget);
 }
 
 ProviderContainer _container(WidgetTester tester, Type type) => ProviderScope.containerOf(tester.element(find.byType(type).first));
@@ -265,17 +257,16 @@ void main() {
     await _pump(tester, const MePage(), size: const Size(320, 1700), overrides: _overrides(), bottomInset: 96);
     expect(find.text('未登录'), findsOneWidget);
     expect(find.text('账号登录'), findsOneWidget);
-    expect(find.text('导入订阅'), findsOneWidget);
+    expect(find.text('导入'), findsOneWidget);
     expect(find.textContaining('还没有订阅'), findsOneWidget);
     for (final label in ['代理与测速', '流量控制', '本地代理', '订阅同步', '辅助功能', '记录日志', '外观', '高级', '关于']) {
       expect(find.text(label), findsOneWidget, reason: label);
     }
     expect(find.text('跟随订阅 · HTTPS 延迟'), findsOneWidget);
     expect(find.text('0.2.0 · 检查更新'), findsOneWidget);
-    // 入口行末尾的箭头垫 40×30 奶白胶囊；开关行没有
-    final chevron = find.descendant(of: find.widgetWithText(MeRow, '流量控制'), matching: find.byType(MeowChip));
-    expect(tester.getSize(chevron), const Size(MeowChip.width, MeowChip.height));
-    expect(find.descendant(of: find.byType(LogSwitchRow), matching: find.byType(MeowChip)), findsNothing);
+    // 入口行末尾一个箭头；开关行没有
+    expect(find.descendant(of: find.widgetWithText(MeRow, '流量控制'), matching: find.byIcon(Icons.chevron_right_rounded)), findsOneWidget);
+    expect(find.descendant(of: find.byType(LogSwitchRow), matching: find.byIcon(Icons.chevron_right_rounded)), findsNothing);
   });
 
   testWidgets('手机 · 已登录：当前档展开显示用量；账户下的订阅单独一组、全部列出（同 iOS）', (tester) async {
@@ -293,12 +284,11 @@ void main() {
     );
     expect(find.text('一个昵称特别特别特别长的用户'), findsOneWidget);
     expect(find.text('实时同步已启用'), findsOneWidget);   // 不带主控域名（同 iOS）
-    expect(find.text('退出'), findsOneWidget);
-    expect(find.text('当前'), findsOneWidget);
-    expect(find.text('128.0 / 500 GB'), findsOneWidget);
-    expect(find.textContaining('到期 2026-12-31'), findsOneWidget);
+    expect(find.text('退出登录'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is Semantics && w.properties.label == '当前订阅'), findsOneWidget);
+    expect(find.textContaining('128.0 / 500 GB · 到期 2026-12-31'), findsOneWidget);
     expect(find.text('12.0 / 100 GB'), findsOneWidget);
-    expect(find.text('内置'), findsOneWidget);
+    expect(find.text('内置 · 流量全部直连'), findsOneWidget);
     expect(find.text(_main.label!), findsOneWidget);
     expect(find.text('账户下的订阅'), findsOneWidget);
     expect(find.text('主力订阅（主控上的名字）'), findsOneWidget);   // 已下载的也列（点了直接切过去）
@@ -437,132 +427,61 @@ void main() {
     expect(urls, ['https://panel.example.com/api/user/avatar/ab?v=2']);
   });
 
-  testWidgets('手机 · 入口行从底部升起设置卡片：高度贴合内容；卡片里的开关直接生效；点 × 关闭', (tester) async {
+  testWidgets('手机 · 入口行整页推入设置页（M3 大标题）：页里的开关直接生效；返回回到「我的」', (tester) async {
     await _pump(tester, const MePage(), size: _phone, overrides: _overrides(), textScale: 1);
     await _openSheet(tester, '流量控制');
     expect(find.text('阻止 QUIC'), findsOneWidget);
     expect(find.text('代理推送服务'), findsOneWidget);
     expect(find.text('DNS 劫持'), findsOneWidget);
     expect(find.text('绕过代理'), findsOneWidget);
-    expect(find.text('流量控制'), findsNWidgets(2));   // 入口行 + 卡片页头
-    expect(tester.getSize(_sheetBody()).height, lessThan(_maxBody(_phone) - 200));   // 只有四行：远不到最高
+    expect(find.text('流量控制'), findsOneWidget);   // 页面大标题（「我的」页在后面、不在屏上）
 
     await tester.tap(find.text('阻止 QUIC'));
     await tester.pump();
     expect(_container(tester, MeSubPage).read(vpnSettingProvider).disableQuic, isTrue);
 
-    await tester.tap(find.byTooltip('关闭'));
+    await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsNothing);
+    expect(find.byType(MeSubPage), findsNothing);
     expect(find.text('代理推送服务'), findsNothing);
     expect(find.text('阻止 QUIC'), findsOneWidget);   // 回到「我的」：入口行的摘要跟着变
   });
 
-  testWidgets('卡片里拨开关带出下一级（局域网地址）：卡片随内容平滑长高', (tester) async {
+  testWidgets('设置页里拨开关带出下一级（局域网地址）', (tester) async {
     await _pump(tester, const MePage(), size: const Size(320, 760), overrides: _overrides());
     await _openSheet(tester, '本地代理');
-    final before = tester.getSize(_sheetBody()).height;
     expect(find.textContaining('192.168.31.120:7890'), findsNothing);
-
     await tester.tap(find.text('允许局域网'));
-    await tester.pump();
-    await tester.pump(MeowMotion.sheetResize ~/ 3);
-    final mid = tester.getSize(_sheetBody()).height;
     await tester.pumpAndSettle();
-    final after = tester.getSize(_sheetBody()).height;
     expect(find.textContaining('192.168.31.120:7890'), findsOneWidget);
-    expect(after, greaterThan(before));
-    expect(mid, inExclusiveRange(before, after));   // 不跳：中途停在两者之间
   });
 
-  testWidgets('卡片里进下一层（DNS 劫持）：卡片拉到最高、页头换标题带返回；返回 / 系统返回键回到上一层并缩回原高度', (tester) async {
+  testWidgets('设置页里进下一层（DNS 劫持）也整页推入；返回 / 系统返回键逐层退回', (tester) async {
     const meow = MeowSettings(dnsHijack: {'hijack.example.com': '1.2.3.4'});
     await _pump(tester, const MePage(), size: _phone, overrides: _overrides(meow: meow), textScale: 1);
     await _openSheet(tester, '流量控制');
-    final first = tester.getSize(_sheetBody()).height;
 
     await tester.tap(find.text('DNS 劫持'));
-    await tester.pump();
-    await tester.pump(MeowMotion.sheetPane ~/ 3);
-    // 平推途中两层都在：新页从右边进来、旧页往左退
-    expect(find.text('阻止 QUIC'), findsOneWidget);
-    expect(find.text('hijack.example.com'), findsOneWidget);
-    expect(tester.getTopLeft(find.text('hijack.example.com')).dx, greaterThan(tester.getTopLeft(find.text('阻止 QUIC')).dx));
     await tester.pumpAndSettle();
-    expect(find.text('阻止 QUIC'), findsNothing);
     expect(find.byType(DnsHijackPage), findsOneWidget);
-    expect(find.byTooltip('返回'), findsOneWidget);
-    expect(find.byTooltip('添加'), findsOneWidget);   // 下一层的操作钮放在卡片页头
-    expect(tester.getSize(_sheetBody()).height, moreOrLessEquals(_maxBody(_phone)));
-    expect(find.byType(Scaffold), findsOneWidget);   // 卡片里不再套一层整页骨架（只有测试外壳那一个）
+    expect(find.text('hijack.example.com'), findsOneWidget);
+    expect(find.byTooltip('添加'), findsOneWidget);   // 操作钮在顶栏右边
 
     await tester.tap(find.byTooltip('返回'));
     await tester.pumpAndSettle();
     expect(find.byType(DnsHijackPage), findsNothing);
     expect(find.text('阻止 QUIC'), findsOneWidget);
-    expect(tester.getSize(_sheetBody()).height, moreOrLessEquals(first));
 
-    // 系统返回键：先退一层，再关掉卡片
+    // 系统返回键：先退一层，再回到「我的」
     await tester.tap(find.text('DNS 劫持'));
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(DnsHijackPage), findsNothing);
-    expect(find.byType(MeSheetScope), findsOneWidget);
+    expect(find.byType(MeSubPage), findsOneWidget);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsNothing);
-  });
-
-  testWidgets('点遮罩关闭；下拉够远关闭、拉一点松手弹回；在下一层时点遮罩也直接关掉整张卡片', (tester) async {
-    await _pump(tester, const MePage(), size: _phone, overrides: _overrides(), textScale: 1);
-    await _openSheet(tester, '外观');
-    await tester.tapAt(const Offset(200, 40));
-    await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsNothing);
-
-    await _openSheet(tester, '外观');
-    final top = tester.getTopLeft(_sheetBody()).dy;
-    await tester.drag(find.text('主题'), const Offset(0, 40));
-    await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsOneWidget);
-    expect(tester.getTopLeft(_sheetBody()).dy, moreOrLessEquals(top));
-    await tester.drag(find.text('主题'), const Offset(0, 160));
-    await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsNothing);
-
-    await _openSheet(tester, '流量控制');
-    await tester.tap(find.text('绕过代理'));
-    await tester.pumpAndSettle();
-    expect(find.byType(BypassPage), findsOneWidget);
-    await tester.tapAt(const Offset(200, 20));
-    await tester.pumpAndSettle();
-    expect(find.byType(MeSheetScope), findsNothing);
-  });
-
-  testWidgets('卡片升起时背后整页缩小；「移除动画」时不缩放、卡片里换层不平移', (tester) async {
-    await _pump(tester, const MeSheetBackdrop(child: MePage()), size: _phone, overrides: _overrides(), textScale: 1);
-    Matrix4 backdrop() => tester.widget<Transform>(find.descendant(of: find.byType(MeSheetBackdrop), matching: find.byType(Transform)).first).transform;
-    expect(backdrop().isIdentity(), isTrue);
-    await _openSheet(tester, '流量控制');
-    expect(backdrop().entry(0, 0), moreOrLessEquals(MeowMotion.sheetBackdropScale));
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
-    expect(backdrop().isIdentity(), isTrue);
-
-    await _pump(tester, const MeSheetBackdrop(child: MePage()), size: _phone, overrides: _overrides(), textScale: 1, disableAnimations: true);
-    await _openSheet(tester, '流量控制');
-    expect(backdrop().isIdentity(), isTrue);
-    await tester.tap(find.text('DNS 劫持'));
-    await tester.pump();
-    await tester.pump(MeowMotion.sheetFade ~/ 2);
-    final shifts = tester.widgetList<FractionalTranslation>(
-      find.descendant(of: find.byType(AnimatedSize), matching: find.byType(FractionalTranslation)),
-    );
-    expect(shifts, isNotEmpty);
-    expect(shifts.every((f) => f.translation == Offset.zero), isTrue);
-    await tester.pumpAndSettle();
-    expect(find.byType(DnsHijackPage), findsOneWidget);
+    expect(find.byType(MeSubPage), findsNothing);
   });
 
   testWidgets('手机 · 「记录日志」直接是列表里的开关行：点了当场切换，不进二级页', (tester) async {
@@ -591,7 +510,7 @@ void main() {
           remote: _remote,
         ),
       );
-      for (final label in ['高级设置', '代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观 · 关于']) {
+      for (final label in ['高级设置', '代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观', '日志 · 关于']) {
         expect(find.text(label), findsOneWidget, reason: '$label @ $size');
       }
       for (final label in ['DNS 模式', '测速方式', '测速地址', '阻止 QUIC', '代理推送服务', 'DNS 劫持', '绕过代理', '端口', '允许局域网', '用户名', '密码', '订阅同步间隔', 'po0 加白', 'GGY 加白', 'AkileCDN 白名单', 'AkileCDN 节点', '主题', '记录日志', '版本', '检查更新', '开源许可']) {
@@ -617,7 +536,7 @@ void main() {
     );
     final sections = find.byType(MeSection);
     final titles = [for (final e in sections.evaluate()) (e.widget as MeSection).title];
-    expect(titles, containsAllInOrder(['代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观 · 关于']));
+    expect(titles, containsAllInOrder(['代理与测速', '流量控制', '本地代理 · 订阅', '辅助功能 · 加白', '外观', '日志 · 关于']));
 
     // 各列底边：第 1 列从账户卡算起
     final lead = tester.getRect(find.byType(AccountCard));

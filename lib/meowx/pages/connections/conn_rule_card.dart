@@ -8,7 +8,7 @@ import '../../state/connection.dart';
 import '../../state/custom_rules.dart';
 import '../../state/meow_settings.dart';
 import '../../state/overrides.dart';
-import '../../theme/button_fill.dart';
+import '../../theme/m3.dart';
 import '../../theme/card_surface.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -71,12 +71,15 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
     }
 
     return MeowCard(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      radius: BorderRadius.circular(20),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+      radius: BorderRadius.circular(MeowShape.lInc + 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(t.ip ? '这个 IP 走' : '这个域名走', style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
+          Text(
+            t.ip ? '这个 IP 走' : '这个域名走',
+            style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w700, color: context.cs.primary),
+          ),
           const SizedBox(height: 2),
           Text(
             t.value,
@@ -87,8 +90,7 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
           if (!t.ip) ...[
             const SizedBox(height: 8),
             MeowSegment<MeowRuleMatch>(
-              height: 32,
-              fontSize: 12,
+              height: 40,
               onCard: true,
               items: [for (final m in const [MeowRuleMatch.domain, MeowRuleMatch.suffix]) (m, m.label)],
               value: _match,
@@ -154,8 +156,7 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
   }
 }
 
-/// 动作按钮：选中 = 墨色实心配页面底色的字（同分段的选中态），未选 = 次级底配动作色的字。
-/// 液态玻璃主题下选中是选中态那档静态半透明 + 强调色的字（见 button_fill.dart）。
+/// 动作按钮：没选 = surfaceContainerHigh 底、动作色的字、圆角 12；选中 = 主色实心的整颗胶囊（形状随弹簧变）。
 class _ActionButton extends StatelessWidget {
   const _ActionButton({required this.label, required this.color, required this.selected, required this.onTap});
   final String label;
@@ -165,18 +166,24 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     return Semantics(
       button: true,
       selected: selected,
-      child: Material(
-        color: mm.buttonFill(selected ? MeowButtonFill.selected : MeowButtonFill.secondary),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: mm.buttonSide),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(end: selected ? 24 : MeowShape.m),
+        duration: MeowSprings.shapeDuration,
+        curve: MeowSprings.shapeCurve,
+        builder: (_, r, child) => Material(
+          color: selected ? cs.primary : cs.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(r.clamp(0, 99)),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
           child: Container(
-            constraints: const BoxConstraints(minHeight: 38),
+            constraints: const BoxConstraints(minHeight: 44),
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             alignment: Alignment.center,
             child: Text(
@@ -184,7 +191,7 @@ class _ActionButton extends StatelessWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: selected ? mm.onSelected : color),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: selected ? cs.onPrimary : color),
             ),
           ),
         ),

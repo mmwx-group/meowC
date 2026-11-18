@@ -64,11 +64,13 @@ enum NodeCardSize {
 }
 
 /// 首页上可以关掉的卡片（连接主卡恒在）。隐藏的卡记在 `MeowSettings.homeHiddenCards`（存 name）。
-/// 列表顺序 = 「首页卡片」设置里的顺序；[apps] 只在 Android 手机 / 平板上有（Windows 没有分应用代理）。
+/// 列表顺序 = 「首页卡片」设置里的顺序；[apps] 只在 Android 手机 / 平板上有（Windows 没有分应用代理）；
+/// [mesh] 只在喵窝可用（管理员账号或已经开着）时才列出来（2026-11-17 加：以前喵窝卡没法隐藏）。
 enum HomeCard {
   upload,
   download,
   chart,
+  mesh,
   apps,
   proxied,
   direct,
@@ -80,6 +82,7 @@ enum HomeCard {
     HomeCard.upload => '上传',
     HomeCard.download => '下载',
     HomeCard.chart => '网速图',
+    HomeCard.mesh => '喵窝',
     HomeCard.apps => '代理应用',
     HomeCard.proxied => '代理连接',
     HomeCard.direct => '直连连接',
@@ -91,6 +94,17 @@ enum HomeCard {
 
 /// 手机端代理页布局：列表 = 可折叠的组卡；单组 = 顶部一个组按钮点开选组，下面只显示这一组的节点。宽屏恒为两栏，不受它影响。
 /// 单组以前叫「标签」（横向组标签 + 左右滑动换组），取值仍是 tabs，沿用存下的偏好。
+/// 节点的画法：清单（一行一个，M3 分段清单）/ 网格（格子）。
+enum NodeView {
+  list,
+  grid;
+
+  String get label => switch (this) {
+    NodeView.list => '清单',
+    NodeView.grid => '网格',
+  };
+}
+
 enum ProxyLayout {
   list,
   tabs;
@@ -331,9 +345,15 @@ abstract class MeowSettings with _$MeowSettings {
     @JsonKey(unknownEnumValue: NodeCardSize.standard)
     @Default(NodeCardSize.standard)
     NodeCardSize nodeCardSize,
-    @JsonKey(unknownEnumValue: ProxyLayout.list)
-    @Default(ProxyLayout.list)
+    /// 2026-11 改版换了键名（旧键 proxyLayout 缺省「列表」）：所有人升级后先看到新的单组布局（组 chip + 节点清单），想要旧的再切
+    @JsonKey(name: 'proxyLayoutV2', unknownEnumValue: ProxyLayout.tabs)
+    @Default(ProxyLayout.tabs)
     ProxyLayout proxyLayout,
+
+    /// 节点画成清单（分段清单，缺省）还是网格（格子大小看 [nodeCardSize]）
+    @JsonKey(unknownEnumValue: NodeView.list)
+    @Default(NodeView.list)
+    NodeView nodeView,
 
     /// 当前的 mode=direct 是切到内置直连档时自动设的（不是用户手选）：离开直连档时据此恢复 rule
     @Default(false) bool autoDirectMode,
@@ -390,7 +410,8 @@ abstract class MeowSettings with _$MeowSettings {
     /// 已做过「TUN 栈 mips → mixed」的一次性回退（之后用户在高级里手选 mips 不会被改回去）
     @Default(false) bool tunStackMipsReverted,
 
-    /// 主题风格（缺省经典）、液态玻璃样式（缺省透明）。存的是枚举名，认不出的值回到缺省
+    /// 旧版外观（2026-11 改成 Material 3 Expressive 以后不再使用，字段留着兼容老配置）：主题风格、液态玻璃样式、
+    /// 卡片颜色、启动卡片颜色、底色样式与渐变两色、背景、磨砂强度、插画图片。存的是枚举名，认不出的值回到缺省
     @JsonKey(unknownEnumValue: MeowThemeStyle.classic)
     @Default(MeowThemeStyle.classic)
     MeowThemeStyle themeStyle,
@@ -404,8 +425,11 @@ abstract class MeowSettings with _$MeowSettings {
     /// 启动卡片（首页连接主卡）的颜色（ARGB，缺省樱粉 #F7CDDB）：电源键的填充色跟着它的色相走；深色下取色相压成深色
     @Default(0xFFF7CDDB) int heroColor,
 
-    /// 强调色（ARGB，缺省玫红 #B02E63）：强调文字 / 图标、选中态的描边与淡底、底栏选中项、进度条；对比度不够时自动压暗 / 提亮
+    /// 主题色（ARGB，缺省品牌玫瑰 #B02E63）：Material 3 色板的种子，整套颜色由它生成（见 `lib/meowx/theme/m3.dart`）
     @Default(0xFFB02E63) int accentColor,
+
+    /// 跟随系统取色：安卓 12+ 用桌布生成的色板、Windows 用系统强调色；取不到时回到 [accentColor]
+    @Default(false) bool followSystemColor,
 
     /// Wi-Fi 智能开关（只 Android）：总开关、按 SSID 的规则（从上往下第一条命中）、其它网络（别的 Wi-Fi / 蜂窝 / 有线）的动作
     @Default(false) bool wifiSwitchEnabled,

@@ -2,6 +2,23 @@ import 'package:bett_box/meowx/state/format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('图标块画了国旗时名字里去掉那面国旗；没有国旗、只剩国旗时原样', () {
+    expect(nodeTitleWithoutFlag('🇭🇰 香港 01'), '香港 01');
+    expect(nodeTitleWithoutFlag('IEPL 🇹🇼 台湾'), 'IEPL 台湾');
+    expect(nodeTitleWithoutFlag('🇯🇵日本'), '日本');
+    expect(nodeTitleWithoutFlag('香港 01'), '香港 01');
+    expect(nodeTitleWithoutFlag('🇺🇸'), '🇺🇸');
+  });
+
+  test('图标块的字：名字里有国旗就用国旗（不在开头也认），没有取第一个字', () {
+    expect(nodeTileLabel('🇭🇰 香港 01'), '🇭🇰');
+    expect(nodeTileLabel('IEPL 🇹🇼 台湾'), '🇹🇼');
+    expect(nodeTileLabel('hk-01'), 'H');
+    expect(nodeTileLabel('[AgentB] sstest'), 'A');
+    expect(nodeTileLabel('香港 01'), '香');
+    expect(nodeTileLabel('  '), '?');
+  });
+
   test('fmtSize 最小 KB，MB 一位小数，GB 两位', () {
     expect(fmtSize(0), '0 KB');
     expect(fmtSize(512), '1 KB');

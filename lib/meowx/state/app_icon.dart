@@ -11,7 +11,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum MeowAppIcon {
   catgirl('默认', 'assets/images/icon_light_256.png'),
   mDark('M · 深色', 'assets/images/app_icon_m_dark_256.png'),
-  mLight('M · 浅色', 'assets/images/app_icon_m_light_256.png');
+  mLight('M · 浅色', 'assets/images/app_icon_m_light_256.png'),
+  // 「X」三款（2026-11-17，设计稿 design/brand/icon-x.svg，scripts/make-x-icons.py 生成）
+  xDuo('X · 双色', 'assets/images/app_icon_x_duo_256.png'),
+  xInk('X · 墨底', 'assets/images/app_icon_x_ink_256.png'),
+  xGradient('X · 渐变', 'assets/images/app_icon_x_gradient_256.png');
 
   const MeowAppIcon(this.label, this.preview);
   final String label;
@@ -23,6 +27,9 @@ enum MeowAppIcon {
   static MeowAppIcon fromNative(String? name) => switch (name) {
     'm_dark' => mDark,
     'm_light' => mLight,
+    'x_duo' => xDuo,
+    'x_ink' => xInk,
+    'x_gradient' => xGradient,
     _ => catgirl,
   };
 
@@ -31,6 +38,9 @@ enum MeowAppIcon {
     catgirl => legacyDark ? 'dark' : 'default',
     mDark => 'm_dark',
     mLight => 'm_light',
+    xDuo => 'x_duo',
+    xInk => 'x_ink',
+    xGradient => 'x_gradient',
   };
 }
 

@@ -1,10 +1,14 @@
 import 'package:bett_box/enum/enum.dart';
+import 'package:bett_box/meowx/pages/advanced/advanced_page.dart';
+import 'package:bett_box/meowx/pages/advanced/tools/requests_page.dart';
+import 'package:bett_box/meowx/pages/advanced/tools/resources_page.dart';
+import 'package:bett_box/meowx/pages/advanced/tools/scripts_page.dart';
 import 'package:bett_box/models/models.dart';
-import 'package:bett_box/providers/providers.dart';
-import 'package:bett_box/views/views.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Bettbox 内部 toPage(PageLabel) 能去的「非 Tab 页」（2026-11-17 删掉 Bettbox 界面后只剩 MeowX 自己的页面）：
+/// 首页 / 节点 / 动态 / 我的是壳的四个 Tab（[MeowTab.fromPageLabel]），这里只列要 push 的几页，见 meow_root 的 _pushBettboxPage。
+/// 日志在「动态」页里，不单独成页。
 class Navigation {
   static Navigation? _instance;
 
@@ -14,73 +18,28 @@ class Navigation {
   }) {
     return [
       NavigationItem(
-        keep: false,
-        icon: Icon(Icons.space_dashboard),
-        label: PageLabel.dashboard,
-        builder: (_) =>
-            DashboardView(key: const GlobalObjectKey(PageLabel.dashboard)),
-      ),
-      NavigationItem(
-        icon: const Icon(Icons.article),
-        label: PageLabel.proxies,
-        builder: (_) => ProviderScope(
-          overrides: [queryProvider.overrideWith(() => Query())],
-          child: ProxiesView(key: const GlobalObjectKey(PageLabel.proxies)),
-        ),
-        modes: hasProxies
-            ? [NavigationItemMode.mobile, NavigationItemMode.desktop]
-            : [],
-      ),
-      NavigationItem(
-        icon: Icon(Icons.folder),
-        label: PageLabel.profiles,
-        builder: (_) =>
-            ProfilesView(key: const GlobalObjectKey(PageLabel.profiles)),
-      ),
-      NavigationItem(
-        icon: Icon(Icons.view_timeline),
+        icon: const Icon(Icons.view_timeline),
         label: PageLabel.requests,
-        builder: (_) =>
-            RequestsView(key: const GlobalObjectKey(PageLabel.requests)),
-        description: 'requestsDesc',
-        modes: [NavigationItemMode.desktop, NavigationItemMode.more],
+        builder: (_) => const RequestsPage(),
+        modes: [NavigationItemMode.more],
       ),
       NavigationItem(
-        icon: Icon(Icons.ballot),
-        label: PageLabel.connections,
-        builder: (_) =>
-            ConnectionsView(key: const GlobalObjectKey(PageLabel.connections)),
-        description: 'connectionsDesc',
-        modes: [NavigationItemMode.desktop, NavigationItemMode.more],
-      ),
-      NavigationItem(
-        icon: Icon(Icons.storage),
+        icon: const Icon(Icons.storage),
         label: PageLabel.resources,
-        description: 'resourcesDesc',
-        builder: (_) =>
-            ResourcesView(key: const GlobalObjectKey(PageLabel.resources)),
+        builder: (_) => const ResourcesPage(),
         modes: [NavigationItemMode.more],
       ),
       NavigationItem(
-        icon: Icon(Icons.functions),
+        icon: const Icon(Icons.functions),
         label: PageLabel.script,
-        description: 'scriptDesc',
-        builder: (_) =>
-            ScriptsView(key: const GlobalObjectKey(PageLabel.script)),
+        builder: (_) => const ScriptsPage(),
         modes: [NavigationItemMode.more],
       ),
       NavigationItem(
-        icon: const Icon(Icons.adb),
-        label: PageLabel.logs,
-        builder: (_) => LogsView(key: const GlobalObjectKey(PageLabel.logs)),
-        description: 'logsDesc',
-        modes: [NavigationItemMode.desktop, NavigationItemMode.more],
-      ),
-      NavigationItem(
-        icon: Icon(Icons.construction),
+        icon: const Icon(Icons.construction),
         label: PageLabel.tools,
-        builder: (_) => ToolsView(key: const GlobalObjectKey(PageLabel.tools)),
-        modes: [NavigationItemMode.desktop, NavigationItemMode.mobile],
+        builder: (_) => const AdvancedPage(),
+        modes: [NavigationItemMode.more],
       ),
     ];
   }

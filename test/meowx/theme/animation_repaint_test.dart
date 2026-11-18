@@ -1,7 +1,6 @@
 import 'package:bett_box/meowx/pages/proxies/group_reveal.dart';
 import 'package:bett_box/meowx/theme/morph_menu.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
-import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -109,53 +108,5 @@ void main() {
   });
 
   // 电源键外面那层 Opacity（不可用时半透明）不透明度非零时本身就是一层，液面的重绘已经被它隔开；这里守住这一点
-  testWidgets('电源键连接中：液面每帧动，外面的页面不重画', (tester) async {
-    const page = ValueKey('page');
-    Widget build({required bool busy}) => _app(
-      RepaintBoundary(
-        key: page,
-        child: Column(
-          children: [
-            const Text('首页上的别的内容'),
-            MeowPowerButton(on: false, busy: busy, onTap: () {}),
-          ],
-        ),
-      ),
-    );
-    await tester.pumpWidget(build(busy: false));
-    await tester.pumpWidget(build(busy: true));
-    await tester.pump(const Duration(milliseconds: 16));
-    final picture = _picture(tester, find.byKey(page));
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(_picture(tester, find.byKey(page)), same(picture));
-    await tester.pumpWidget(_app(const SizedBox()));
-  });
 
-  testWidgets('分段滑块弹簧：滑块每帧重绘，外面的页面不重画', (tester) async {
-    const page = ValueKey('page');
-    Widget build(int v) => _app(
-      RepaintBoundary(
-        key: page,
-        child: Column(
-          children: [
-            const Text('首页上的别的内容'),
-            MeowSegment<int>(items: const [(0, '规则'), (1, '全局'), (2, '直连')], value: v, onChanged: (_) {}),
-          ],
-        ),
-      ),
-    );
-    await tester.pumpWidget(build(0));
-    await tester.pumpWidget(build(2));
-    // 颜色渐变（220ms）走完以后弹簧还在晃
-    await tester.pump(MeowMotion.colorFade + const Duration(milliseconds: 16));
-    await tester.pump(const Duration(milliseconds: 16));
-    final picture = _picture(tester, find.byKey(page));
-    for (var i = 0; i < 5; i++) {
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    expect(_picture(tester, find.byKey(page)), same(picture));
-    await tester.pumpAndSettle();
-  });
 }

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../glass/liquid_glass.dart';
 import 'glass.dart';
 import 'motion.dart';
+import 'm3.dart';
 import 'tokens.dart';
 
 /// 下拉菜单的一项。
@@ -333,7 +334,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       // 玻璃上直接用淡粉（深色下它本身是半透明的），不垫卡片底
-                      color: glass ? mm.soft : Color.alphaBlend(mm.soft, mm.elevSolid),
+                      color: glass ? mm.soft : Color.alphaBlend(mm.soft, context.cs.surfaceContainer),
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
@@ -396,7 +397,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
               rect: r,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Color.lerp(route.fromColor, mm.elevSolid, pc),
+                  color: Color.lerp(route.fromColor, context.cs.surfaceContainer, pc),
                   borderRadius: radius,
                   // 阴影只淡入、半径不变
                   boxShadow: [

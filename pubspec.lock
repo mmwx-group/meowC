@@ -25,14 +25,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.13.4"
-  animations:
-    dependency: "direct main"
-    description:
-      name: animations
-      sha256: "9cb469212ea51be27097f23b519d594c01171721347b55df9334fff653659e7f"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.2.0"
   app_links:
     dependency: "direct main"
     description:
@@ -336,14 +328,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "0.7.15"
-  defer_pointer:
-    dependency: "direct main"
-    description:
-      name: defer_pointer
-      sha256: d69e6f8c1d0f052d2616cc1db3782e0ea73f42e4c6f6122fd1a548dfe79faf02
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.2"
   device_info_plus:
     dependency: "direct main"
     description:
@@ -384,22 +368,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.9.0"
-  emoji_regex:
-    dependency: "direct main"
-    description:
-      name: emoji_regex
-      sha256: "3a25dd4d16f98b6f76dc37cc9ae49b8511891ac4b87beac9443a1e9f4634b6c7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.5"
-  equatable:
-    dependency: transitive
-    description:
-      name: equatable
-      sha256: "3bce007a596ff8b3119c45d68aaef631272537c03d30e5d4534dd24bf4c5eaa2"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.1.0"
   fake_async:
     dependency: transitive
     description:
@@ -611,14 +579,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
-  google_nav_bar:
-    dependency: "direct main"
-    description:
-      name: google_nav_bar
-      sha256: bb12dd21514ee1b041ab3127673e2fd85e693337df308f7f2b75cd1e8e92eaf4
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.7"
   graphs:
     dependency: transitive
     description:
@@ -1656,7 +1616,7 @@ packages:
     source: hosted
     version: "1.0.1"
   web_socket_channel:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: web_socket_channel
       sha256: d645757fb0f4773d602444000a8131ff5d48c9e47adfe9772652dd1a4f2d45c8

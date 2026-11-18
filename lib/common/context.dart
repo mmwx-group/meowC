@@ -1,12 +1,7 @@
 import 'package:bett_box/manager/message_manager.dart';
-import 'package:bett_box/widgets/scaffold.dart';
 import 'package:flutter/material.dart';
 
 extension BuildContextExtension on BuildContext {
-  CommonScaffoldState? get commonScaffoldState {
-    return findAncestorStateOfType<CommonScaffoldState>();
-  }
-
   Future<void>? showNotifier(String text,
       {VoidCallback? onAction, String? actionLabel, bool showCountdown = false}) {
     return findAncestorStateOfType<MessageManagerState>()

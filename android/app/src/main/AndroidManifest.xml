@@ -187,6 +187,89 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- MeowX：可选 App 图标「X」三款（双色 / 墨底 / 渐变，2026-11-17），同上面两个 M 图标：默认关 -->
+
+        <activity-alias
+            android:name="com.appshub.bettbox.MainActivityXDuo"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_x_duo"
+            android:roundIcon="@mipmap/ic_launcher_x_duo"
+            android:targetActivity="com.appshub.bettbox.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="clash" android:host="install-config" />
+                <data android:scheme="clashmeta" android:host="install-config" />
+                <data android:scheme="miaomiaowu" android:host="login" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.appshub.bettbox.MainActivityXInk"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_x_ink"
+            android:roundIcon="@mipmap/ic_launcher_x_ink"
+            android:targetActivity="com.appshub.bettbox.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="clash" android:host="install-config" />
+                <data android:scheme="clashmeta" android:host="install-config" />
+                <data android:scheme="miaomiaowu" android:host="login" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.appshub.bettbox.MainActivityXGradient"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_x_gradient"
+            android:roundIcon="@mipmap/ic_launcher_x_gradient"
+            android:targetActivity="com.appshub.bettbox.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="clash" android:host="install-config" />
+                <data android:scheme="clashmeta" android:host="install-config" />
+                <data android:scheme="miaomiaowu" android:host="login" />
+            </intent-filter>
+        </activity-alias>
+
         <activity
             android:name=".TempActivity"
             android:exported="true"

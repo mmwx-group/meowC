@@ -81,6 +81,7 @@ class EntryOverride {
     this.source = '',
     this.updatedAt = 0,
     this.active = false,
+    this.ports,
   });
 
   final String server;
@@ -97,6 +98,11 @@ class EntryOverride {
   /// 当前配置里有节点的 server 等于这个键（只有这时内核才会用它）
   final bool active;
 
+  /// 这个入口的端口（规格 §1「入口端口」，2026-11-17 加）：节点端口在里面才算转发节点。
+  /// null = 老主控没给，照旧只比 server；空 = 链上还没有节点，不匹配任何节点。
+  /// 为什么要它：转发链入口所在的机器上另开的直连节点 server 和入口键一样，只比 server 会被当成转发节点。
+  final List<int>? ports;
+
   factory EntryOverride.fromJson(Map<String, dynamic> j) => EntryOverride(
     server: j['server']?.toString() ?? '',
     ips: [
@@ -108,7 +114,11 @@ class EntryOverride {
     source: j['source']?.toString() ?? '',
     updatedAt: (j['updatedAt'] as num?)?.toInt() ?? 0,
     active: j['active'] == true,
+    ports: j['ports'] is List ? [for (final p in j['ports'] as List) if (p is num) p.toInt()] : null,
   );
+
+  /// 端口 [port] 的节点用不用这条覆盖：没给端口集合（老主控）时都用。
+  bool matchesPort(int? port) => ports == null || (port != null && ports!.contains(port));
 
   @override
   bool operator ==(Object other) =>
@@ -117,10 +127,11 @@ class EntryOverride {
       other.rev == rev &&
       other.active == active &&
       other.updatedAt == updatedAt &&
-      other.ips.join(',') == ips.join(',');
+      other.ips.join(',') == ips.join(',') &&
+      other.ports?.join(',') == ports?.join(',');
 
   @override
-  int get hashCode => Object.hash(server, rev, active, updatedAt, ips.join(','));
+  int get hashCode => Object.hash(server, rev, active, updatedAt, ips.join(','), ports?.join(','));
 }
 
 /// 解析核心 `entries` 的列表；只留有 IP 的。
@@ -155,12 +166,12 @@ String entryKeyOf(String server) {
   return host;
 }
 
-/// 节点 [server] 现在生效的主控指定入口；没有为 null。
-EntryOverride? entryOverrideFor(String server, List<EntryOverride> entries) {
+/// 节点（[server] + [port]）现在生效的主控指定入口；没有为 null。主控给了端口集合时节点端口要在里面（规格 §6）。
+EntryOverride? entryOverrideFor(String server, List<EntryOverride> entries, {int? port}) {
   if (server.trim().isEmpty) return null;
   final key = entryKeyOf(server);
   for (final e in entries) {
-    if (e.active && e.ips.isNotEmpty && entryKeyOf(e.server) == key) return e;
+    if (e.active && e.ips.isNotEmpty && entryKeyOf(e.server) == key && e.matchesPort(port)) return e;
   }
   return null;
 }

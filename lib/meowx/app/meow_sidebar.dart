@@ -10,6 +10,7 @@ import '../state/connection.dart';
 import '../state/format.dart';
 import '../state/node_count.dart';
 import '../theme/button_fill.dart';
+import '../theme/m3.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 import 'meow_tab.dart';
@@ -44,7 +45,7 @@ class MeowSidebar extends StatelessWidget {
     return MeowCard(
       width: compact ? compactWidth - 12 : fullWidth - 12,
       padding: EdgeInsets.all(compact ? 10 : 12),
-      radius: BorderRadius.circular(22),
+      radius: BorderRadius.circular(MeowShape.xl),
       // 矮窗口（手机横屏、缩到最小的窗口）放不下时栏内滚动，保证电源键不画到栏外
       child: LayoutBuilder(
         builder: (context, c) => SingleChildScrollView(
@@ -99,21 +100,22 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    final ink = on ? mm.accent : mm.t2;
+    // M3 导航抽屉：选中项 = 次色容器的整颗胶囊
+    final cs = context.cs;
+    final ink = on ? cs.onSecondaryContainer : cs.onSurfaceVariant;
     Widget body = Material(
-      color: on ? mm.soft : Colors.transparent,
-      borderRadius: BorderRadius.circular(14),
+      color: on ? cs.secondaryContainer : Colors.transparent,
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 16),
           child: Row(
             mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
             children: [
-              MeowIcon(tab.glyph, size: 20, color: ink),
+              MeowIcon(tab.glyph, size: 22, color: ink),
               if (!compact) ...[
                 const SizedBox(width: 12),
                 Expanded(
@@ -121,7 +123,7 @@ class _NavItem extends StatelessWidget {
                     tab.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: ink),
+                    style: TextStyle(fontSize: 15, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: ink),
                   ),
                 ),
                 if (tab == MeowTab.proxies || tab == MeowTab.connections) _NavBadge(tab),
@@ -216,7 +218,7 @@ class _ConnectionCard extends ConsumerWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: on && !mm.glass ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(18)),
+      decoration: BoxDecoration(color: on ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(18)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

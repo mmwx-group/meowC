@@ -21,7 +21,6 @@ import 'common/common.dart';
 import 'common/external_control.dart';
 import 'common/network_matcher.dart';
 import 'models/models.dart';
-import 'pages/editor.dart';
 
 ReceivePort? _serviceReceiverPort;
 ReceivePort? _messageReceiverPort;
@@ -103,9 +102,8 @@ Future<void> _runApp() async {
   }
   HttpOverrides.global = BettboxHttpOverrides();
   runApp(ProviderScope(child: const Application()));
-  // MeowX：code_forge 的 Rust 库只有配置查看 / 编辑页用，不再挡首帧。进编辑页的入口都会先等它
-  // （ensureEditorRuntime，只初始化一次）；这里在启动忙完后预热一次，正常使用时进编辑页不用现等。
-  Timer(const Duration(seconds: 5), () => unawaited(ensureEditorRuntime()));
+  // MeowX：code_forge 的 Rust 库只有配置查看 / 编辑页用，进编辑页的入口都会先等它（ensureEditorRuntime，只初始化一次）。
+  // 以前启动 5 秒后预热一次，2026-11-17 起不预热：多数人从不打开编辑页，库与它的初始化一直占着内存。
 }
 
 @pragma('vm:entry-point')

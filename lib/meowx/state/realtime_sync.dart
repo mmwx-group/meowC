@@ -396,8 +396,13 @@ class EntryOverridesController extends Notifier<List<EntryOverride>> {
 }
 
 /// 节点 [name] 现在生效的主控指定入口（按订阅里这个节点的 server 查）；没有为 null。
+/// 只有一个入口 IP 时不显示（2026-11-17 用户要求：只有一个 IP 的转发链没什么可切的，小标只是干扰）；覆盖本身照常在内核里生效。
 final nodeEntryOverrideProvider = Provider.autoDispose.family<EntryOverride?, String>((ref, name) {
-  final server = ref.watch(localNodeKeysProvider.select((m) => m[name]?.server));
-  if (server == null) return null;
-  return ref.watch(entryOverridesProvider.select((list) => entryOverrideFor(server, list)));
+  final key = ref.watch(localNodeKeysProvider.select((m) => m[name]));
+  if (key == null) return null;
+  // 按 server + 端口认：入口机器上另开的直连节点（端口不在入口端口里）不显示
+  final entry = ref.watch(
+    entryOverridesProvider.select((list) => entryOverrideFor(key.server, list, port: key.port)),
+  );
+  return entry != null && entry.ips.length >= 2 ? entry : null;
 });

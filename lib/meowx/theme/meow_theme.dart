@@ -2,44 +2,26 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'button_fill.dart';
+import 'm3.dart';
 import 'tokens.dart';
 
-/// MeowX 主题：Material 3 骨架 + MM token（奶白 / 樱粉 / 墨色，与 iOS 改版一致），不用动态取色。
-/// [look] = 「我的 › 外观」里的主题风格 / 玻璃样式 / 卡片颜色（见 [MeowTokens.resolve]）。
+/// MeowX 主题：Material 3 Expressive。色板由种子色生成（[MeowColors.scheme]：缺省品牌玫瑰，可换主题色或跟随系统取色，
+/// 种子怎么定见 seed.dart），各组件按 M3E 的形状与字重调过；旧页面用的 `context.mm` 由同一份色板推出（[MeowTokens.fromScheme]）。
 ThemeData meowThemeData({
   required Brightness brightness,
   String? fontFamily,
   PageTransitionsTheme? pageTransitionsTheme,
-  MeowLook look = MeowLook.classic,
+  Color seed = MeowColors.brandSeed,
 }) {
-  final tokens = MeowTokens.resolve(brightness, look);
-  // 浮层与 Bettbox 原页面的 Material 用不透明的卡片底：液态玻璃下 elev / card2 是半透明的（内容卡片的玻璃），
-  // 对话框、弹出菜单这些叠在半透明上会发灰。经典主题下这两个就是 elev / card2 本身
-  final solid = tokens.elevSolid;
-  final solid2 = Color.alphaBlend(tokens.card2, solid);
-  final scheme = ColorScheme.fromSeed(
-    seedColor: tokens.accent,
-    brightness: brightness,
-  ).copyWith(
-    primary: tokens.accent,
-    onPrimary: tokens.onAccent,
-    secondary: tokens.accent,
-    surface: tokens.bg,
-    surfaceContainerHigh: solid,
-    surfaceContainerHighest: solid2,
-    onSurfaceVariant: tokens.t2,
-    outlineVariant: tokens.line,
-    surfaceContainerLowest: solid,
-    surfaceContainerLow: solid,
-    surfaceContainer: solid,
-    onSurface: tokens.t1,
-    error: tokens.slow,
-  );
+  final cs = MeowColors.scheme(seed, brightness);
+  final x = MeowM3.from(cs);
+  const stadium = StadiumBorder();
+  RoundedRectangleBorder rounded(double r) => RoundedRectangleBorder(borderRadius: BorderRadius.circular(r));
+
   final base = ThemeData(
     useMaterial3: true,
     brightness: brightness,
-    colorScheme: scheme,
+    colorScheme: cs,
     fontFamily: fontFamily,
     // Windows 自带字体没有国旗 emoji（显示成 CN / US 字母），回落到随包的 Twemoji；Linux 另加中文回落（[linuxTextFallback]）
     fontFamilyFallback: Platform.isWindows ? const ['Twemoji'] : linuxTextFallback,
@@ -47,126 +29,166 @@ ThemeData meowThemeData({
     // Android 上 M3 默认的点按水波是 InkSparkle：点一下要在整块可点区域里逐像素跑约 0.6 秒的噪声着色器，
     // Android 8–9（Skia）首次点按还要现场编译它。换成普通的圆形水波（其它平台本来就是它）。
     splashFactory: InkRipple.splashFactory,
-    scaffoldBackgroundColor: tokens.bg,
-    canvasColor: tokens.bg,
-    cardColor: solid,
-    dialogTheme: DialogThemeData(
-      backgroundColor: solid,
+    scaffoldBackgroundColor: cs.surface,
+    canvasColor: cs.surface,
+    cardTheme: CardThemeData(
+      color: cs.card,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(24))),
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: rounded(MeowShape.xl),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: cs.surfaceContainerHigh,
+      surfaceTintColor: Colors.transparent,
+      shape: rounded(MeowShape.xl),
+      // M3 对话框标题 = headline small；Expressive 用粗字重
+      titleTextStyle: TextStyle(fontSize: 24, height: 32 / 24, fontWeight: FontWeight.w800, color: cs.onSurface),
+      contentTextStyle: TextStyle(fontSize: 14, height: 20 / 14, color: cs.onSurfaceVariant),
     ),
     bottomSheetTheme: BottomSheetThemeData(
-      backgroundColor: solid,
+      backgroundColor: cs.surfaceContainerLow,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(MeowShape.xl))),
     ),
-    // 开关：打开 = 樱粉轨 + 白钮；关闭 = 次级底轨 + 白钮（设计稿的胶囊开关，两态的钮一样大）。
-    // M3 的 Switch 关闭态钮只有 16；给一个透明的 thumbIcon 它就两态都画 24 的钮。
-    switchTheme: SwitchThemeData(
-      thumbIcon: const WidgetStatePropertyAll(Icon(Icons.circle, color: Colors.transparent)),
-      thumbColor: const WidgetStatePropertyAll(Colors.white),
-      trackColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? tokens.btnOn : tokens.card2,
-      ),
-      trackOutlineColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? Colors.transparent : tokens.line,
-      ),
-    ),
-    // 实心主按钮：墨色底配页面底色的字（强调色只用于选中态的字和描边）；
-    // 液态玻璃主题下是按钮那档静态半透明 + 细亮边、墨色字（见 button_fill.dart）
+    // 按钮一律胶囊（M3E 的圆形按钮），最小 48 高保证点按面积
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: tokens.buttonFill(MeowButtonFill.prominent),
-        foregroundColor: tokens.onProminent,
-        side: tokens.glass ? tokens.buttonSide : null,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-        minimumSize: const Size(44, 44),
+        shape: stadium,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: tokens.t1,
-        side: BorderSide(color: tokens.line),
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
-        minimumSize: const Size(44, 44),
+        shape: stadium,
+        minimumSize: const Size(48, 48),
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        side: BorderSide(color: cs.outlineVariant),
+        textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),
     ),
-    textButtonTheme: TextButtonThemeData(style: TextButton.styleFrom(foregroundColor: tokens.accent)),
-    checkboxTheme: CheckboxThemeData(
-      fillColor: WidgetStateProperty.resolveWith(
-        (states) => states.contains(WidgetState.selected) ? tokens.accent : Colors.transparent,
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(shape: stadium, textStyle: const TextStyle(fontWeight: FontWeight.w700)),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(shape: stadium, minimumSize: const Size(48, 48)),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(style: SegmentedButton.styleFrom(shape: stadium)),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: cs.primaryContainer,
+      foregroundColor: cs.onPrimaryContainer,
+      elevation: 2,
+      shape: rounded(MeowShape.l),
+      extendedTextStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+    ),
+    chipTheme: ChipThemeData(
+      shape: rounded(MeowShape.s),
+      side: BorderSide(color: cs.outlineVariant),
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+    ),
+    checkboxTheme: CheckboxThemeData(shape: rounded(MeowShape.xs)),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: cs.surfaceContainerHighest,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(MeowShape.l), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(MeowShape.l), borderSide: BorderSide.none),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(MeowShape.l),
+        borderSide: BorderSide(color: cs.primary, width: 2),
       ),
-      checkColor: WidgetStatePropertyAll(tokens.onAccent),
-      side: BorderSide(color: tokens.t2, width: 2),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(7))),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(MeowShape.l),
+        borderSide: BorderSide(color: cs.error, width: 1.5),
+      ),
     ),
-    progressIndicatorTheme: ProgressIndicatorThemeData(color: tokens.accent, linearTrackColor: tokens.card2),
-    snackBarTheme: SnackBarThemeData(
-      backgroundColor: tokens.t1,
-      contentTextStyle: TextStyle(color: tokens.bg),
-      behavior: SnackBarBehavior.floating,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(16))),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
+      color: cs.primary,
+      linearTrackColor: cs.secondaryContainer,
+      circularTrackColor: cs.secondaryContainer,
     ),
+    snackBarTheme: SnackBarThemeData(behavior: SnackBarBehavior.floating, shape: rounded(MeowShape.m)),
     popupMenuTheme: PopupMenuThemeData(
-      color: solid,
+      color: cs.surfaceContainer,
       surfaceTintColor: Colors.transparent,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18))),
+      shape: rounded(MeowShape.l),
     ),
-    dividerTheme: DividerThemeData(color: tokens.line, space: 1, thickness: 1),
-    navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: solid,
-      indicatorColor: tokens.accent.withValues(alpha: 0.14),
-      labelTextStyle: WidgetStatePropertyAll(
-        TextStyle(fontSize: MeowFont.caption2, fontWeight: FontWeight.w500, color: tokens.t1),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(cs.surfaceContainer),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(rounded(MeowShape.l)),
       ),
     ),
+    dividerTheme: DividerThemeData(color: cs.outlineVariant, space: 1, thickness: 1),
     appBarTheme: AppBarTheme(
-      backgroundColor: tokens.bg,
+      backgroundColor: cs.surface,
       surfaceTintColor: Colors.transparent,
-      foregroundColor: tokens.t1,
+      scrolledUnderElevation: 0,
+      foregroundColor: cs.onSurface,
     ),
-    listTileTheme: ListTileThemeData(tileColor: solid),
-    extensions: [tokens],
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(color: cs.inverseSurface, borderRadius: BorderRadius.circular(MeowShape.xs)),
+      textStyle: TextStyle(color: cs.onInverseSurface, fontSize: MeowFont.caption),
+    ),
+    extensions: [MeowTokens.fromScheme(cs), x],
   );
+  // Expressive 的字：标题 / 大数字用粗字重（不打包新字体）
+  final t = base.textTheme;
+  TextStyle? w(TextStyle? s, FontWeight weight, [double? spacing]) =>
+      s?.copyWith(fontWeight: weight, letterSpacing: spacing);
   return base.copyWith(
-    textTheme: base.textTheme.apply(bodyColor: tokens.t1, displayColor: tokens.t1),
+    textTheme: t
+        .copyWith(
+          displayLarge: w(t.displayLarge, FontWeight.w800, -1),
+          displayMedium: w(t.displayMedium, FontWeight.w800, -0.8),
+          displaySmall: w(t.displaySmall, FontWeight.w800, -0.5),
+          headlineLarge: w(t.headlineLarge, FontWeight.w800, -0.5),
+          headlineMedium: w(t.headlineMedium, FontWeight.w800, -0.3),
+          headlineSmall: w(t.headlineSmall, FontWeight.w700),
+          titleLarge: w(t.titleLarge, FontWeight.w700),
+          titleMedium: w(t.titleMedium, FontWeight.w600),
+          titleSmall: w(t.titleSmall, FontWeight.w600),
+          labelLarge: w(t.labelLarge, FontWeight.w700),
+        )
+        .apply(bodyColor: cs.onSurface, displayColor: cs.onSurface),
   );
 }
 
 /// 亮 / 暗两份主题，记住上一次的结果：参数没变就还是同一对实例。
 ///
-/// [meowThemeData] 每次现建的主题彼此不相等（里面有 WidgetStateProperty.resolveWith 的闭包）。MaterialApp 一重建——
+/// [meowThemeData] 每次现建的主题彼此不相等（里面有 WidgetStateProperty 的闭包）。MaterialApp 一重建——
 /// 切语言、改任何一项主题设置——AnimatedTheme 就认为主题变了，在两份看起来一样的主题之间做 200ms 插值，
 /// 这期间每一帧所有用到主题的 widget（常驻的四个 Tab 页都是）全部重建。拿到的是同一份实例它就直接跳过。
-/// 切浅色 / 深色只是在这两份之间换，渐变照旧。改外观（[MeowLook]）才换一对新的。
+/// 切浅色 / 深色只是在这两份之间换，渐变照旧。换主题色（[seed]）才换一对新的。
 class MeowThemes {
   String? _fontFamily;
   PageTransitionsTheme? _transitions;
-  MeowLook _look = MeowLook.classic;
+  Color _seed = MeowColors.brandSeed;
   ThemeData? _light, _dark;
 
   ({ThemeData light, ThemeData dark}) of({
     String? fontFamily,
     PageTransitionsTheme? pageTransitionsTheme,
-    MeowLook look = MeowLook.classic,
+    Color seed = MeowColors.brandSeed,
   }) {
-    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme || _look != look) {
+    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme || _seed != seed) {
       _fontFamily = fontFamily;
       _transitions = pageTransitionsTheme;
-      _look = look;
+      _seed = seed;
       _light = meowThemeData(
         brightness: Brightness.light,
         fontFamily: fontFamily,
         pageTransitionsTheme: pageTransitionsTheme,
-        look: look,
+        seed: seed,
       );
       _dark = meowThemeData(
         brightness: Brightness.dark,
         fontFamily: fontFamily,
         pageTransitionsTheme: pageTransitionsTheme,
-        look: look,
+        seed: seed,
       );
     }
     return (light: _light!, dark: _dark!);

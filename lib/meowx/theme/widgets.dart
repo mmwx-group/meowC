@@ -1,12 +1,9 @@
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'button_fill.dart';
-import 'glass.dart';
 import 'mesh_glyph.dart';
-import 'haptics.dart';
-import 'motion.dart';
+import 'm3.dart';
+import 'm3_kit.dart';
 import 'svg_path.dart';
 import 'tokens.dart';
 
@@ -105,13 +102,10 @@ class _GlyphPainter extends CustomPainter {
   bool shouldRepaint(_GlyphPainter old) => old.path != path || old.color != color || old.stroke != stroke;
 }
 
-/// 分段选择：卡片底胶囊里放等宽分段，选中 = 墨色滑块配页面底色的字。
-/// [onCard] = 放在白卡片上时槽用次级底（放在主卡 / 页面底上时槽用卡片底）。
-/// 换段时滑块用弹跳弹簧滑过去（只平移、不拉伸，越过两端的部分被槽的圆角裁掉），段内文字颜色 220ms 交叉渐变。
-/// [track] 换槽的颜色（主卡上的半透明白）；[glass] = 液态玻璃主题下滑块换成一块玻璃透镜、选中的字用墨色（经典主题照旧是墨色实心块）。
-/// 液态玻璃主题下其余的滑块（没要玻璃的、低端机上画不了玻璃的）也不是墨色实心块：中性的静态半透明 + 细亮边、墨色的字
-/// （同 iOS 分段的玻璃滑块；强调色那档留给选中的筛选胶囊）。
-class MeowSegment<T> extends StatefulWidget {
+/// 分段选择（M3 改版后就是 [M3ButtonGroup]：连接式按钮组，选中的变主色胶囊）。旧调用点的参数照收：
+/// [onCard] = 放在卡片上（没选中的用 surfaceContainerHighest，否则 surfaceContainerHigh）、[track] 换没选中的底色，
+/// [fontSize] / [glass] 不再起作用。
+class MeowSegment<T> extends StatelessWidget {
   const MeowSegment({
     super.key,
     required this.items,
@@ -138,208 +132,18 @@ class MeowSegment<T> extends StatefulWidget {
   final Set<T> dimmed;
 
   @override
-  State<MeowSegment<T>> createState() => _MeowSegmentState<T>();
+  Widget build(BuildContext context) => M3ButtonGroup<T>(
+    items: items,
+    selected: value,
+    onChanged: onChanged,
+    height: height,
+    dimmed: dimmed,
+    unselectedColor: track ?? (onCard ? context.cs.surfaceContainerHighest : context.cs.surfaceContainerHigh),
+  );
 }
 
-class _MeowSegmentState<T> extends State<MeowSegment<T>> with SingleTickerProviderStateMixin {
-  int get _index => widget.items.indexWhere((it) => it.$1 == widget.value);
-
-  /// 滑块所在的段（小数 = 正在两段之间）；[_target] 是它要去的段
-  late int _target = math.max(0, _index);
-  late final _pos = AnimationController.unbounded(vsync: this, value: _target.toDouble());
-
-  @override
-  void didUpdateWidget(MeowSegment<T> old) {
-    super.didUpdateWidget(old);
-    final i = _index;
-    if (i >= 0 && i != _target) {
-      _target = i;
-      MeowMotion.spring(_pos, i.toDouble(), MeowMotion.bouncy, reduce: MeowMotion.reduced(context));
-    }
-  }
-
-  @override
-  void dispose() {
-    _pos.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final height = widget.height;
-    final outer = height >= 40 ? 14.0 : 11.0;
-    final index = _index;
-    final glass = widget.glass && meowGlassOn(context);
-    final track = widget.track ?? (widget.onCard ? mm.card2 : mm.elev);
-    final row = Row(
-      children: [
-        for (final (i, it) in widget.items.indexed) ...[
-          if (i > 0) const SizedBox(width: _segGap),
-          Expanded(
-            child: Semantics(
-              button: true,
-              selected: i == index,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () {
-                  if (i != index) MeowHaptics.select();   // 换段才震（所有分段同一处，含出站模式）
-                  widget.onChanged(it.$1);
-                },
-                child: Container(
-                  constraints: BoxConstraints(minHeight: height - _segGap * 2),
-                  alignment: Alignment.center,
-                  child: AnimatedDefaultTextStyle(
-                    duration: MeowMotion.of(context, MeowMotion.colorFade),
-                    style: TextStyle(
-                      fontSize: widget.fontSize,
-                      fontWeight: i == index ? FontWeight.w600 : FontWeight.w500,
-                      fontFamilyFallback: linuxTextFallback,   // 这里另起一份样式、不继承主题
-                      // 玻璃滑块是透明的，选中的字仍用墨色
-                      color: i == index ? (glass ? mm.t1 : mm.onProminent) : (widget.dimmed.contains(it.$1) ? mm.t3 : mm.t2),
-                    ),
-                    child: Text(it.$2, maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-    if (glass) {
-      // 玻璃滑块画在文字下面、读它背后的槽与主卡；越过两端的部分由槽的圆角裁掉（只裁不离屏）
-      return Container(
-        constraints: BoxConstraints(minHeight: height),
-        padding: const EdgeInsets.all(_segGap),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(outer)),
-        child: Stack(
-          children: [
-            if (index >= 0)
-              Positioned.fill(child: _GlassThumb(pos: _pos, count: widget.items.length, radius: outer - _segGap)),
-            row,
-          ],
-        ),
-      );
-    }
-    return Container(
-      constraints: BoxConstraints(minHeight: height),
-      padding: const EdgeInsets.all(_segGap),
-      decoration: BoxDecoration(color: track, borderRadius: BorderRadius.circular(outer)),
-      // 滑块每帧重绘：自成一层，不连带整页重画
-      child: RepaintBoundary(
-        child: CustomPaint(
-          painter: _SegmentThumb(
-            pos: _pos,
-            count: widget.items.length,
-            visible: index >= 0,
-            color: mm.segmentThumb,
-            stroke: mm.glass ? mm.buttonSide : null,
-            radius: outer - _segGap,
-            slotRadius: outer,
-          ),
-          child: row,
-        ),
-      ),
-    );
-  }
-}
-
-/// 液态玻璃主题下分段的滑块：一块玻璃透镜，跟着 [pos] 平移（弹簧越过两端时伸进槽的内边距）。
-class _GlassThumb extends StatelessWidget {
-  const _GlassThumb({required this.pos, required this.count, required this.radius});
-
-  final Animation<double> pos;
-  final int count;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) {
-    final glass = MeowGlassBox(
-      style: MeowGlassStyles.lens(context),
-      radius: BorderRadius.circular(radius),
-      shadows: MeowGlassMetrics.lensShadow,
-    );
-    return LayoutBuilder(
-      builder: (_, c) {
-        final w = (c.maxWidth - _segGap * (count - 1)) / count;
-        return AnimatedBuilder(
-          animation: pos,
-          child: glass,
-          builder: (_, child) => Stack(
-            clipBehavior: Clip.none,
-            children: [Positioned(left: pos.value * (w + _segGap), top: 0, bottom: 0, width: w, child: child!)],
-          ),
-        );
-      },
-    );
-  }
-}
-
-const _segGap = 3.0;
-
-/// 分段的滑块：画在分段行的背后，位置跟着 [pos] 只重绘、不重排。
-class _SegmentThumb extends CustomPainter {
-  _SegmentThumb({
-    required this.pos,
-    required this.count,
-    required this.visible,
-    required this.color,
-    required this.radius,
-    required this.slotRadius,
-    this.stroke,
-  }) : super(repaint: pos);
-
-  final Animation<double> pos;
-  final int count;
-  final bool visible;
-  final Color color;
-  final double radius, slotRadius;
-
-  /// 液态玻璃主题下滑块的细亮边（[MeowButtonColors.buttonSide]）；经典 = null
-  final BorderSide? stroke;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (!visible || count <= 0) return;
-    final w = (size.width - _segGap * (count - 1)) / count;
-    final x = pos.value * (w + _segGap);
-    final thumb = RRect.fromRectAndRadius(Rect.fromLTWH(x, 0, w, size.height), Radius.circular(radius));
-    // 弹簧越过两端时滑块伸进槽的内边距，再往外就被槽的圆角裁掉
-    canvas
-      ..save()
-      ..clipRRect(RRect.fromRectAndRadius((Offset.zero & size).inflate(_segGap), Radius.circular(slotRadius)))
-      ..drawRRect(thumb, Paint()..color = color);
-    final s = stroke;
-    if (s != null) {
-      // 描在滑块里面（同 BoxDecoration 的边框）
-      canvas.drawRRect(thumb.deflate(s.width / 2), s.toPaint());
-    }
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_SegmentThumb old) =>
-      old.pos != pos ||
-      old.count != count ||
-      old.visible != visible ||
-      old.color != color ||
-      old.stroke != stroke ||
-      old.radius != radius ||
-      old.slotRadius != slotRadius;
-}
-
-/// 电源键（圆角方块）：墨色底，「液面」是一层从底边纵向缩放的樱粉色块，只走变换不触发布局，进度本身就是液面、不再叠转圈。
-/// - 连接中（[busy]）：液面 1.2s 先快后慢注到七成，之后 6s 线性涨到 0.92（久连不上也不会注满）；
-/// - 连上（[on]）：弹簧补满，同时一圈樱粉描边外扩一次（涟漪），图标从 0.6 弹回 1、颜色渐变成墨色；
-/// - 断开 / 连接失败：350ms 排空。
-/// 初值按出现时的状态给：切回首页时已连接就是满的，不重放。不可用 = 半透明。
-/// 点下去中震一下（只在用户点的时候；核心那边起停引起的状态变化不震）。
-/// 液态玻璃主题：没有墨色实心底（用户 2026-10-28 要求按钮别再是纯色，同 iOS），液面半透明（55%）地在里面涨、图标用墨色；
-/// 液面之上盖一块几乎不着色的玻璃（樱粉着色那一档的边缘折射与高光），形状仍是圆角方块、不加光晕（用户明确不要正圆和光晕），
-/// 只留一层很淡的投影。低端机画不了玻璃时底换成按钮那档静态半透明 + 细亮边（[MeowButtonFill.plain]），照样不是实心块。
-class MeowPowerButton extends StatefulWidget {
+/// 电源键（M3 改版后就是 [M3PowerButton]：没连是圆角方块，连上变成主色饼干，连接中在转）。宽屏侧栏用。
+class MeowPowerButton extends StatelessWidget {
   const MeowPowerButton({
     super.key,
     required this.on,
@@ -354,196 +158,8 @@ class MeowPowerButton extends StatefulWidget {
   final double size;
 
   @override
-  State<MeowPowerButton> createState() => _MeowPowerButtonState();
-}
-
-enum _PowerPhase { off, connecting, on }
-
-class _MeowPowerButtonState extends State<MeowPowerButton> with TickerProviderStateMixin {
-  late final _level = AnimationController.unbounded(vsync: this, value: widget.on ? 1 : 0);
-  late final _ripple = AnimationController(vsync: this, duration: MeowMotion.ripple);
-  late final _icon = AnimationController.unbounded(vsync: this, value: 1);
-  bool _started = false;
-
-  _PowerPhase _phaseOf(MeowPowerButton w) =>
-      w.on ? _PowerPhase.on : (w.busy ? _PowerPhase.connecting : _PowerPhase.off);
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // 连接中切回来：接着注（从底开始，之前注到哪了不知道）
-    if (!_started) {
-      _started = true;
-      if (_phaseOf(widget) == _PowerPhase.connecting) _apply(_PowerPhase.connecting);
-    }
-  }
-
-  @override
-  void didUpdateWidget(MeowPowerButton old) {
-    super.didUpdateWidget(old);
-    final next = _phaseOf(widget);
-    if (next != _phaseOf(old)) _apply(next);
-  }
-
-  void _apply(_PowerPhase phase) {
-    final reduce = MeowMotion.reduced(context);
-    switch (phase) {
-      case _PowerPhase.connecting:
-        if (reduce) {
-          _level.value = MeowMotion.pourFastLevel;
-        } else {
-          _level.animateWith(PourSimulation(_level.value));
-        }
-      case _PowerPhase.on:
-        MeowMotion.spring(_level, 1, MeowMotion.bouncy, reduce: reduce);
-        if (!reduce) {
-          _ripple.forward(from: 0);
-          _icon.value = MeowMotion.iconPopFrom;
-          MeowMotion.spring(_icon, 1, MeowMotion.bouncy);
-        }
-      case _PowerPhase.off:
-        if (reduce) {
-          _level.value = 0;
-        } else {
-          _level.animateTo(0, duration: MeowMotion.drainDuration, curve: MeowMotion.drain);
-        }
-    }
-  }
-
-  @override
-  void dispose() {
-    _level.dispose();
-    _ripple.dispose();
-    _icon.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final on = widget.on;
-    final size = widget.size;
-    final radius = BorderRadius.circular(size * 0.325);
-    // 玻璃透镜画不画看宿主（低端机不画）；没有实心底 / 半透明液面 / 墨色图标看主题（低端机上也一样）
-    final glass = meowGlassOn(context);
-    final glassTheme = mm.glass;
-    return Semantics(
-      button: true,
-      enabled: widget.enabled,
-      label: on ? '断开连接' : (widget.busy ? '正在连接' : '连接'),
-      child: Opacity(
-        opacity: widget.enabled || widget.busy ? 1 : 0.4,
-        child: GestureDetector(
-          onTap: widget.enabled
-              ? () {
-                  MeowHaptics.toggle();
-                  widget.onTap();
-                }
-              : null,
-          child: SizedBox.square(
-            dimension: size,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 底：阴影只换颜色、半径不变（玻璃下不要这圈光晕，投影由玻璃自己带）。
-                // 液态玻璃主题没有实心底：有透镜时透镜读的就是背后的卡片；低端机没有透镜，垫一层静态半透明
-                Positioned.fill(
-                  child: glassTheme
-                      ? (glass
-                            ? const SizedBox.shrink()
-                            : DecoratedBox(
-                                decoration: BoxDecoration(color: mm.buttonFill(MeowButtonFill.plain), borderRadius: radius),
-                              ))
-                      : glass
-                      ? DecoratedBox(decoration: BoxDecoration(color: mm.t1, borderRadius: radius))
-                      : AnimatedContainer(
-                          duration: MeowMotion.of(context, MeowMotion.colorFade),
-                          decoration: BoxDecoration(
-                            color: mm.t1,
-                            borderRadius: radius,
-                            boxShadow: [
-                              BoxShadow(
-                                color: on ? mm.pink.withValues(alpha: 0.5) : const Color(0x382A2130),
-                                blurRadius: size * 0.25,
-                                offset: Offset(0, size * 0.1),
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
-                // 液面：弹簧补满时会越过 1，越出的部分被圆角裁掉
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: radius,
-                    child: AnimatedBuilder(
-                      animation: _level,
-                      builder: (_, child) => Transform(
-                        alignment: Alignment.bottomCenter,
-                        transform: Matrix4.diagonal3Values(1, _level.value.clamp(0.0, 1.5), 1),
-                        child: child,
-                      ),
-                      // 液态玻璃主题：液面半透明（直接用带透明度的颜色，不套 Opacity 层）
-                      child: ColoredBox(color: glassTheme ? mm.btnOn.withValues(alpha: mm.btnOn.a * 0.55) : mm.btnOn),
-                    ),
-                  ),
-                ),
-                // 玻璃：画在底与液面之后，读的就是它们（边缘把液面弯进来）
-                if (glass)
-                  Positioned.fill(
-                    child: MeowGlassBox(
-                      style: MeowGlassStyles.power(context),
-                      radius: radius,
-                      shadows: MeowGlassMetrics.powerShadow,
-                    ),
-                  )
-                // 低端机：细亮边描在液面上面（同其它按钮）
-                else if (glassTheme)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: DecoratedBox(decoration: BoxDecoration(border: mm.buttonBorder, borderRadius: radius)),
-                    ),
-                  ),
-                // 涟漪：连上那一下外扩一圈，平时不画
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedBuilder(
-                      animation: _ripple,
-                      builder: (_, child) {
-                        final v = _ripple.value;
-                        if (v <= 0 || v >= 1) return const SizedBox.shrink();
-                        final t = MeowMotion.emphasized.transform(v);
-                        return Opacity(
-                          opacity: 0.8 * (1 - t),
-                          child: Transform.scale(scale: 1 + 0.5 * t, child: child),
-                        );
-                      },
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          borderRadius: radius,
-                          border: Border.all(color: mm.btnOn, width: 2),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Center(
-                  child: ScaleTransition(
-                    scale: _icon,
-                    child: TweenAnimationBuilder<Color?>(
-                      // 液态玻璃主题下没有墨色底，连没连上图标都是墨色
-                      tween: ColorTween(end: glassTheme ? mm.t1 : (on ? mm.onBtn : mm.bg)),
-                      duration: MeowMotion.of(context, MeowMotion.colorFade),
-                      builder: (_, c, _) => MeowIcon(MeowGlyph.power, size: size * 0.43, color: c, stroke: 2.2),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      M3PowerButton(on: on, busy: busy, enabled: enabled, size: size, onTap: onTap);
 }
 
 /// 地区码小标签（HK / JP …）：只用于出口 IP 查到的归属地代码。节点名里的国旗原样显示（和代理组名一个画法），不再换成这个标签。
@@ -578,7 +194,7 @@ class RegionTag extends StatelessWidget {
   }
 }
 
-/// 行首的图标方块：柔粉底 + 玫红图标（[tint] 可换色，底取它的 14%）。
+/// 行首的图标方块：主色容器底 + 图标（[tint] 可换色，底取它的 14%）。
 class IconTile extends StatelessWidget {
   const IconTile({super.key, this.icon, this.glyph, this.mesh = false, this.size = 32, this.tint});
   final IconData? icon;
@@ -590,15 +206,15 @@ class IconTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    final fg = tint ?? mm.accent;
+    final cs = context.cs;
+    final fg = tint ?? cs.onPrimaryContainer;
     return Container(
       width: size,
       height: size,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: tint == null ? mm.soft : fg.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(size * 0.31),
+        color: tint == null ? cs.primaryContainer : fg.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(size * 0.35),
       ),
       child: mesh
           ? MeshGlyph(size: size * 0.62, color: fg)
@@ -609,7 +225,7 @@ class IconTile extends StatelessWidget {
   }
 }
 
-/// 小按钮的底：40×30 奶白胶囊（同延迟胶囊一族，底色 card2），里面放 13–14 号的图标。
+/// 小按钮的底：40×30 胶囊（surfaceContainerHighest），里面放 13–14 号的图标。
 /// 节点页组卡的测速 / 展开钮、设置行末尾的箭头都用它（以前是裸的小图标，iOS 上用户反馈太小不好点）。
 /// [onTap] 为 null = 只是个底（整行的点按照旧由行自己接）。
 class MeowChip extends StatelessWidget {
@@ -624,7 +240,7 @@ class MeowChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final body = Material(
-      color: context.mm.card2,
+      color: context.cs.surfaceContainerHighest,
       shape: const StadiumBorder(),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

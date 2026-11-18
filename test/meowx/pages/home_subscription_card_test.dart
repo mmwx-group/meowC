@@ -4,6 +4,7 @@ import 'package:bett_box/meowx/app/meow_tab.dart';
 import 'package:bett_box/meowx/config/direct_profile.dart';
 import 'package:bett_box/meowx/pages/dashboard/info_cards.dart';
 import 'package:bett_box/meowx/panel/account.dart';
+import 'package:bett_box/meowx/theme/m3_kit.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
@@ -149,7 +150,7 @@ void main() {
       expect(find.text('选择订阅'), findsOneWidget);
       expect(find.text('切换订阅'), findsNothing);
       expect(find.text('未使用订阅，流量全部直连'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsNothing);
+      expect(find.byType(M3WavyProgress), findsNothing);
       expect(find.byTooltip('刷新订阅'), findsNothing);
     });
 
@@ -158,8 +159,8 @@ void main() {
       final actions = await _pump(tester, current: _main, dense: dense, size: dense ? const Size(520, 400) : const Size(320, 400));
 
       expect(find.text('切换订阅'), findsOneWidget);
-      expect(find.byType(LinearProgressIndicator), findsOneWidget);
-      expect(find.text('128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
+      expect(find.byType(M3WavyProgress), findsOneWidget);
+      expect(find.text('已用 128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
       expect(find.text('3 小时前更新'), findsOneWidget);
 
       actions.refreshGate = Completer<void>();

@@ -17,7 +17,7 @@ import 'package:bett_box/plugins/service.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/providers/state.dart' as providers_state;
 
-import 'package:bett_box/widgets/dialog.dart';
+import 'package:bett_box/meowx/theme/common_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart' as flutter_riverpod;
@@ -86,20 +86,11 @@ class GlobalState {
   final Lock _scriptEvaluateLock = Lock();
   bool isInit = false;
 
-  bool get hasMediaUnlockWidget {
-    final widgets = system.isAndroid
-        ? config.appSetting.mobileDashboardWidgets
-        : config.appSetting.desktopDashboardWidgets;
-    return widgets.contains(DashboardWidget.mediaUnlock) ||
-        widgets.contains(DashboardWidget.mediaUnlockSmall);
-  }
+  // MeowX：Bettbox 首页的「流媒体解锁」「网络检测」格子随 Bettbox 界面删掉了（2026-11-17），这两项后台检测一律不跑
+  // （设置里存着的旧组件列表照旧读写，只是不再据此触发）。
+  bool get hasMediaUnlockWidget => false;
 
-  bool get hasNetworkDetectionWidget {
-    final widgets = system.isAndroid
-        ? config.appSetting.mobileDashboardWidgets
-        : config.appSetting.desktopDashboardWidgets;
-    return widgets.contains(DashboardWidget.networkDetection);
-  }
+  bool get hasNetworkDetectionWidget => false;
 
   bool get isStart => startTime != null && startTime!.isBeforeNow;
 

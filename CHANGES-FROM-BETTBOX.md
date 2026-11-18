@@ -296,3 +296,16 @@
 - `lib/common/request.dart`：`getFileResponseForUrl` 多一个可选的 `extraHeaders`（推送触发的重拉带 `mmwx-refresh: push`）。
 - `lib/models/profile.dart`：`Profile.update` 多一个可选的 `requestHeaders`；内容写盘后记下主控的应答头 `mmwx-sub-key` / `mmwx-sub-rev` / `mmwx-realtime-url` / `mmwx-realtime`（没有就记空；订阅键只认应答头，不从地址猜），存 `<数据目录>/meowx-sub-meta.json`（不进偏好、不跟 WebDAV 备份走）。
 - 其余在 `lib/meowx/`：纯逻辑 `config/subscription_meta.dart`（主控地址规范化、要连哪些主控：登录了用会话 token，没登录的主控用订阅给的只读凭证、一个主控一条、优先当前在用的订阅；一条订阅变更要重拉哪些档）；`state/subscription_meta_store.dart`（应答头落盘）；`state/realtime_sync.dart`（登录状态 / 订阅档 / 应答头变了就重配内核通道，不再连的主控清掉它指定的入口；订阅待更新队列：逐个重拉、内容真变了且是当前档才按 `setProfileAndAutoApply` 应用，同一档 30 秒内只拉一次，失败的按 1、2、4… 分钟重试；桌面换网叫醒通道；节点页看得见时每 30 秒取一次入口覆盖表）；`panel/realtime.dart`（内核调用与回包解析）；退出登录时清掉这个主控指定的入口（`panel/account.dart`）；节点格上「主控指定入口」小标（`pages/proxies/entry_badge.dart`，点开 / 悬停看「主控指定入口 IP · 切换时间」）。测试 `test/meowx/config/subscription_meta_test.dart`、`test/meowx/panel/realtime_test.dart`、`test/meowx/state/realtime_sync_test.dart`；删掉旧 Dart 通道的 `test/meowx/panel/realtime_backoff_test.dart`。
+
+## 2026-11-17 · M3 Expressive 改版 + 删除 Bettbox 原界面 + 可选「X」图标
+- 界面整体按 Material 3 Expressive 重做（底栏液态玻璃保留），都在 `lib/meowx/`；Bettbox 的提示条（`lib/manager/message_manager.dart`）配色改成 M3 snackbar（inverseSurface 底），进出动画由 `animations` 包的 FadeThroughBox 换成 `AnimatedSwitcher`。
+- **删除 Bettbox 原界面**：`lib/views/`、`lib/pages/`、`lib/widgets/` 整个删掉（MeowX 的「高级」页早已取代它们）。底层还在用的部分：
+  - 代理测速调度（`DelayTestCoordinator` / `delayTest` / `proxyDelayTest`，原 `lib/views/proxies/common.dart`）挪到 `lib/common/delay_test.dart`，只给旧代理页排版用的几个函数没搬；
+  - 通用对话框 `CommonDialog`（`controller.dart` / `state.dart` 的提示框用）、代码编辑页、录快捷键、网络图标、IP 详情、跟到底的列表挪进 `lib/meowx/`（编辑页外壳换成 Scaffold / PopupMenuButton / PopScope / ListTile，编辑器本体与查找面板照旧）；
+  - `lib/common/system.dart`：Linux 提权时的管理员密码框换成文件内一个最简的 `_PasswordDialog`（原 `InputDialog`）；`lib/common/scroll.dart` 的桌面滚动条直接写 `Scrollbar`（原 `CommonScrollBar`）；`lib/common/context.dart` 去掉 `commonScaffoldState`；
+  - `lib/common/navigation.dart`：只剩 toPage 要 push 的几页（请求记录 / 资源 / 脚本 / 高级），都是 MeowX 自己的页面；`lib/manager/app_manager.dart` 删掉 Bettbox 桌面侧栏 `AppSidebarContainer`（MeowX 壳自带导航，它一直原样返回子组件，却在每次导航状态变化时重建），`lib/application.dart` 跟着去掉这一层；
+  - `lib/controller.dart` 删掉只给旧覆写页用的 `handleAddOrUpdate`；`lib/enum/enum.dart` 的 `DashboardWidget` 不再带对应的仪表盘组件，只留取值（设置里存着它们）。
+- **内存 / 后台**：Bettbox 首页「网络检测」「流媒体解锁」格子没有了，`lib/state.dart` 的 `hasNetworkDetectionWidget` / `hasMediaUnlockWidget` 一律为 false，`app_manager.dart` 不再在启动 / 回前台 / 换节点时触发这两项后台检测（首页出口 IP 是 MeowX 自己的）；`lib/main.dart` 不再在启动 5 秒后预载代码编辑器的 Rust 库（进编辑页时才加载）。模拟器冷启动 PSS 约 217MB → 213MB，Dart 代码 17.6MB → 15.6MB。
+- `pubspec.yaml`：去掉只给旧界面用的 `animations`、`emoji_regex`、`defer_pointer`、`google_nav_bar`、`web_socket_channel`；删掉关于页的贡献者头像 `assets/images/avatars/`。
+- **可选 App 图标「X」三款**（双色 / 墨底 / 渐变，设计稿 `design/brand/icon-x.svg`）：`AndroidManifest.xml` 加 `MainActivityXDuo` / `XInk` / `XGradient` 三个默认停用的 alias（同 M 图标）；`AppPlugin.kt` 的图标表、`NotificationComponentCache.kt` 的通知入口各加三项；自适应图标资源由 `scripts/make-x-icons.py`（几何在 `scripts/x_icons.py`，MeowX iOS 用同一份）生成：位图背景层 + 前景层 + 单色层。
+- 首页「喵窝」卡用普通卡片底色，并可在「首页卡片」里关掉（`lib/models/meow.dart` 的 `HomeCard` 加 `mesh`）；入口覆盖小标按 server + 端口认（主控新字段 `ports`，内核对应改动在 meowx-core 分支 `feat/entry-ports`），只有一个入口 IP 时不显示。

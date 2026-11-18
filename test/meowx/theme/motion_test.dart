@@ -2,7 +2,6 @@ import 'package:bett_box/meowx/pages/proxies/group_reveal.dart';
 import 'package:bett_box/meowx/theme/morph_menu.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
 import 'package:bett_box/meowx/theme/sliver_reveal.dart';
-import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -108,62 +107,7 @@ void main() {
     });
   });
 
-  group('电源键液面', () {
-    test('1.2s 注到七成，再 6s 涨到 0.92 停住', () {
-      expect(pourLevel(0, Duration.zero), 0);
-      expect(pourLevel(0, const Duration(milliseconds: 600)), inExclusiveRange(0.35, 0.7));
-      expect(pourLevel(0, const Duration(milliseconds: 1200)), closeTo(0.7, 1e-9));
-      expect(pourLevel(0, const Duration(milliseconds: 4200)), closeTo(0.81, 1e-9));
-      expect(pourLevel(0, const Duration(milliseconds: 7200)), closeTo(0.92, 1e-9));
-      expect(pourLevel(0, const Duration(seconds: 60)), closeTo(0.92, 1e-9));
-      // 从半满接着注不会先掉下去
-      expect(pourLevel(0.4, Duration.zero), 0.4);
-      expect(PourSimulation(0).isDone(7.3), isTrue);
-      expect(PourSimulation(0).isDone(7.0), isFalse);
-    });
 
-    testWidgets('一出现就是已连接：直接满、不重放（没有在跑的动画）', (tester) async {
-      await tester.pumpWidget(_app(MeowPowerButton(on: true, onTap: () {})));
-      expect(tester.hasRunningAnimations, isFalse);
-    });
-
-    testWidgets('连接中 → 已连接：液面 / 涟漪 / 图标在动；移除动画时直接终态', (tester) async {
-      Widget button(bool on, bool busy, {bool reduce = false}) =>
-          _app(MeowPowerButton(on: on, busy: busy, onTap: () {}), reduce: reduce);
-      await tester.pumpWidget(button(false, true));
-      expect(tester.hasRunningAnimations, isTrue);
-      await tester.pumpWidget(button(true, false));
-      expect(tester.hasRunningAnimations, isTrue);
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(button(false, false));
-      expect(tester.hasRunningAnimations, isTrue);
-      await tester.pumpAndSettle();
-
-      await tester.pumpWidget(button(false, true, reduce: true));
-      expect(tester.hasRunningAnimations, isFalse);
-      await tester.pumpWidget(button(true, false, reduce: true));
-      expect(tester.hasRunningAnimations, isFalse);
-    });
-  });
-
-  group('分段滑块', () {
-    testWidgets('换段时滑块弹过去；移除动画时直接到位', (tester) async {
-      Widget seg(int v, {bool reduce = false}) => _app(
-        SizedBox(
-          width: 300,
-          child: MeowSegment<int>(items: const [(0, '规则'), (1, '全局'), (2, '直连')], value: v, onChanged: (_) {}),
-        ),
-        reduce: reduce,
-      );
-      await tester.pumpWidget(seg(0));
-      expect(tester.hasRunningAnimations, isFalse);
-      await tester.pumpWidget(seg(2));
-      expect(tester.hasRunningAnimations, isTrue);
-      await tester.pumpAndSettle();
-      await tester.pumpWidget(seg(1, reduce: true));
-      expect(tester.hasRunningAnimations, isFalse);
-    });
-  });
 
   group('弹出菜单', () {
     test('落点：从按钮顶边往下；下面放不下往上长；左右收进屏幕', () {

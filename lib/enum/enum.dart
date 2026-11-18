@@ -4,8 +4,6 @@ import 'dart:io';
 
 import 'package:bett_box/common/system.dart';
 import 'package:bett_box/common/app_localizations.dart';
-import 'package:bett_box/views/dashboard/widgets/widgets.dart';
-import 'package:bett_box/widgets/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -317,59 +315,32 @@ enum FunctionTag {
   autoScrollToEnd,
 }
 
+/// 首页组件（Bettbox 原仪表盘的格子）。2026-11-17 删掉 Bettbox 界面后不再带对应的组件，只留取值：设置里存着它们，
+/// 「网络检测」「流媒体解锁」在不在列表里还决定要不要在后台跑这两项检测（state.dart / app_manager）。
 enum DashboardWidget {
-  networkSpeed(GridItem(crossAxisCellCount: 8, child: NetworkSpeed())),
-  networkSpeedSmall(
-    GridItem(crossAxisCellCount: 4, child: NetworkSpeedSmall()),
-  ),
-  outboundModeV2(GridItem(crossAxisCellCount: 8, child: OutboundModeV2())),
-  outboundMode(GridItem(crossAxisCellCount: 4, child: OutboundMode())),
-  trafficUsage(GridItem(crossAxisCellCount: 4, child: TrafficUsage())),
-  networkDetection(GridItem(crossAxisCellCount: 4, child: NetworkDetection())),
-  tunButton(
-    GridItem(crossAxisCellCount: 4, child: TUNButton()),
-    platforms: desktopPlatforms,
-  ),
-  vpnButton(
-    GridItem(crossAxisCellCount: 4, child: VpnButton()),
-    platforms: [SupportPlatform.Android],
-  ),
-  systemProxyButton(
-    GridItem(crossAxisCellCount: 4, child: SystemProxyButton()),
-    platforms: desktopPlatforms,
-  ),
-  intranetIp(GridItem(crossAxisCellCount: 4, child: IntranetIP())),
-  memoryInfo(GridItem(crossAxisCellCount: 4, child: MemoryInfo())),
-  connectionsCount(GridItem(crossAxisCellCount: 4, child: ConnectionsCount())),
-  ipv6Switch(GridItem(crossAxisCellCount: 4, child: Ipv6Switch())),
-  wakelockSwitch(
-    GridItem(crossAxisCellCount: 4, child: WakelockSwitch()),
-    platforms: desktopPlatforms,
-  ),
-  dnsOverride(GridItem(crossAxisCellCount: 4, child: DnsOverride())),
-  snifferOverride(GridItem(crossAxisCellCount: 4, child: SnifferOverride())),
-  ntpOverride(GridItem(crossAxisCellCount: 4, child: NtpOverride())),
-  providersInfo(GridItem(crossAxisCellCount: 4, child: ProvidersInfo())),
-  fcmStatus(GridItem(crossAxisCellCount: 4, child: FcmStatus())),
-  onlinePanel(GridItem(crossAxisCellCount: 4, child: OnlinePanel())),
-  mediaUnlock(GridItem(crossAxisCellCount: 8, child: MediaUnlock())),
-  mediaUnlockSmall(GridItem(crossAxisCellCount: 4, child: MediaUnlockSmall())),
-  startButton(
-    GridItem(crossAxisCellCount: 4, isDeletable: false, child: StartButton()),
-  );
-
-  final GridItem widget;
-  final List<SupportPlatform> platforms;
-
-  const DashboardWidget(this.widget, {this.platforms = SupportPlatform.values});
-
-  static DashboardWidget getDashboardWidget(GridItem gridItem) {
-    final dashboardWidgets = DashboardWidget.values;
-    final index = dashboardWidgets.indexWhere(
-      (item) => item.widget == gridItem,
-    );
-    return dashboardWidgets[index];
-  }
+  networkSpeed,
+  networkSpeedSmall,
+  outboundModeV2,
+  outboundMode,
+  trafficUsage,
+  networkDetection,
+  tunButton,
+  vpnButton,
+  systemProxyButton,
+  intranetIp,
+  memoryInfo,
+  connectionsCount,
+  ipv6Switch,
+  wakelockSwitch,
+  dnsOverride,
+  snifferOverride,
+  ntpOverride,
+  providersInfo,
+  fcmStatus,
+  onlinePanel,
+  mediaUnlock,
+  mediaUnlockSmall,
+  startButton,
 }
 
 enum GeodataLoader { standard, memconservative }

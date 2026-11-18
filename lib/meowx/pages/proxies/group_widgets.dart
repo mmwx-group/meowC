@@ -1,167 +1,95 @@
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
-import 'package:bett_box/views/proxies/common.dart';
-import 'package:bett_box/widgets/icon.dart';
-import '../../theme/card_surface.dart';
+import 'package:bett_box/common/delay_test.dart';
+import 'package:bett_box/meowx/theme/target_icon.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
-import '../../state/latency.dart';
+import '../../state/format.dart';
 import '../../state/meow_settings.dart';
-import '../../theme/button_fill.dart';
 import '../../theme/haptics.dart';
+import '../../theme/latency_badge.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/motion.dart';
-import '../../theme/popover.dart';
+import '../../theme/badges.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart';
 import 'node_grid.dart';
 import 'node_parts.dart';
 
-/// 单组布局顶部的组按钮：当前组的 icon + 组名 / 类型 · 成员数 · 共几个组，行尾「切换」胶囊。点开选组面板（[showGroupPicker]）。
-/// [onTap] 拿到的是按钮自己的 context：宽屏的选组面板从按钮下面弹出，要按它定位。
-class GroupPickerButton extends StatelessWidget {
-  const GroupPickerButton({super.key, required this.group, required this.groupCount, required this.onTap});
-  final Group group;
-  final int groupCount;
-  final void Function(BuildContext anchor) onTap;
+/// 单组布局顶部的代理组 chip（画布稿 Nodes）：一排横向滚动的筛选 chip，选中的带勾、变成胶囊；换组时把选中的那个滚进视野。
+/// [padding] = 页面左右留白：滚动区本身贴到屏幕两边，chip 滚出去时不在留白处被裁掉。
+class GroupChipBar extends StatefulWidget {
+  const GroupChipBar({
+    super.key,
+    required this.groups,
+    required this.selected,
+    required this.onSelected,
+    this.padding = EdgeInsets.zero,
+  });
+
+  final List<Group> groups;
+  final String selected;
+  final ValueChanged<String> onSelected;
+  final EdgeInsets padding;
 
   @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return Semantics(
-      button: true,
-      label: '当前代理组 ${group.name}，${S.pickGroup}',
-      excludeSemantics: true,
-      child: MeowCardMaterial(
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(20))),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => onTap(context),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 58),
-            padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-            child: Row(
-              children: [
-                if (group.icon.isNotEmpty) ...[
-                  CommonTargetIcon(src: group.icon, size: 22),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        group.name,   // 国旗原样显示，和组卡、节点格一个画法
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),
-                      ),
-                      const SizedBox(height: 3),
-                      FitRow(
-                        head: Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: GroupTypeTag(group.type, bg: mm.card2, small: true),
-                        ),
-                        text: Text(
-                          '${group.all.length} 个成员 · 共 $groupCount 个组',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: mm.t2),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  constraints: const BoxConstraints(minHeight: 32),
-                  padding: const EdgeInsets.only(left: 12, right: 8),
-                  decoration: ShapeDecoration(
-                    color: mm.buttonFill(MeowButtonFill.accent, classic: Color.alphaBlend(mm.soft, mm.elev)),
-                    shape: StadiumBorder(side: mm.buttonSide),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '切换',
-                        maxLines: 1,
-                        softWrap: false,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: mm.accent),
-                      ),
-                      const SizedBox(width: 2),
-                      Icon(Icons.unfold_more_rounded, size: 18, color: mm.accent),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  State<GroupChipBar> createState() => _GroupChipBarState();
 }
 
-/// 选组面板：每组一张组卡（icon / 名 / 类型 / 成员数 / 当前选中 + 延迟），当前组高亮。点一组 → 收起并返回组名；点外面收起 → null。
-/// 手机是底部弹出面板；有侧栏的宽屏（平板竖屏、Windows 窄窗口）从组按钮下面弹出（同奖牌详情的 popover），宽度跟按钮。
-Future<String?> showGroupPicker(
-  BuildContext anchor, {
-  required List<Group> groups,
-  required String current,
-  required bool wide,
-}) {
-  Widget list(BuildContext ctx, EdgeInsets padding) => ListView.separated(
-    shrinkWrap: true,
-    padding: padding,
-    itemCount: groups.length,
-    separatorBuilder: (_, _) => const SizedBox(height: 8),
-    itemBuilder: (_, i) => GroupCard(
-      group: groups[i],
-      selected: groups[i].name == current,
-      showCount: true,
-      onTap: () => Navigator.of(ctx).pop(groups[i].name),
-    ),
-  );
+class _GroupChipBarState extends State<GroupChipBar> {
+  final _keys = <String, GlobalKey>{};
 
-  if (wide) {
-    final width = anchor.size?.width ?? 360;
-    return showAnchoredPopover<String>(
-      anchor,
-      width: math.min(width, 440),
-      builder: (ctx) => ColoredBox(color: ctx.mm.bg, child: list(ctx, const EdgeInsets.all(8))),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _reveal(animate: false);
   }
-  return showModalBottomSheet<String>(
-    context: anchor,
-    showDragHandle: true,
-    isScrollControlled: true,   // 默认上限是屏高的 9/16；组多时放到 3/4
-    useSafeArea: true,
-    backgroundColor: anchor.mm.bg,   // 组卡是白卡，垫在页面底色上（同页面里的样子）
-    builder: (ctx) {
-      final mm = ctx.mm;
-      return ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.75),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-              child: Text(
-                S.pickGroup,
-                style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w600, color: mm.t1),
-              ),
-            ),
-            Flexible(child: list(ctx, EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.paddingOf(ctx).bottom))),
-          ],
-        ),
+
+  @override
+  void didUpdateWidget(GroupChipBar old) {
+    super.didUpdateWidget(old);
+    if (old.selected != widget.selected) _reveal(animate: true);
+  }
+
+  void _reveal({required bool animate}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _keys[widget.selected]?.currentContext;
+      if (ctx == null || !mounted) return;
+      Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.5,
+        duration: animate && !MeowMotion.reduced(context) ? const Duration(milliseconds: 300) : Duration.zero,
+        curve: Curves.easeOutCubic,
       );
-    },
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 40,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: EdgeInsets.only(left: widget.padding.left, right: widget.padding.right),
+      itemCount: widget.groups.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 8),
+      itemBuilder: (_, i) {
+        final g = widget.groups[i];
+        final on = g.name == widget.selected;
+        return M3FilterChip(
+          key: _keys.putIfAbsent(g.name, GlobalKey.new),
+          label: g.name,
+          selected: on,
+          showCheck: true,
+          height: 40,
+          onTap: on ? null : () => widget.onSelected(g.name),
+        );
+      },
+    ),
   );
 }
 
@@ -179,7 +107,7 @@ class GroupTestButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
+    final cs = context.cs;
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     return ListenableBuilder(
       listenable: delayTestCoordinator,
@@ -189,12 +117,20 @@ class GroupTestButton extends ConsumerWidget {
           MeowHaptics.tap();
           delayTest(group.all, testUrl: group.testUrl, groupName: group.name);
         }
+
+        // 测过：延迟色调容器（同节点行的延迟胶囊）；没测过 / 测速中：中性底 + 闪电「测速」/ 转圈
+        final tone = testing || delay == null ? M3Tone.neutral : latencyTone(delay, mode);
+        final (bg, fg) = switch (tone) {
+          M3Tone.ok => (context.m3.okContainer, context.m3.onOkContainer),
+          M3Tone.warn => (context.m3.warnContainer, context.m3.onWarnContainer),
+          M3Tone.error => (cs.errorContainer, cs.onErrorContainer),
+          _ => (compact ? cs.surfaceContainerHighest : cs.surfaceContainerLowest.withValues(alpha: 0.7), cs.onSurface),
+        };
         final Widget content;
         if (testing) {
-          content = SizedBox(width: 13, height: 13, child: CircularProgressIndicator(strokeWidth: 2, color: mm.accent));
+          content = SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary));
         } else if (delay == null) {
-          // 20 号：Material 的 bolt 在 24 格里留白多，20 号才和 iOS 胶囊里 14pt 的 bolt.fill 一样大
-          final bolt = Icon(Icons.bolt_rounded, size: compact ? 20 : 17, color: mm.accent);
+          final bolt = Icon(Icons.bolt_rounded, size: 18, color: cs.primary);
           content = compact
               ? bolt
               : Row(
@@ -202,29 +138,33 @@ class GroupTestButton extends ConsumerWidget {
                   children: [
                     bolt,
                     const SizedBox(width: 2),
-                    Text('测速', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: mm.t1)),
+                    Text('测速', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fg)),
                   ],
                 );
         } else {
-          final (text, color) = msStyle(mm, delay, mode, unit: false);
           content = Text(
-            text,
+            LatencyBadge.text(delay, unit: !compact),
             maxLines: 1,
             softWrap: false,
-            style: MeowFont.mono(size: compact ? 12 : 13, weight: FontWeight.w700, color: color),
+            style: TextStyle(
+              fontSize: compact ? 12 : 13,
+              fontWeight: FontWeight.w800,
+              color: fg,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           );
         }
         return Tooltip(
           message: S.testGroup,
           child: Material(
-            color: compact ? mm.card2 : mm.elev,
+            color: bg,
             shape: const StadiumBorder(),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: testing ? null : run,
               child: Container(
-                constraints: BoxConstraints(minWidth: compact ? MeowChip.width : 64, minHeight: compact ? MeowChip.height : height),
-                padding: EdgeInsets.symmetric(horizontal: compact ? 9 : 14),
+                constraints: BoxConstraints(minWidth: compact ? 44 : 64, minHeight: compact ? 30 : height),
+                padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 14),
                 alignment: Alignment.center,
                 child: AnimatedSwitcher(duration: const Duration(milliseconds: 180), child: content),
               ),
@@ -236,261 +176,111 @@ class GroupTestButton extends ConsumerWidget {
   }
 }
 
-/// url-test / fallback 组的「自动选择」开关：开 = 按策略自动选（健康检查 / 故障转移照常）；手选节点后翻成关（已固定）。
-/// 打开 = 取消固定，关掉 = 把当前自动选中的节点固定下来。
-/// 默认是一整行（名称 + 说明 + 开关）；[pill] = 宽屏摘要卡里的胶囊，说明放进悬停提示。
-class AutoSelectToggle extends ConsumerWidget {
-  const AutoSelectToggle({super.key, required this.group, this.pill = false});
-  final Group group;
-  final bool pill;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final auto = watchFixedMember(ref, group).isEmpty;
-    final hint = auto
-        ? (group.type == GroupType.Fallback ? '按可用性自动切换' : '按延迟自动切换')
-        : '已手动固定，打开恢复';
-    void toggle() => toggleAutoSelect(ref, group);
-    final label = Text(
-      '自动选择',
-      maxLines: 1,
-      softWrap: false,
-      style: TextStyle(
-        fontSize: pill ? 13 : 14,
-        fontWeight: pill ? FontWeight.w600 : FontWeight.w500,
-        color: mm.t1,
-      ),
-    );
-    final sw = Switch(
-      value: auto,
-      onChanged: MeowHaptics.onSwitch((_) => toggle()),
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    );
-    final body = MeowCardMaterial(
-      shape: pill
-          ? const StadiumBorder()
-          : const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(14))),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: toggle,
-        child: Container(
-          constraints: BoxConstraints(minHeight: pill ? 40 : 44),
-          padding: EdgeInsets.only(left: 12, right: pill ? 6 : 8),
-          child: Row(
-            mainAxisSize: pill ? MainAxisSize.min : MainAxisSize.max,
-            children: [
-              label,
-              const SizedBox(width: 8),
-              if (!pill) ...[
-                Expanded(
-                  child: Text(
-                    hint,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                    style: TextStyle(fontSize: 12, color: mm.t2),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              sw,
-            ],
-          ),
-        ),
-      ),
-    );
-    return pill ? Tooltip(message: hint, child: body) : body;
-  }
-}
-
-/// 组卡：名 + 类型 / 当前选中 + 延迟。三处用：
-/// - 宽屏左栏的一行（[selected] = 柔粉底 + 玫红 2px 描边）；
-/// - 单组布局选组面板里的一行（同上，[showCount] 多画成员数）；
-/// - 手机列表布局里可展开的组头（[expanded] 非 null）：多画成员数、测速钮和箭头，展开时换成樱粉底（液态玻璃主题下不换，
-///   全部卡片一致，展开看箭头），下面接节点网格。
+/// 组卡：两处用。
+/// - 宽屏左栏的一行（分段清单的行：组图标块 + 名 / 当前选中 + 组延迟；[selected] = 次色容器底、四角 28）；
+/// - 手机列表布局里可展开的组头（[expanded] 非 null）：多画类型 · 成员数、测速钮和箭头，展开时换成主色容器底，下面接节点。
 class GroupCard extends ConsumerWidget {
-  const GroupCard({
-    super.key,
-    required this.group,
-    required this.onTap,
-    this.selected = false,
-    this.expanded,
-    this.showCount = false,
-  });
+  const GroupCard({super.key, required this.group, required this.onTap, this.selected = false, this.expanded});
   final Group group;
   final VoidCallback onTap;
   final bool selected;
   final bool? expanded;
-  final bool showCount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
-    final list = expanded != null;
-    final open = expanded == true;
+    final cs = context.cs;
     final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
-    if (list) return _listCard(context, mm, current, delay, open);
-    return MeowCardMaterial(
-      // 深色主题的 soft 是半透明的，先叠到卡片底上
-      color: selected ? mm.selectedCard : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: selected ? mm.accent : Colors.transparent, width: 2),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 58),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          child: Row(
-            children: [
-              if (group.icon.isNotEmpty) ...[
-                CommonTargetIcon(src: group.icon, size: 20),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    FitRow(
-                      text: Text(
-                        group.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
-                      ),
-                      tail: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(width: 6),
-                          if (showCount) ...[
-                            Text('${group.all.length}', style: MeowFont.mono(size: 11, color: mm.t2)),
-                            const SizedBox(width: 6),
-                          ],
-                          GroupTypeTag(group.type, bg: selected ? mm.elev : mm.card2, small: true),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    FitRow(
-                      head: NestedGroupIcon(current, size: 14, gap: 4),   // 当前选中的是代理组时带上它的 icon
-                      text: Text(
-                        current.isEmpty ? '—' : current,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, color: mm.t2),
-                      ),
-                      tail: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CurrentBadges(groupName: group.name),
-                          // 选组面板的组卡没有测速钮，延迟留在这一行（列表布局见 _listCard）
-                          if (current.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            MsChip(delay, mode: mode),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    final tile = M3IconTile(
+      shape: selected || expanded == true ? M3TileShape.circle : M3TileShape.rounded,
+      bg: selected || expanded == true ? cs.primary : cs.surfaceContainerHighest,
+      fg: selected || expanded == true ? cs.onPrimary : cs.onSurfaceVariant,
+      text: group.icon.isEmpty ? nodeTileLabel(group.name) : null,
+      child: group.icon.isEmpty ? null : CommonTargetIcon(src: group.icon, size: 22),
+    );
+    if (expanded != null) return _listCard(context, tile, current, delay, expanded!);
+    return M3ListRow(
+      title: group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
+      titleSize: 15,
+      // 组名下面只写策略（用户 2026-11-17：不写成员数和当前节点）
+      subtitle: groupTypeLabel(group.type.name),
+      subtitleMaxLines: 1,
+      selected: selected,
+      onTap: onTap,
+      leading: tile,
+      trailing: current.isEmpty ? null : LatencyBadge(ms: delay, mode: mode, unit: false, fontSize: 12),
     );
   }
 
-  /// 列表布局的组卡（同 iOS 节点页）：第一行 图标 · 组名 · 类型标签 ……… 成员数 · 延迟测速钮 · 展开钮；
-  /// 第二行 当前选中 ……… 奖牌 / 解锁（贴卡片右边，按钮只占第一行）。延迟在测速钮上，第二行不再重复。
-  Widget _listCard(BuildContext context, MeowTokens mm, String current, int? delay, bool open) {
-    // 液态玻璃主题下展开了也是普通的玻璃卡片
-    final hero = open && !mm.glass;
-    return MeowCardMaterial(
-      color: hero ? mm.hero : null,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22))),
-      clipBehavior: Clip.antiAlias,
+  /// 列表布局的组卡：图标块 · 组名 / 策略 ……… 测速钮 · 展开钮（圆形按钮）。展开时主色容器底（同单组布局的摘要卡）。
+  Widget _listCard(BuildContext context, Widget tile, String current, int? delay, bool open) {
+    final cs = context.cs;
+    final fg = open ? cs.onPrimaryContainer : cs.onSurface;
+    final sub = open ? cs.onPrimaryContainer.withValues(alpha: 0.85) : cs.onSurfaceVariant;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: open ? MeowShape.xl : 24),
+      duration: MeowSprings.shapeDuration,
+      curve: MeowSprings.shapeCurve,
+      builder: (_, r, child) => AnimatedContainer(
+        duration: MeowSprings.effectsDuration,
+        decoration: BoxDecoration(
+          color: open ? cs.primaryContainer : cs.card,
+          borderRadius: BorderRadius.circular(math.max(0, r)),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(math.max(0, r)),
+          clipBehavior: Clip.antiAlias,
+          child: child,
+        ),
+      ),
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          child: Row(
             children: [
-              // 左块 图标 · 组名 · 类型标签（组名先省略，标签放不下就等比缩小）；右块 成员数 · 测速钮 · 展开钮
-              // （最多占六成，放不下也等比缩小）。窄屏 + 大字号时任何宽度都不溢出
-              LayoutBuilder(
-                builder: (context, box) => Row(
+              tile,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          if (group.icon.isNotEmpty) ...[
-                            CommonTargetIcon(src: group.icon, size: 20),
-                            const SizedBox(width: 8),
-                          ],
-                          Flexible(
-                            flex: 3,
-                            child: Text(
-                              group.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            flex: 2,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: GroupTypeTag(group.type, bg: hero ? mm.elev : mm.card2),
-                            ),
-                          ),
-                        ],
-                      ),
+                    Text(
+                      group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: fg),
                     ),
-                    const SizedBox(width: 8),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(maxWidth: box.maxWidth * 0.6),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerRight,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('${group.all.length}', style: MeowFont.mono(size: 12, color: mm.t2)),
-                            const SizedBox(width: 8),
-                            GroupTestButton(group: group, delay: delay, compact: true),
-                            const SizedBox(width: 6),
-                            // 箭头胶囊本身也能点：与点组卡同一个动作（展开 / 收起）
-                            MeowChip(onTap: onTap, child: _GroupChevron(open: open)),
-                          ],
-                        ),
-                      ),
+                    const SizedBox(height: 1),
+                    // 组名下面只写策略（用户 2026-11-17：不写成员数和当前节点）
+                    Text(
+                      groupTypeLabel(group.type.name),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: MeowFont.caption, color: sub),
                     ),
                   ],
                 ),
               ),
-              if (current.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                FitRow(
-                  head: NestedGroupIcon(current, size: 16, gap: 6),   // 当前选中的是代理组时带上它的 icon
-                  text: Text(
-                    current,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: mm.t2),
+              const SizedBox(width: 8),
+              GroupTestButton(group: group, delay: delay, compact: true),
+              const SizedBox(width: 8),
+              // 展开钮：一颗圆形按钮包着箭头（展开时主色实心），点它与点组卡同一个动作
+              Material(
+                color: open ? cs.primary : cs.cardInner,
+                shape: const CircleBorder(),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: onTap,
+                  child: SizedBox.square(
+                    dimension: 36,
+                    child: Center(child: _GroupChevron(open: open, color: open ? cs.onPrimary : cs.onSurfaceVariant)),
                   ),
-                  tail: Padding(padding: const EdgeInsets.only(left: 6), child: CurrentBadges(groupName: group.name)),
                 ),
-              ],
+              ),
             ],
           ),
         ),
@@ -501,8 +291,9 @@ class GroupCard extends ConsumerWidget {
 
 /// 组卡上的箭头：收起朝下、展开朝上，转动用弹跳弹簧。初值按当前状态给：滚动回来 / 重建时不重播。
 class _GroupChevron extends StatefulWidget {
-  const _GroupChevron({required this.open});
+  const _GroupChevron({required this.open, required this.color});
   final bool open;
+  final Color color;
 
   @override
   State<_GroupChevron> createState() => _GroupChevronState();
@@ -532,7 +323,7 @@ class _GroupChevronState extends State<_GroupChevron> with SingleTickerProviderS
     // 图形本身朝右：先转 90° 朝下，再按进度转到朝上
     // 同 iOS：收起朝右、展开转 90° 朝下（以前收起朝下、展开转 180° 朝上，和 iOS 不一致）
     builder: (_, child) => Transform.rotate(angle: _turn.value * math.pi / 2, child: child),
-    child: const MeowChipChevron(),
+    child: Icon(Icons.chevron_right_rounded, color: widget.color),
   );
 }
 
@@ -546,135 +337,79 @@ class GroupSummary extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
+    final cs = context.cs;
+    final fg = cs.onPrimaryContainer;
     final computed = group.type.isComputedSelected;
     final fixed = watchFixedMember(ref, group);
-    // 和网格的高亮同一口径：正在切换时先显示目标节点
+    // 和节点的高亮同一口径：正在切换时先显示目标节点
     final pending = computed ? ref.watch(pendingPickProvider.select((m) => m[group.name])) : null;
     final current = (pending != null && pending.isNotEmpty)
         ? pending
         : (ref.watch(getSelectedProxyNameProvider(group.name)) ?? '');
-    final currentIcon = current.isEmpty ? '' : ref.watch(groupIconProvider(current));
-    final delay = current.isEmpty
-        ? null
-        : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
-    final members = Text(
-      '${group.all.length} 个成员${computed ? (fixed.isEmpty ? ' · 自动' : ' · 已固定') : ''}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(fontSize: 12, color: mm.t2),
+    final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
+    final type =
+        '${groupTypeLabel(group.type.name)} · ${group.all.length}${computed ? (fixed.isEmpty ? ' · 自动' : ' · 已固定') : ''}';
+    final typeTag = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(MeowShape.full),
+      ),
+      child: Text(
+        type,
+        maxLines: 1,
+        softWrap: false,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: cs.onSurface),
+      ),
     );
-    // 樱粉主卡上的小标签用卡片底；液态玻璃主题下主卡是普通的玻璃卡片，标签用卡片里的次级块
-    final tag = GroupTypeTag(group.type, bg: mm.glass ? mm.card2 : mm.elev);
-    final heroColor = mm.glass ? null : mm.hero;
-
-    if (wide) {
-      return MeowCard(
-        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
-        radius: BorderRadius.circular(20),
-        color: heroColor,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  FitRow(
-                    head: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 200),
-                          child: Text(
-                            group.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: mm.t1),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        tag,
-                        const SizedBox(width: 6),
-                      ],
-                    ),
-                    text: members,
-                  ),
-                  const SizedBox(height: 2),
-                  // 延迟单独一段、不参与省略：名字再长也看得到
-                  Row(
-                    children: [
-                      Flexible(
-                        // 当前选中的是代理组、且它配了 icon 时，名字前带上它的 icon
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(text: current.isEmpty ? '当前 —' : '当前 '),
-                              if (currentIcon.isNotEmpty)
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.middle,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(right: 4),
-                                    child: CommonTargetIcon(src: currentIcon, size: 14),
-                                  ),
-                                ),
-                              if (current.isNotEmpty) TextSpan(text: current),
-                            ],
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 12, color: mm.t2),
-                        ),
-                      ),
-                      CurrentBadges(groupName: group.name),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            if (computed) ...[const SizedBox(width: 10), AutoSelectToggle(group: group, pill: true)],
-            const SizedBox(width: 10),
-            GroupTestButton(group: group, delay: delay, height: 40),
-          ],
+    final currentRow = Row(
+      children: [
+        Text('当前', style: TextStyle(fontSize: 14, color: fg.withValues(alpha: 0.85))),
+        const SizedBox(width: 10),
+        NestedGroupIcon(current, size: 18),
+        Flexible(
+          child: Text(
+            current.isEmpty ? '—' : current,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: fg),
+          ),
         ),
-      );
-    }
+        CurrentBadges(groupName: group.name),
+        const Spacer(),
+        const SizedBox(width: 8),
+        GroupTestButton(group: group, delay: delay, height: 36),
+      ],
+    );
 
-    return MeowCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      radius: BorderRadius.circular(22),
-      color: heroColor,
+    return Container(
+      padding: wide ? const EdgeInsets.fromLTRB(18, 14, 14, 14) : const EdgeInsets.fromLTRB(18, 18, 14, 16),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(wide ? MeowShape.xl : MeowShape.xlInc),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Row(
             children: [
+              if (group.icon.isNotEmpty) ...[CommonTargetIcon(src: group.icon, size: 24), const SizedBox(width: 8)],
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    FitRow(
-                      head: Padding(padding: const EdgeInsets.only(right: 6), child: tag),
-                      text: members,
-                    ),
-                    const SizedBox(height: 3),
-                    FitRow(
-                      head: NestedGroupIcon(current, size: 18),   // 当前选中的是代理组时带上它的 icon
-                      text: Text(
-                        current.isEmpty ? '—' : current,   // 国旗原样显示，和节点格、组名一个画法
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: mm.t1),
-                      ),
-                      tail: CurrentBadges(groupName: group.name),
-                    ),
-                  ],
+                child: Text(
+                  group.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: wide ? 20 : 22, fontWeight: FontWeight.w900, color: fg),
                 ),
               ),
               const SizedBox(width: 10),
-              GroupTestButton(group: group, delay: delay),
+              // 窄屏 + 大字号放不下时整体缩小，组名先省略
+              Flexible(child: FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerRight, child: typeTag)),
             ],
           ),
-          if (computed) ...[const SizedBox(height: 10), AutoSelectToggle(group: group)],
+          const SizedBox(height: 12),
+          currentRow,
         ],
       ),
     );

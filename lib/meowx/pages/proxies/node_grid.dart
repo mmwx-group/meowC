@@ -6,7 +6,8 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/views/proxies/common.dart';
+import 'package:bett_box/common/delay_test.dart';
+import 'package:bett_box/meowx/theme/target_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -14,12 +15,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
 import '../../panel/account.dart';
+import '../../state/format.dart';
 import '../../state/meow_settings.dart';
 import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
-import '../../theme/card_surface.dart';
 import '../../theme/haptics.dart';
+import '../../theme/latency_badge.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'entry_badge.dart';
@@ -77,7 +81,8 @@ String watchFixedMember(WidgetRef ref, Group group) {
 
 /// 点选节点。
 /// - select 组：本地高亮即时生效，核心切换沿用 Bettbox 的 600 ms 防抖（合并连点）。
-/// - url-test / fallback 组：点节点 = 固定（SelectAble.Set），点已固定的 = 取消（ForceSet("")）。高亮只认核心回报的 now，
+/// - url-test / fallback 组（2026-11-17 起没有「自动选择」开关，同 MeowX iOS / Mac）：点组内第一个成员 = 回到自动选择（ForceSet("")），
+///   点其它成员 = 固定在它上面（SelectAble.Set），再点已固定的不变。高亮只认核心回报的 now，
 ///   所以不走防抖、先乐观高亮；另外 mihomo 的 Fallback.Set 遇到失效节点会持核心全局锁同步测速最多 5 秒，
 ///   期间拉代理组 / 连接列表全被卡住——已知失效的节点先在锁外单独测一次，测不通就不切。
 ///   切完以核心结果为准：没切过去（节点不可用被 mihomo 清掉）就撤掉图钉并提示，不留一个假的固定状态。
@@ -89,7 +94,8 @@ Future<void> pickNode(WidgetRef ref, Group group, Proxy proxy) async {
     return;
   }
   final pinned = ref.read(getProxyNameProvider(group.name)) ?? '';
-  final next = proxy.name == pinned ? '' : proxy.name;
+  final next = proxy.name == group.all.firstOrNull?.name ? '' : proxy.name;
+  if (next == pinned) return;   // 已经是自动 / 已经固定在它上面
   final pending = ref.read(pendingPickProvider.notifier);
   pending.update((m) => {...m, group.name: next});
   c.updateCurrentSelectedMap(group.name, next);
@@ -127,16 +133,6 @@ Future<void> pickNode(WidgetRef ref, Group group, Proxy proxy) async {
   }
 }
 
-/// 「自动选择」开关（url-test / fallback 组）：打开 = 取消固定，关掉 = 把当前自动选中的节点固定下来。
-/// 两个方向都等于「点一下那个成员」，走 [pickNode] 同一套乐观高亮与失败回滚。
-void toggleAutoSelect(WidgetRef ref, Group group) {
-  final pinned = ref.read(getProxyNameProvider(group.name)) ?? '';
-  final current = ref.read(getSelectedProxyNameProvider(group.name)) ?? '';
-  final proxy =
-      group.all.firstWhereOrNull((p) => p.name == pinned) ?? group.all.firstWhereOrNull((p) => p.name == current);
-  if (proxy != null) unawaited(pickNode(ref, group, proxy));
-}
-
 /// 列数跟着网格宽度走：手机标准 2 列、大卡 1 列，更宽（平板、宽屏右栏）按最小格宽加列。
 int nodeColumns(double width, NodeCardSize size) {
   final large = size == NodeCardSize.large;
@@ -166,8 +162,18 @@ class _NodeGridDelegate extends SliverGridDelegate {
 
 /// 懒加载节点网格：只构建可见格子；每格的 RepaintBoundary 由 [StaggeredItem] 套在位移里面（见它的说明）。
 class NodeSliverGrid extends ConsumerWidget {
-  const NodeSliverGrid({super.key, required this.group, required this.size, this.dense = false, this.reveal});
+  const NodeSliverGrid({
+    super.key,
+    required this.group,
+    required this.size,
+    this.dense = false,
+    this.reveal,
+    this.view = NodeView.grid,
+  });
   final Group group;
+
+  /// 清单（M3 分段清单，一行一个）还是网格
+  final NodeView view;
 
   /// 列表布局里正在展开 / 收起时的错峰动画；null = 静止。
   final GroupReveal? reveal;
@@ -200,37 +206,160 @@ class NodeSliverGrid extends ConsumerWidget {
     );
     // 重排时已建出的格子跟着自己的名字挪位置，不在原位拆掉重建
     final indexOf = sort == ProxiesSortType.none ? null : {for (final (i, p) in nodes.indexed) p.name: i};
+    VoidCallback? tapOf(Proxy p) => selectable
+        ? () {
+            // select 组点已选中的那个什么都不变，不震；url-test / fallback 组点了不是固定就是取消固定，都算换了
+            if (computed || p.name != selectedName) MeowHaptics.select();
+            unawaited(pickNode(ref, group, p));
+          }
+        : null;
+    final delegate = SliverChildBuilderDelegate(
+      (context, i) {
+        final p = nodes[i];
+        final selected = p.name == shownSelected;
+        final isPinned = pinned.isNotEmpty && p.name == pinned;
+        final busy = pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name;
+        return StaggeredItem(
+          key: ValueKey(p.name),
+          reveal: reveal,
+          index: i,
+          child: view == NodeView.list
+              ? Padding(
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
+                  child: M3SegmentSlot(
+                    index: i,
+                    count: nodes.length,
+                    child: _NodeListRow(
+                      proxy: p,
+                      group: group,
+                      meta: metas[p.name],
+                      index: i,
+                      selected: selected,
+                      pinned: isPinned,
+                      busy: busy,
+                      mode: mode,
+                      onTap: tapOf(p),
+                    ),
+                  ),
+                )
+              : _NodeCell(
+                  proxy: p,
+                  group: group,
+                  meta: metas[p.name],
+                  selected: selected,
+                  pinned: isPinned,
+                  busy: busy,
+                  mode: mode,
+                  dense: dense,
+                  onTap: tapOf(p),
+                ),
+        );
+      },
+      childCount: nodes.length,
+      addRepaintBoundaries: false,
+      findChildIndexCallback: indexOf == null ? null : (key) => key is ValueKey<String> ? indexOf[key.value] : null,
+    );
+    if (view == NodeView.list) return SliverList(delegate: delegate);
     return SliverGrid(
       gridDelegate: _NodeGridDelegate(size: size, cellExtent: _nodeCellExtent(context, dense)),
-      delegate: SliverChildBuilderDelegate(
-        (context, i) {
-          final p = nodes[i];
-          return StaggeredItem(
-            key: ValueKey(p.name),
-            reveal: reveal,
-            index: i,
-            child: _NodeCell(
-              proxy: p,
-              group: group,
-              meta: metas[p.name],
-              selected: p.name == shownSelected,
-              pinned: pinned.isNotEmpty && p.name == pinned,
-              busy: pendingPick != null && pendingPick.isNotEmpty && pendingPick == p.name,
-              mode: mode,
-              dense: dense,
-              onTap: selectable
-                  ? () {
-                      // select 组点已选中的那个什么都不变，不震；url-test / fallback 组点了不是固定就是取消固定，都算换了
-                      if (computed || p.name != selectedName) MeowHaptics.select();
-                      unawaited(pickNode(ref, group, p));
-                    }
-                  : null,
-            ),
+      delegate: delegate,
+    );
+  }
+}
+
+/// 节点的副标题：协议（+ 版本）· 安全性；内置出站（直连 / 拒绝）写用途；成员是代理组写「代理组 · 类型」。
+String nodeSubtitle(Proxy proxy, ProxyMeta? meta, MeowTokens mm) {
+  final builtin = builtinSubtitle(proxy.name);
+  if (builtin != null) return builtin;
+  if (isGroupType(proxy.type)) return '${S.nestedGroup} · ${groupBadge(proxy.type, mm).label}';
+  final proto = '${protoStyle(proxy.type, mm).label}${meta?.versionSuffix ?? ''}';
+  return meta?.securitySubtitle.isNotEmpty == true ? '$proto · ${meta!.securitySubtitle}' : proto;
+}
+
+bool _testable(Proxy proxy) => !const {'REJECT', 'REJECT-DROP', 'PASS'}.contains(proxy.name.toUpperCase());
+
+/// 清单里的一行（画布稿 Nodes）：图标块（地区码；没选中的按行号轮换四种形状，选中变成主色圆）+ 名（+ 图钉）/ 副标题 +
+/// 主控指定入口 / 回程奖牌 / 解锁徽标 + 延迟胶囊（点 = 测该成员）。选中 = 次色容器底、四角 28。
+class _NodeListRow extends ConsumerWidget {
+  const _NodeListRow({
+    required this.proxy,
+    required this.group,
+    required this.meta,
+    required this.index,
+    required this.selected,
+    required this.pinned,
+    required this.busy,
+    required this.mode,
+    required this.onTap,
+  });
+
+  final Proxy proxy;
+  final Group group;
+  final ProxyMeta? meta;
+  final int index;
+  final bool selected, pinned, busy;
+  final LatencyMode mode;
+  final VoidCallback? onTap;
+
+  static const _shapes = [M3TileShape.rounded, M3TileShape.circle, M3TileShape.leafA, M3TileShape.leafB];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
+    final nested = isGroupType(proxy.type);
+    final delay = ref.watch(getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl));
+    final medal = ref.watch(nodeMedalsProvider.select((m) => m[proxy.name]));
+    final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[proxy.name]));
+    final icon = nested ? ref.watch(groupIconProvider(proxy.name)) : '';
+    final Widget leading = icon.isNotEmpty
+        ? M3IconTile(
+            shape: selected ? M3TileShape.circle : _shapes[index % _shapes.length],
+            bg: selected ? cs.primary : cs.surfaceContainerHighest,
+            fg: selected ? cs.onPrimary : cs.onSurfaceVariant,
+            child: CommonTargetIcon(src: icon, size: 22),
+          )
+        : M3IconTile(
+            text: nested ? null : nodeTileLabel(proxy.name),
+            icon: nested ? Icons.layers_rounded : null,
+            shape: selected ? M3TileShape.circle : _shapes[index % _shapes.length],
+            bg: selected ? cs.primary : cs.surfaceContainerHighest,
+            fg: selected ? cs.onPrimary : cs.onSurfaceVariant,
           );
-        },
-        childCount: nodes.length,
-        addRepaintBoundaries: false,
-        findChildIndexCallback: indexOf == null ? null : (key) => key is ValueKey<String> ? indexOf[key.value] : null,
+    return M3ListRow(
+      // 图标块里已经画了国旗，名字里的那面不再重复（嵌套的组 / 带图标的组没有国旗块，照写全名）
+      title: nested || icon.isNotEmpty ? proxy.name : nodeTitleWithoutFlag(proxy.name),
+      titleSize: 15,
+      subtitle: nodeSubtitle(proxy, meta, context.mm),
+      subtitleMaxLines: 1,
+      selected: selected,
+      onTap: onTap,
+      leading: leading,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (pinned)
+            Tooltip(
+              message: '已固定，点组内第一个节点恢复自动选择',
+              child: Icon(Icons.push_pin_rounded, size: 16, color: cs.primary),
+            ),
+          EntryOverrideBadge(proxy.name, size: 14),
+          if (medal != null) ...[const SizedBox(width: 4), MedalBadge(medal, size: 16)],
+          if (unlocks != null) ...[const SizedBox(width: 4), UnlockBadge(unlocks, size: 15)],
+          const SizedBox(width: 6),
+          if (busy)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
+            )
+          else if (_testable(proxy))
+            GestureDetector(
+              onTap: () {
+                MeowHaptics.tap();
+                proxyDelayTest(proxy, group.testUrl);
+              },
+              child: LatencyBadge(ms: delay, mode: mode, fontSize: 12),
+            ),
+        ],
       ),
     );
   }
@@ -270,44 +399,24 @@ class _NodeCell extends ConsumerWidget {
     final mm = context.mm;
     final s = _spec(dense);
     final nested = isGroupType(proxy.type);
-    final builtin = builtinSubtitle(proxy.name);
-    final style = protoStyle(proxy.type, mm);
-    final proto = '${style.label}${meta?.versionSuffix ?? ''}';
-    final subtitle =
-        builtin ??
-        (nested
-            ? '${S.nestedGroup} · ${groupBadge(proxy.type, mm).label}'
-            : (meta?.securitySubtitle.isNotEmpty == true ? '$proto · ${meta!.securitySubtitle}' : proto));
+    final subtitle = nodeSubtitle(proxy, meta, mm);
     final delay = ref.watch(
       getDelayProvider(proxyName: proxy.name, testUrl: group.testUrl),
     );
     final medal = ref.watch(nodeMedalsProvider.select((m) => m[proxy.name]));
     final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[proxy.name]));
-    final testable = !const {
-      'REJECT',
-      'REJECT-DROP',
-      'PASS',
-    }.contains(proxy.name.toUpperCase());
+    final testable = _testable(proxy);
 
-    final glass = mm.backdrop != null;
     final radius = BorderRadius.circular(s.radius);
     final cell = Container(
         // 描边的 2 算在内边距里：选中 / 未选中内容不位移
-        padding: glass
-            ? EdgeInsets.symmetric(horizontal: s.padH, vertical: s.padV)
-            : EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
+        padding: EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
         // 深色主题的 soft 是半透明的，先叠到卡片底上，不然透出的是页面底、比没选中的格子还暗
-        decoration: glass
-            ? null
-            : BoxDecoration(
-                color: selected ? mm.selectedCard : mm.elev,
-                borderRadius: radius,
-                border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
-              ),
-        // 玻璃卡片：选中的描边盖在亮边上面（不占内边距，所以上面的内边距不减 2）
-        foregroundDecoration: glass && selected
-            ? BoxDecoration(borderRadius: radius, border: Border.all(color: mm.accent, width: 2))
-            : null,
+        decoration: BoxDecoration(
+          color: selected ? mm.selectedCard : mm.elev,
+          borderRadius: radius,
+          border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -331,7 +440,7 @@ class _NodeCell extends ConsumerWidget {
                 if (pinned) ...[
                   const SizedBox(width: 4),
                   Tooltip(
-                    message: '已固定，再点一次恢复自动选择',
+                    message: '已固定，点组内第一个节点恢复自动选择',
                     child: Icon(Icons.push_pin_rounded, size: dense ? 13 : 14, color: mm.accent),
                   ),
                 ],
@@ -380,10 +489,7 @@ class _NodeCell extends ConsumerWidget {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      // 液态玻璃：磨砂玻璃格子（选中 = 淡粉叠在填充上 + 强调色描边）
-      child: glass
-          ? MeowFrostBox(radius: radius, tint: selected ? mm.selectedCard : null, child: cell)
-          : cell,
+      child: cell,
     );
   }
 }

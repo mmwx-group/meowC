@@ -2,7 +2,6 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:bett_box/common/common.dart';
-import 'package:bett_box/widgets/scroll.dart';
 import 'package:flutter/material.dart';
 
 class BaseScrollBehavior extends MaterialScrollBehavior {
@@ -35,7 +34,15 @@ class ShowBarScrollBehavior extends BaseScrollBehavior {
     Widget child,
     ScrollableDetails details,
   ) {
-    return CommonScrollBar(controller: details.controller, child: child);
+    // 桌面滚动条（原 Bettbox 的 CommonScrollBar，2026-11-17 删掉 Bettbox 界面时直接写在这里）
+    final controller = details.controller;
+    return Scrollbar(
+      controller: controller,
+      thickness: 8,
+      radius: const Radius.circular(8),
+      interactive: true,
+      child: child,
+    );
   }
 }
 

@@ -1,7 +1,7 @@
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/widgets/dialog.dart';
+import 'package:bett_box/meowx/theme/common_dialog.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 

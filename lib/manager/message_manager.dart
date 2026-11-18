@@ -3,8 +3,6 @@ import 'dart:math';
 
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
-import 'package:bett_box/widgets/fade_box.dart';
-import 'package:bett_box/widgets/text.dart';
 import 'package:flutter/material.dart';
 
 class MessageManager extends StatefulWidget {
@@ -59,9 +57,13 @@ class MessageManagerState extends State<MessageManager> {
     _pushing = true;
     while (_bufferMessages.isNotEmpty) {
       final commonMessage = _bufferMessages.removeAt(0);
-      _messagesNotifier.value = List.from(_messagesNotifier.value)..add(commonMessage);
+      _messagesNotifier.value = List.from(_messagesNotifier.value)
+        ..add(commonMessage);
       await Future.delayed(const Duration(seconds: 1));
-      Future.delayed(commonMessage.duration, () => _handleRemove(commonMessage));
+      Future.delayed(
+        commonMessage.duration,
+        () => _handleRemove(commonMessage),
+      );
       if (_bufferMessages.isEmpty) _pushing = false;
     }
   }
@@ -79,76 +81,93 @@ class MessageManagerState extends State<MessageManager> {
         ValueListenableBuilder(
           valueListenable: _messagesNotifier,
           builder: (_, messages, _) {
-            return FadeThroughBox(
+            // 提示条的进出：淡入淡出 + 轻微缩放（原 Bettbox 的 FadeThroughBox，2026-11-17 删掉 Bettbox 界面时换成 AnimatedSwitcher）
+            return Container(
               margin: EdgeInsets.only(
                 top: kToolbarHeight + 8,
                 left: 12,
                 right: 12,
               ),
               alignment: Alignment.topCenter,
-              child: messages.isEmpty
-                  ? SizedBox()
-                  : LayoutBuilder(
-                      key: Key(messages.last.id),
-                      builder: (_, constraints) {
-                        final message = messages.last;
-                        return Card(
-                          shape: const RoundedRectangleBorder(
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(12.0),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween(begin: 0.92, end: 1.0).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: messages.isEmpty
+                    ? SizedBox()
+                    : LayoutBuilder(
+                        key: Key(messages.last.id),
+                        builder: (_, constraints) {
+                          final message = messages.last;
+                          // MeowX：M3 snackbar 的配色（inverseSurface 底、onInverseSurface 字、按钮 inversePrimary）
+                          return Card(
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(16.0),
+                              ),
                             ),
-                          ),
-                          elevation: 10,
-                          color: context.colorScheme.surfaceContainerHigh,
-                          child: Container(
-                            width: min(constraints.maxWidth, 500),
-                            padding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (message.showCountdown)
-                                  _CountdownWidget(
-                                    duration: message.duration,
-                                  ),
-                                Expanded(
-                                  child: EmojiText(
-                                    message.text,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                                if (message.actionLabel != null &&
-                                    message.onAction != null) ...[
-                                  const SizedBox(width: 8),
-                                  TextButton(
-                                    onPressed: () {
-                                      _handleRemove(message);
-                                      message.onAction?.call();
-                                    },
-                                    style: TextButton.styleFrom(
-                                      minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      foregroundColor:
-                                          context.colorScheme.primary,
+                            elevation: 6,
+                            color: context.colorScheme.inverseSurface,
+                            child: Container(
+                              width: min(constraints.maxWidth, 500),
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (message.showCountdown)
+                                    _CountdownWidget(
+                                      duration: message.duration,
                                     ),
-                                    child: Text(message.actionLabel!),
+                                  Expanded(
+                                    child: Text(
+                                      message.text,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: context
+                                            .colorScheme
+                                            .onInverseSurface,
+                                      ),
+                                    ),
                                   ),
+                                  if (message.actionLabel != null &&
+                                      message.onAction != null) ...[
+                                    const SizedBox(width: 8),
+                                    TextButton(
+                                      onPressed: () {
+                                        _handleRemove(message);
+                                        message.onAction?.call();
+                                      },
+                                      style: TextButton.styleFrom(
+                                        minimumSize: Size.zero,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        foregroundColor:
+                                            context.colorScheme.inversePrimary,
+                                      ),
+                                      child: Text(message.actionLabel!),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+              ),
             );
           },
         ),
@@ -175,10 +194,7 @@ class _CountdownWidgetState extends State<_CountdownWidget>
   void initState() {
     super.initState();
     _totalSeconds = widget.duration.inSeconds;
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    );
+    _controller = AnimationController(vsync: this, duration: widget.duration);
     _controller.forward();
   }
 

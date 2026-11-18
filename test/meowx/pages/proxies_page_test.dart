@@ -9,11 +9,12 @@ import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/badges.dart';
-import 'package:bett_box/meowx/theme/motion.dart';
+import 'package:bett_box/meowx/theme/m3_kit.dart';
 import 'package:bett_box/meowx/theme/unlock_badge.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
+import 'package:bett_box/meowx/state/format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,6 +130,7 @@ List<Override> _overrides({
   bool twoPane = false,
   ProxyLayout layout = ProxyLayout.tabs,
   NodeCardSize size = NodeCardSize.standard,
+  NodeView view = NodeView.list,
   Profile? profile,
   bool live = false,
   List<Group>? groups,
@@ -152,7 +154,7 @@ List<Override> _overrides({
     groupsProvider.overrideWith(() => _Groups(gs)),
     currentPageLabelProvider.overrideWith(_PageLabel.new),
     proxiesStyleSettingProvider.overrideWith(_Style.new),
-    meowSettingProvider.overrideWith(() => _Meow(MeowSettings(proxyLayout: layout, nodeCardSize: size))),
+    meowSettingProvider.overrideWith(() => _Meow(MeowSettings(proxyLayout: layout, nodeCardSize: size, nodeView: view))),
     proxyMetaProvider.overrideWithValue(const {_longName: ProxyMeta(type: 'vless', reality: true, flow: 'xtls-rprx-vision')}),
     medalsProvider.overrideWith((ref) => {_longName: _medal(_longName, 'gold'), '东京 01 · IIJ': _medal('东京 01 · IIJ', 'silver')}),
     unlocksProvider.overrideWith((ref) => {_longName: _unlock(_longName, 'yes'), '香港 02 · BGP': _unlock('香港 02 · BGP', 'no')}),
@@ -211,7 +213,7 @@ int _gridColumns(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('手机 · 单组布局：窄屏 1.4 倍字号不溢出；标题 / 组按钮 / 摘要 / 节点格', (tester) async {
+  testWidgets('手机 · 单组布局：窄屏 1.4 倍字号不溢出；标题 / 组 chip / 摘要 / 节点清单', (tester) async {
     await _pump(
       tester,
       size: const Size(320, 1600),
@@ -221,59 +223,61 @@ void main() {
 
     expect(find.text('节点'), findsOneWidget);
     expect(find.text('4 个代理组 · 13 个节点'), findsOneWidget);   // 12 个节点 + DIRECT，嵌套的组不算
-    // 不再有横向组标签 / 左右滑动换组，只有一个组按钮
+    // 一排代理组 chip（不左右滑动换组），选中的是订阅记下的组
     expect(find.byType(PageView), findsNothing);
-    expect(find.byType(GroupPickerButton), findsOneWidget);
-    expect(find.text('12 个成员 · 共 4 个组'), findsOneWidget);
-    expect(find.text('切换'), findsOneWidget);
-    // 停在订阅记下的组（自动选择）：摘要是 url-test 组的，带「自动选择」开关
-    expect(find.byType(GroupSummary), findsOneWidget);
-    expect(find.text('url-test'), findsNWidgets(2));   // 组按钮 + 摘要
-    expect(find.text('12 个成员 · 自动'), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-    expect(find.text('按延迟自动切换'), findsOneWidget);
-    // 测速钮与组延迟合成一个：测过就在钮上显示当前节点的延迟（没测过才是「⚡ 测速」）
+    expect(find.byType(GroupChipBar), findsOneWidget);
+    final chip = tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '自动选择'));
+    expect(chip.selected, isTrue);
+    // 没有组摘要卡、没有「自动选择」开关（2026-11-17，同 iOS）；chip 行尾的测速钮带组延迟（没测过才是闪电）
+    expect(find.byType(GroupSummary), findsNothing);
+    expect(find.byType(Switch), findsNothing);
     expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38')), findsOneWidget);
-    // 摘要里的当前节点和节点格：名字连国旗原样显示（和代理组名一个画法），不画地区码标签
+    // 节点行：国旗画在行首的图标块里，名字里的那面不重复写；不画地区码标签
     expect(find.byType(RegionTag), findsNothing);
-    expect(find.text(_longName), findsNWidgets(2));
+    expect(find.text(nodeTitleWithoutFlag(_longName)), findsOneWidget);
     expect(find.text('Premium-Node-Without-Region-12345'), findsOneWidget);
     expect(find.text('vless · reality · vision'), findsOneWidget);
     expect(find.text('hy2'), findsOneWidget);
     // 延迟四态：有值 / 测试中 / 没测过 / 超时
-    expect(find.text('38'), findsNWidgets(2));   // 摘要的测速钮 + 格子（延迟只写数字，同 iOS）
-    expect(find.text('12345'), findsOneWidget);
+    expect(find.text('38 ms'), findsOneWidget);
+    expect(find.text('12345 ms'), findsOneWidget);
     expect(find.text('…'), findsOneWidget);
-    expect(find.text('—'), findsWidgets);
+    expect(find.text('— ms'), findsWidgets);
     expect(find.text('超时'), findsOneWidget);
-    // 奖牌 / 解锁：摘要里当前节点的一份 + 格子里的
-    expect(find.byType(MedalBadge), findsNWidgets(3));
-    expect(find.byType(UnlockBadge), findsNWidgets(3));
+    // 行首的图标块：节点名里的国旗
+    expect(find.text('🇭🇰'), findsOneWidget);
+    // 奖牌 / 解锁：节点行里的
+    expect(find.byType(MedalBadge), findsNWidgets(2));
+    expect(find.byType(UnlockBadge), findsNWidgets(2));
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
-    // 标准卡片手机上两列；悬浮底栏的高度让进了网格底部留白
-    expect(_gridColumns(tester), 2);
+    // 清单（不是网格）；没有「全部测速」按钮（2026-11-17 去掉），底部留白只让悬浮底栏
+    expect(find.byType(SliverGrid), findsNothing);
+    expect(find.byType(SliverList), findsWidgets);
+    expect(find.text('全部测速'), findsNothing);
     final gridPad = tester.widget<SliverPadding>(
       find.ancestor(of: find.byType(NodeSliverGrid), matching: find.byType(SliverPadding)).first,
     );
-    expect(gridPad.padding, const EdgeInsets.fromLTRB(16, 12, 16, 12 + 96));
+    expect(gridPad.padding, const EdgeInsets.fromLTRB(16, 0, 16, 12 + 96));
   });
 
   testWidgets('排序：「节点视图」菜单里选延迟 / 名称，节点格跟着重排并记下；选默认回到订阅顺序', (tester) async {
     await _pump(tester, size: const Size(412, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
     final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    final names = {for (final p in _nodes) p.name};
+    // 行里显示的名字去掉了国旗（国旗在图标块里），按显示名认回原名
+    final names = {for (final p in _nodes) nodeTitleWithoutFlag(p.name): p.name};
     final subscription = [for (final p in _nodes) p.name];
     // 节点格里的名字，按网格顺序（摘要里的当前节点不算）
     List<String> order() => [
       for (final t in tester.widgetList<Text>(find.descendant(of: find.byType(NodeSliverGrid), matching: find.byType(Text))))
-        if (names.contains(t.data)) t.data!,
+        if (names.containsKey(t.data)) names[t.data]!,
     ];
-    // 点了菜单项先亮选中块，menuAutoClose 之后才关菜单、回传
+    // 「节点视图」是从按钮长出来的气泡：点排序那一组按钮即时生效，点气泡外面关掉再看节点顺序
     Future<void> pick(String item) async {
       await tester.tap(find.byTooltip('节点视图'));
       await tester.pumpAndSettle();
       await tester.tap(find.text(item));
-      await tester.pump(MeowMotion.menuAutoClose);
+      await tester.pump();
+      await tester.tapAt(const Offset(10, 1500));
       await tester.pumpAndSettle();
     }
 
@@ -314,13 +318,11 @@ void main() {
       overrides: _overrides(
         profile: _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'}),
         size: NodeCardSize.large,
+        view: NodeView.grid,
       ),
       brightness: Brightness.dark,
     );
 
-    expect(find.text('12 个成员 · 已固定'), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-    expect(find.text('已手动固定，打开恢复'), findsOneWidget);
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
     expect(_gridColumns(tester), 1);
   });
@@ -334,9 +336,7 @@ void main() {
     );
 
     // 没记过停在哪个组 → 第一个组
-    expect(find.text('select'), findsNWidgets(2));   // 组按钮 + 摘要
-    expect(find.text('5 个成员'), findsOneWidget);
-    expect(find.byType(Switch), findsNothing);
+    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '节点选择')).selected, isTrue);
     expect(find.text('代理组 · url-test'), findsOneWidget);
     expect(find.text('直连'), findsOneWidget);
     expect(find.byIcon(Icons.layers_rounded), findsOneWidget);
@@ -351,45 +351,44 @@ void main() {
     );
 
     expect(find.byType(GroupCard), findsNWidgets(4));
-    expect(find.byType(GroupPickerButton), findsNothing);
+    expect(find.byType(GroupChipBar), findsNothing);
     expect(find.byType(NodeSliverGrid), findsNothing);
-    expect(find.text('fallback'), findsOneWidget);
-    expect(find.text('load-balance'), findsOneWidget);
-    // 负载均衡组没有「当前选中」：不画第二行（同 iOS）
-    expect(find.text('—'), findsNothing);
+    // 组名下面只写策略，不写成员数和当前节点
+    expect(find.descendant(of: find.widgetWithText(GroupCard, 'AI 服务（名字也很长的一个代理组）'), matching: find.text('故障转移')), findsOneWidget);
+    expect(find.textContaining('洛杉矶'), findsNothing);
+    expect(find.text('负载均衡'), findsNWidgets(2));   // 组名 + 策略
+    final urlTest = find.widgetWithText(GroupCard, '自动选择');
 
     // 展开动画从高度 0 开始（这一帧网格还不在屏上），播完才整段露出
-    await tester.tap(find.text('url-test'));
+    await tester.tap(urlTest);
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
-    expect(find.byType(AutoSelectToggle), findsOneWidget);
     expect(find.text('大阪 02'), findsOneWidget);
 
     // 收起：节点卡倒序淡出、容器收完之后才拆掉
-    await tester.tap(find.text('url-test'));
+    await tester.tap(urlTest);
     await tester.pump();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNothing);
   });
 
-  testWidgets('手机 · 列表布局：组卡头部的测速钮带组延迟（30 高、至少 40 宽），箭头是 40×30 胶囊，点箭头胶囊同样展开 / 收起', (tester) async {
+  testWidgets('手机 · 列表布局：组卡头部的测速钮带组延迟（30 高、至少 44 宽），点箭头同样展开 / 收起', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
       overrides: _overrides(profile: _profile(), layout: ProxyLayout.list),
     );
-    final card = find.widgetWithText(GroupCard, 'url-test');
+    final card = find.widgetWithText(GroupCard, '自动选择');
     final test = find.descendant(of: card, matching: find.byType(GroupTestButton));
     expect(test, findsOneWidget);
-    expect(tester.getSize(test).height, MeowChip.height);
-    expect(tester.getSize(test).width, greaterThanOrEqualTo(MeowChip.width));
+    expect(tester.getSize(test).height, 30);
+    expect(tester.getSize(test).width, greaterThanOrEqualTo(44));
     // 延迟在测速钮上，组卡第二行不再重复
     expect(find.descendant(of: test, matching: find.text('38')), findsOneWidget);
     expect(find.descendant(of: card, matching: find.text('38')), findsOneWidget);
-    Finder chevron() => find.descendant(of: card, matching: find.byType(MeowChip));
+    Finder chevron() => find.descendant(of: card, matching: find.byIcon(Icons.chevron_right_rounded));
     expect(chevron(), findsOneWidget);
-    expect(tester.getSize(chevron()), const Size(MeowChip.width, MeowChip.height));
 
     await tester.tap(chevron());
     await tester.pumpAndSettle();
@@ -408,25 +407,25 @@ void main() {
     );
     final lower = find.byWidgetPredicate((w) => w is NodeSliverGrid && w.group.type == GroupType.Fallback);
 
-    await tester.tap(find.text('fallback'));
+    await tester.tap(find.widgetWithText(GroupCard, 'AI 服务（名字也很长的一个代理组）'));
     await tester.pumpAndSettle();
     final before = tester.element(lower);
     final cell = tester.element(find.text('洛杉矶 01 · 9929').last);
 
-    // 在它上面插进一行「自动选择」和一张网格
-    await tester.tap(find.text('url-test'));
+    // 在它上面插进一行「自动选择」和一份节点清单
+    await tester.tap(find.widgetWithText(GroupCard, '自动选择'));
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsNWidgets(2));
     expect(identical(tester.element(lower), before), isTrue);
     expect(identical(tester.element(find.text('洛杉矶 01 · 9929').last), cell), isTrue);
 
-    await tester.tap(find.text('url-test'));
+    await tester.tap(find.widgetWithText(GroupCard, '自动选择').first);
     await tester.pumpAndSettle();
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(identical(tester.element(lower), before), isTrue);
   });
 
-  testWidgets('手机 · 单组布局：点组按钮弹出选组面板，选组后网格换成该组并记下（窄屏 1.4 倍字号）', (tester) async {
+  testWidgets('手机 · 单组布局：点组 chip 换组，节点换成该组并记下（窄屏 1.4 倍字号）', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 800),
@@ -436,39 +435,17 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '自动选择');
 
-    await tester.tap(find.byType(GroupPickerButton));
-    await tester.pumpAndSettle();
-    // 手机是底部弹出面板：标题 + 每组一张组卡（带成员数），当前组高亮
-    expect(find.byType(BottomSheet), findsOneWidget);
-    expect(find.text('选择代理组'), findsOneWidget);
-    final cards = find.descendant(of: find.byType(BottomSheet), matching: find.byType(GroupCard));
-    expect(cards, findsNWidgets(4));
-    expect(
-      tester.widgetList<GroupCard>(cards).where((c) => c.selected).map((c) => c.group.name),
-      ['自动选择'],
-    );
-    expect(tester.widgetList<GroupCard>(cards).every((c) => c.showCount), isTrue);
-
     const target = 'AI 服务（名字也很长的一个代理组）';
-    await tester.tap(find.descendant(of: find.byType(BottomSheet), matching: find.widgetWithText(GroupCard, target)));
+    await tester.ensureVisible(find.widgetWithText(M3FilterChip, target));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(M3FilterChip, target));
     await tester.pump();
-    // 换组当帧旧网格就撤走，只有新的一份在淡入
+    // 换组当帧旧清单就撤走，只有新的一份在淡入
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, target);
     await tester.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsNothing);
-    expect(find.text('5 个成员 · 共 4 个组'), findsOneWidget);
-    expect(find.text('5 个成员 · 自动'), findsOneWidget);   // 摘要也换成了 fallback 组的
-    expect(find.text('按可用性自动切换'), findsOneWidget);
+    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, target)).selected, isTrue);
     // 记在订阅上（重进节点页、重启后照它停）
-    expect(container.read(currentProfileProvider)?.currentGroupName, target);
-
-    // 点外面收起面板：不换组
-    await tester.tap(find.byType(GroupPickerButton));
-    await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(180, 20));
-    await tester.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsNothing);
     expect(container.read(currentProfileProvider)?.currentGroupName, target);
     expect(tester.takeException(), isNull);
   });
@@ -481,7 +458,7 @@ void main() {
       textScale: 1,
     );
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '负载均衡');
-    expect(find.text('load-balance'), findsNWidgets(2));
+    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '负载均衡')).selected, isTrue);
 
     await _pump(
       tester,
@@ -492,7 +469,7 @@ void main() {
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '节点选择');
   });
 
-  testWidgets('手机 · 单组布局：点节点（selectedMap 变）只更新网格，组按钮不重建', (tester) async {
+  testWidgets('手机 · 单组布局：点节点（selectedMap 变）只更新节点，组 chip 不重建', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
@@ -500,23 +477,22 @@ void main() {
       textScale: 1,
     );
     final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    final button = tester.widget<GroupPickerButton>(find.byType(GroupPickerButton));
+    final button = tester.widget<GroupChipBar>(find.byType(GroupChipBar));
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
 
     container.read(_liveProfile.notifier).state = _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'});
     await tester.pump();
 
-    // 网格跟着变了（固定的节点画上图钉），组按钮还是原来那个 widget
+    // 节点跟着变了（固定的节点画上图钉），组 chip 还是原来那个 widget
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
-    expect(find.text('12 个成员 · 已固定'), findsOneWidget);
-    expect(identical(tester.widget<GroupPickerButton>(find.byType(GroupPickerButton)), button), isTrue);
+    expect(identical(tester.widget<GroupChipBar>(find.byType(GroupChipBar)), button), isTrue);
   });
 
   testWidgets('节点网格的列数在布局阶段跟着宽度走：窗口变宽 / 只变高都不重建网格', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 800),
-      overrides: _overrides(profile: _profile()),
+      overrides: _overrides(profile: _profile(), view: NodeView.grid),
       textScale: 1,
     );
     final grid = tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid));
@@ -543,22 +519,23 @@ void main() {
       await _pump(
         tester,
         size: size,
-        overrides: _overrides(profile: _profile(), wide: true, twoPane: true),
+        overrides: _overrides(profile: _profile(), wide: true, twoPane: true, view: NodeView.grid),
       );
 
-      expect(find.text('全部测速'), findsOneWidget);
+      expect(find.text('全部测速'), findsNothing);
       expect(find.byType(GroupCard), findsNWidgets(4));
-      expect(find.byType(GroupPickerButton), findsNothing);
+      expect(find.byType(GroupChipBar), findsNothing);
       expect(find.byType(GroupSummary), findsOneWidget);
-      expect(find.text('5 个成员'), findsOneWidget);
+      expect(find.text('手动选择 · 5'), findsOneWidget);
       expect(find.byType(Switch), findsNothing);
 
-      await tester.tap(find.widgetWithText(GroupCard, 'url-test'));
+      // 「节点选择」那张卡的第二行也是「自动选择」（它当前选中的成员）：取第二张
+      await tester.tap(find.widgetWithText(GroupCard, '自动选择').last);
       await tester.pump();
-      expect(find.text('12 个成员 · 自动'), findsOneWidget);
-      expect(find.text('当前 $_longName'), findsOneWidget);
-      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text('38')), findsOneWidget);   // 在测速钮上
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(find.text('延迟最低 · 12 · 自动'), findsOneWidget);
+      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text(_longName)), findsOneWidget);
+      expect(find.descendant(of: find.byType(GroupSummary), matching: find.text('38 ms')), findsOneWidget);   // 在测速钮上
+      expect(find.byType(Switch), findsNothing);   // 没有「自动选择」开关了
       expect(_gridColumns(tester), size.width > 1000 ? 4 : 2);
     }
   });
@@ -567,38 +544,12 @@ void main() {
     await _pump(
       tester,
       size: const Size(600, 900),
-      overrides: _overrides(profile: _profile(), wide: true),
+      overrides: _overrides(profile: _profile(), wide: true, view: NodeView.grid),
     );
 
-    expect(find.byType(GroupPickerButton), findsOneWidget);
+    expect(find.byType(GroupChipBar), findsOneWidget);
     expect(find.text('全部测速'), findsNothing);
     expect(_gridColumns(tester), 3);
-  });
-
-  testWidgets('有侧栏的单列（平板竖屏 / Windows 窄窗口）：选组面板从组按钮下面弹出', (tester) async {
-    await _pump(
-      tester,
-      size: const Size(600, 900),
-      overrides: _overrides(profile: _profile(), wide: true, live: true),
-    );
-    final buttonRect = tester.getRect(find.byType(GroupPickerButton));
-
-    await tester.tap(find.byType(GroupPickerButton));
-    await tester.pumpAndSettle();
-    expect(find.byType(BottomSheet), findsNothing);
-    expect(find.text('选择代理组'), findsNothing);
-    final popover = find.ancestor(of: find.byType(ListView).last, matching: find.byType(Material)).first;
-    final rect = tester.getRect(popover);
-    expect(rect.top, greaterThan(buttonRect.bottom));
-    expect(rect.width, closeTo(440, 0.5));   // 跟按钮宽，最宽 440，居中在按钮下面
-    expect(rect.center.dx, closeTo(buttonRect.center.dx, 0.5));
-    expect(find.byType(GroupCard), findsNWidgets(4));
-
-    await tester.tap(find.widgetWithText(GroupCard, '负载均衡'));
-    await tester.pumpAndSettle();
-    expect(find.byType(GroupCard), findsNothing);
-    expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '负载均衡');
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('空态：没有配置 → 点按去「我的」；有配置但没有代理组只给说明', (tester) async {
@@ -615,17 +566,15 @@ void main() {
   });
 
   group('震动', () {
-    testWidgets('全部测速 / 测速本组 / 点节点的延迟单测：点下去各轻震一下', (tester) async {
+    testWidgets('测速本组 / 点节点的延迟单测：点下去各轻震一下', (tester) async {
       final haptics = recordHaptics();
       await _pump(tester, size: const Size(360, 1600), overrides: _overrides(profile: _profile()), textScale: 1);
       expect(haptics, isEmpty);
 
-      await _tapAction(tester, find.byTooltip('全部测速'));
-      expect(haptics, [kLight]);
       await _tapAction(tester, find.byTooltip('测速本组'));
+      expect(haptics, [kLight]);
+      await _tapAction(tester, find.text('152 ms'));   // 香港 02 的延迟胶囊
       expect(haptics, [kLight, kLight]);
-      await _tapAction(tester, find.text('152'));   // 香港 02 的延迟胶囊
-      expect(haptics, [kLight, kLight, kLight]);
     });
 
     testWidgets('选节点：换了才震（select 组点已选中的不震）；url-test 组点了就是固定，震', (tester) async {

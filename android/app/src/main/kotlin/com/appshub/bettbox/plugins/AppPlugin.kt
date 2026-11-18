@@ -589,6 +589,10 @@ class AppPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, ActivityAware 
         "dark" to "com.appshub.bettbox.MainActivityDark",
         "m_dark" to "com.appshub.bettbox.MainActivityMDark",
         "m_light" to "com.appshub.bettbox.MainActivityMLight",
+        // 「X」三款（双色 / 墨底 / 渐变，2026-11-17）
+        "x_duo" to "com.appshub.bettbox.MainActivityXDuo",
+        "x_ink" to "com.appshub.bettbox.MainActivityXInk",
+        "x_gradient" to "com.appshub.bettbox.MainActivityXGradient",
     )
 
     private fun setLauncherIcon(useDarkIcon: Boolean) {

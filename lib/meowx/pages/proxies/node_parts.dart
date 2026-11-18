@@ -1,6 +1,6 @@
 import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/providers/providers.dart';
-import 'package:bett_box/widgets/icon.dart';
+import 'package:bett_box/meowx/theme/target_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

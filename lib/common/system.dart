@@ -10,7 +10,7 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/helper/helper.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/widgets/input.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart';
 import 'package:synchronized/synchronized.dart';
@@ -154,11 +154,7 @@ class System {
       window?.show();
       final shell = Platform.environment['SHELL'] ?? 'bash';
       final password = await globalState.showCommonDialog<String>(
-        child: InputDialog(
-          obscureText: true,
-          title: appLocalizations.pleaseInputAdminPassword,
-          value: '',
-        ),
+        child: _PasswordDialog(title: appLocalizations.pleaseInputAdminPassword),
       );
       if (password == null || password.isEmpty) {
         globalState.showNotifier(appLocalizations.tunEnableRequireAdmin);
@@ -691,3 +687,40 @@ class MacOS {
 }
 
 final macOS = system.isMacOS ? MacOS() : null;
+
+/// Linux 上给内核提权时问管理员密码（原 Bettbox 的 InputDialog，2026-11-17 删掉 Bettbox 界面时换成这个最简的密码框）。
+class _PasswordDialog extends StatefulWidget {
+  const _PasswordDialog({required this.title});
+
+  final String title;
+
+  @override
+  State<_PasswordDialog> createState() => _PasswordDialogState();
+}
+
+class _PasswordDialogState extends State<_PasswordDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() => Navigator.of(this.context).pop(_controller.text);
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      obscureText: true,
+      autofocus: true,
+      onSubmitted: (_) => _submit(),
+    ),
+    actions: [
+      TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(appLocalizations.cancel)),
+      FilledButton(onPressed: _submit, child: Text(appLocalizations.confirm)),
+    ],
+  );
+}

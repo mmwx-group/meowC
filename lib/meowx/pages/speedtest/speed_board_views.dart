@@ -270,7 +270,7 @@ class SpeedBoardStrip extends StatelessWidget {
         }
     }
     return MeowCardMaterial(
-      color: mm.glass ? null : mm.soft,
+      color: mm.soft,
       borderRadius: BorderRadius.circular(16),
       clipBehavior: Clip.antiAlias,
       child: InkWell(

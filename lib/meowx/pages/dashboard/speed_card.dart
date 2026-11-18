@@ -1,4 +1,3 @@
-import '../../theme/card_surface.dart';
 import 'dart:async';
 
 import 'package:bett_box/common/navigator.dart';
@@ -11,11 +10,12 @@ import '../../app/strings.dart';
 import '../../state/format.dart';
 import '../../state/speed_history.dart';
 import '../../state/status.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart';
 import '../speedtest/speed_test_page.dart';
 
-/// 网速卡：上传 / 下载两列（速率大字 + 会话累计）+ 近 60 秒折线，折线贴着卡片左右和底边。
+/// 网速卡（画布稿 Main）：上传（第三色）/ 下载（主色）两列大字 + 右上角网络测速圆钮 + 近 60 秒折线 + 本次累计。
 /// [up] / [down] / [chart] 对应「首页卡片」里的三个开关，调用方保证至少开着一个。
 /// [expand]：外层给了定高（宽屏左列撑满），折线吃掉剩余高度；否则折线定高。
 class HomeSpeedCard extends ConsumerWidget {
@@ -32,7 +32,7 @@ class HomeSpeedCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
+    final cs = context.cs;
     final running = ref.watch(isRunningProvider);
     // 两份数据每秒各变一次：不在首页时不跟（数据照常在 provider 里攒着，切回来那一帧折线直接画到最新）
     // 折线用自己攒的 60 秒（Bettbox 只留 30 个点，见 speed_history.dart）：每次推送都喂进缓冲。
@@ -45,135 +45,131 @@ class HomeSpeedCard extends ConsumerWidget {
     buffer.feed(traffics);
     final history = buffer.state;
     final peak = [...history.up, ...history.down].fold<double>(0, (m, v) => v > m ? v : m);
-    final hasRates = up || down;
-    final caption = TextStyle(fontSize: 11, color: mm.t2);
+    final caption = TextStyle(
+      fontSize: MeowFont.caption,
+      color: cs.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
 
-    // 两列各自居中，排法同 iOS：标题行只写「上传 / 下载」，大号速率，会话累计在速率下面；
-    // 宽屏（dense，格子矮）才把会话并进标题行（同 iPad 竖屏）。以前手机上也并在标题行，下载那一列的长标题伸到右上角，
-    // 和测速入口的小仪表图标叠在一起。
-    Widget rate(MeowGlyph glyph, Color color, String label, int value, int session) => Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            MeowIcon(glyph, size: dense ? 12 : 13, color: color),
-            const SizedBox(width: 4),
-            // 窄屏 + 大字号放不下时整体缩小，不截掉数字
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
+    // 「2.4 MB/s」拆成大字数字 + 小字单位；放不下（窄屏 / 大字号）时整体缩小，不截成「12.3 M…」
+    Widget rate(IconData icon, Color color, String label, int value) {
+      final text = fmtRate(value);
+      final at = text.indexOf(' ');
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 6),
+              Flexible(
                 child: Text(
-                  dense ? '$label · ${S.session} ${fmtSize(session)}' : label,
+                  label,
                   maxLines: 1,
-                  style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2),
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: color),
                 ),
               ),
-            ),
-          ],
-        ),
-        SizedBox(height: dense ? 1 : 2),
-        // 放不下时整体缩小，不截成「12.3 M…」
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            fmtRate(value),
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: mm.t1,
-              fontFamilyFallback: meowRounded,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            ],
           ),
-        ),
-        if (!dense)
+          const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text('${S.session} ${fmtSize(session)}', maxLines: 1, style: TextStyle(fontSize: 11, color: mm.t2)),
+            alignment: Alignment.centerLeft,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: at < 0 ? text : text.substring(0, at)),
+                  if (at >= 0)
+                    TextSpan(
+                      text: text.substring(at),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: dense ? 26 : 30,
+                fontWeight: FontWeight.w800,
+                color: cs.onSurface,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
-      ],
-    );
+        ],
+      );
+    }
 
     final painter = _SpeedChart(
       history: history,
       // 只在首页是当前页时动：隐藏页外层虽有 TickerMode，这里自己也管住，不在首页就不要帧
       active: ref.watch(meowTabProvider.select((t) => t == MeowTab.home)),
-      upColor: mm.accent,
-      downColor: mm.down,
-      idleColor: mm.line,
+      upColor: cs.tertiary,
+      downColor: cs.primary,
+      idleColor: cs.outlineVariant,
       running: running,
-      fill: dense,
+      fill: true,
+    );
+    final speedTest = M3IconButton(
+      icon: Icons.speed_rounded,
+      tooltip: '网络测速',
+      size: 44,
+      tonal: true,
+      onPressed: () => BaseNavigator.push(context, const SpeedTestPage()),
     );
 
-    final card = Container(
-      padding: EdgeInsets.only(top: dense ? 12 : 14),
+    return M3Card(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: expand && chart ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          if (hasRates)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (up) Expanded(child: rate(MeowGlyph.up, mm.accent, S.upload, last?.up.value ?? 0, total.up.value)),
-                  if (up && down) const SizedBox(width: 12),
-                  if (down) Expanded(child: rate(MeowGlyph.down, mm.down, S.download, last?.down.value ?? 0, total.down.value)),
-                ],
-              ),
-            ),
-          if (chart) ...[
-            // 手机端有两列速率时不要这行说明（设计稿只有折线）；速率都关掉、只剩折线时补上，否则看不出画的是什么
-            if (dense || !hasRates)
-              Padding(
-                padding: EdgeInsets.fromLTRB(16, hasRates ? 6 : 0, 16, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(child: Text('近 60 秒', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption)),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text('${S.peak} ${fmtRate(peak)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
-                    ),
-                  ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (up) Expanded(child: rate(Icons.arrow_upward_rounded, cs.tertiary, S.upload, last?.up.value ?? 0)),
+              if (up && down) const SizedBox(width: 12),
+              if (down) Expanded(child: rate(Icons.arrow_downward_rounded, cs.primary, S.download, last?.down.value ?? 0)),
+              if (!up && !down)
+                Expanded(
+                  child: Text(
+                    '网速',
+                    style: TextStyle(fontSize: MeowFont.headline, fontWeight: FontWeight.w800, color: cs.onSurface),
+                  ),
                 ),
-              ),
-            const SizedBox(height: 6),
+              const SizedBox(width: 8),
+              speedTest,
+            ],
+          ),
+          if (chart) ...[
+            const SizedBox(height: 12),
             if (expand)
               Expanded(child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 24), child: painter))
             else
-              SizedBox(height: dense ? 84 : 34, child: painter),
-          ] else
-            SizedBox(height: dense ? 12 : 14),
-        ],
-      ),
-    );
-    // 点卡片打开网络测速（右上角一个小仪表图标提示，与 iOS 同）
-    return MeowCardMaterial(
-      borderRadius: BorderRadius.circular(dense ? 22 : 24),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => BaseNavigator.push(context, const SpeedTestPage()),
-        child: Stack(
-          fit: StackFit.passthrough,   // 宽屏撑满模式下卡片要拿到外层的定高
-          children: [
-            card,
-            Positioned(
-              top: dense ? 10 : 12,
-              right: 14,
-              child: Tooltip(message: '网络测速', child: Icon(Icons.speed_rounded, size: 16, color: mm.t2)),
-            ),
+              SizedBox(height: dense ? 72 : 56, child: painter),
           ],
-        ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${S.session} ↑ ${fmtSize(total.up.value)} · ↓ ${fmtSize(total.down.value)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: caption,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(chart ? (dense ? '${S.peak} ${fmtRate(peak)}' : '过去 60 秒') : '', maxLines: 1, style: caption),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-/// 近 60 秒双线：下载紫在下层、上传玫红在上层，线宽 2。未连接画一条虚线。
+/// 近 60 秒双线：下载（主色，线宽 3，下方铺 12% 底色）在下层、上传（第三色，线宽 2.5）在上层。未连接画一条虚线。
 ///
 /// 连续绘制（与 iOS / macOS 的 `SpeedSparkline` 同一套画法）：样本每秒来一个，以前每来一个就整体重画、所有点一下子
 /// 左移一格（一顿一顿的）。现在按帧重画：线头是「倒数第二个点 → 最新点」之间按时间插值的位置，一直平滑地往前画；
@@ -349,20 +345,21 @@ class _SpeedPainter extends CustomPainter {
     final scale = (size.height - 4) * 0.9 / maxV;
     double y(double v) => size.height - 2 - (v * scale).clamp(0.0, size.height - 4);
 
-    // 一屏 capacity − 2 格。位置按样本的绝对序号算（攒满 60 个之后下标整体前移，绝对序号不会）：
+    // 一屏 capacity − 4 格。位置按样本的绝对序号算（攒满 60 个之后下标整体前移，绝对序号不会）：
     // 线头在序号 head = 最新序号 − 1 + phase 处，线头超过一屏才整体左移。
-    final step = size.width / (_capacity - 2);
+    // 攒满后最老的点在左边缘外 2–3 格：平滑曲线每段只受相邻三个点影响，丢掉最老的点时变形的那一段
+    // 整个在左边缘外（以前只多留一格，丢点那一下左边缘那一段曲线会跳，看着是「卡一下消失」）。
+    const cells = _capacity - 4;
+    final step = size.width / cells;
     final latest = (history.sequence > count ? history.sequence : count) - 1.0;
     final first = latest - (count - 1);
     final head = latest - 1 + phase;
-    final shift = head - (_capacity - 2) > 0 ? head - (_capacity - 2) : 0.0;
+    final shift = head - cells > 0 ? head - cells : 0.0;
 
     List<Offset> points(List<double> data) {
       final out = <Offset>[];
       for (var i = 0; i < count - 1; i++) {
-        final x = (first + i - shift) * step;
-        if (x < -step) continue; // 左边缘外多留一个点，线不在边上断开
-        out.add(Offset(x, y(data[i])));
+        out.add(Offset((first + i - shift) * step, y(data[i])));
       }
       final previous = data[count - 2], newest = data[count - 1];
       out.add(Offset((head - shift) * step, y(previous + (newest - previous) * phase)));
@@ -378,21 +375,40 @@ class _SpeedPainter extends CustomPainter {
           ..lineTo(pts.last.dx, size.height)
           ..lineTo(pts.first.dx, size.height)
           ..close();
-        canvas.drawPath(area, Paint()..color = color.withValues(alpha: 0.10));
+        canvas.drawPath(area, Paint()..color = color.withValues(alpha: 0.12));
       }
       canvas.drawPath(
         path,
         Paint()
           ..color = color
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
+          ..strokeWidth = fill ? 3 : 2.5
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round,
       );
     }
 
+    // 左边缘外的点不画出卡片；左边 24 像素渐隐，线是慢慢淡出去的，不是在边上被切断
+    final bounds = Offset.zero & size;
+    canvas.clipRect(bounds);
+    canvas.saveLayer(bounds, Paint());
     line(down, downColor, fill: fill);
     line(up, upColor, fill: false);
+    if (shift > 0) {
+      // 刚开始左移时线头还贴着左边缘：渐隐在一格之内慢慢加深，不突然出现
+      final fade = (24 / size.width).clamp(0.0, 0.5);
+      final edge = 1 - shift.clamp(0.0, 1.0);
+      canvas.drawRect(
+        bounds,
+        Paint()
+          ..blendMode = BlendMode.dstIn
+          ..shader = LinearGradient(
+            colors: [Color.fromRGBO(0, 0, 0, edge), const Color(0xFF000000)],
+            stops: [0, fade],
+          ).createShader(bounds),
+      );
+    }
+    canvas.restore();
   }
 
   /// 经各点的中点做二次曲线：拐角变圆，又不会冲过数据点（曲线落在控制点的凸包里，不会低于基线）。

@@ -10,6 +10,7 @@ import 'package:bett_box/state.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
+import 'package:flutter/semantics.dart' show CustomSemanticsAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/meow_tab.dart';
@@ -21,12 +22,12 @@ import '../../state/custom_rules.dart';
 import '../../state/format.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
-import '../../theme/button_fill.dart';
-import '../../theme/haptics.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
-import '../../theme/widgets.dart';
+import '../me/me_kit.dart' show MeSegmentGap;
 import 'conn_rule_card.dart';
 
 enum _Seg { connections, logs }
@@ -66,6 +67,9 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
   _Seg _seg = _Seg.connections;
   final _search = TextEditingController();
   String _query = '';
+
+  /// 手机上搜索框收在标题行的圆钮后面（画布稿），点开才占一行；有搜索词时一直开着
+  bool _searchOpen = false;
 
   /// 类型筛选（全部 / 推送 / DNS / 直连 / 代理 / 已关闭），连接与日志共用（对应 iOS，APNs 换成 Google 推送）；
   /// 「已关闭」只作用于连接，日志按「全部」
@@ -245,6 +249,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     setState(() {
       _seg = v;
       _query = '';
+      _searchOpen = false;
     });
   }
 
@@ -320,20 +325,19 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final segment = _Selected<String>(
       listenable: _polled,
       select: () => running && _loaded ? '连接 · ${_conns.length}' : '连接',
-      builder: (context, label) => MeowSegment<_Seg>(
+      builder: (context, label) => M3ButtonGroup<_Seg>(
         items: [(_Seg.connections, label), (_Seg.logs, '日志')],
-        value: _seg,
+        selected: _seg,
         onChanged: _switchSeg,
-        height: twoPane ? 40 : 44,
-        fontSize: twoPane ? 13 : 14,
+        height: twoPane ? 40 : 48,
       ),
     );
     final search = _SearchField(
       controller: _search,
       hint: onConns ? '搜索域名 / 目标 / 规则' : '搜索日志',
       onChanged: (v) => setState(() => _query = v.trim()),
-      height: twoPane ? 40 : 44,
-      fontSize: twoPane ? 13 : 14,
+      height: 40,
+      fontSize: 13,
     );
     // 「已关闭」没有可关的，不放「全部关闭」
     final Widget? rowAction = onConns && _closedMode
@@ -345,6 +349,25 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
           )
         : _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs());
+    // 手机标题行右边的圆钮（画布稿：第三色容器的「全部关闭」）；两栏照旧用搜索框旁的胶囊
+    final Widget? headerAction = onConns && _closedMode
+        ? null
+        : onConns
+        ? _Selected<bool>(
+            listenable: _polled,
+            select: () => _conns.isEmpty,
+            builder: (context, empty) => M3IconButton(
+              icon: Icons.close_rounded,
+              tooltip: '全部关闭',
+              tertiary: true,
+              onPressed: empty ? null : _closeAll,
+            ),
+          )
+        : M3IconButton(
+            icon: Icons.delete_sweep_rounded,
+            tooltip: '清空日志',
+            onPressed: () => ref.read(logsProvider.notifier).clearLogs(),
+          );
     final kindFilter = _KindFilter(value: _kind, compact: twoPane, onChanged: (k) => setState(() => _kind = k));
     final emptyText = _query.isNotEmpty
         ? '无匹配连接'
@@ -360,6 +383,7 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     final Widget loading = visible ? const _Loading() : const SizedBox.shrink();
 
     if (!twoPane) {
+      final showSearch = _searchOpen || _query.isNotEmpty;
       // 手机：悬浮底栏盖在内容上，列表底部让出它的高度；平板竖屏 / 窄窗口有侧栏，底边留白在外层
       final bottom = (wide ? 0.0 : 16.0) + MediaQuery.paddingOf(context).bottom;
       final Widget body;
@@ -375,19 +399,24 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             if (!_loaded) return loading;
             final (:items, sum: _) = _view(true);
             if (items.isEmpty) return _Empty(icon: Icons.inbox_rounded, text: emptyText);
-            // 每条连接一张小卡（同 iOS）
+            // 分段清单（画布稿）：一条连接一行，左滑关闭
             return ListView.builder(
               padding: EdgeInsets.only(bottom: bottom),
               itemCount: items.length,
               itemBuilder: (_, i) {
                 final closedAt = closedAtOf(items[i]);
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _ConnRow(
-                    c: items[i],
-                    closedAt: closedAt,
-                    onTap: () => unawaited(_openSheet(items[i], closedAt: closedAt)),
-                    onClose: () => _close(items[i].id),
+                  padding: EdgeInsets.only(top: i == 0 ? 0 : 3),
+                  child: M3SegmentSlot(
+                    index: i,
+                    count: items.length,
+                    child: _ConnRow(
+                      key: ValueKey(items[i].id),
+                      c: items[i],
+                      closedAt: closedAt,
+                      onTap: () => unawaited(_openSheet(items[i], closedAt: closedAt)),
+                      onClose: () => _close(items[i].id),
+                    ),
                   ),
                 );
               },
@@ -402,7 +431,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
           children: [
             PageTitle(
               MeowTab.connections.label,
-              trailing: running
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  M3IconButton(
+                    icon: Icons.search_rounded,
+                    tooltip: '搜索',
+                    tonal: showSearch,
+                    onPressed: () => setState(() {
+                      if (showSearch) {
+                        _search.clear();
+                        _query = '';
+                      }
+                      _searchOpen = !showSearch;
+                    }),
+                  ),
+                  if (headerAction != null) ...[const SizedBox(width: 8), headerAction],
+                ],
+              ),
+              // 标题下面一行：当前列表累计上下行
+              subtitle: running
                   ? ListenableBuilder(
                       listenable: _polled,
                       builder: (context, _) {
@@ -412,14 +460,26 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
                     )
                   : null,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             segment,
+            if (showSearch) ...[
+              const SizedBox(height: 12),
+              _SearchField(
+                controller: _search,
+                hint: onConns ? '搜索域名 / 目标 / 规则' : '搜索日志',
+                onChanged: (v) => setState(() => _query = v.trim()),
+                height: 48,
+                fontSize: 15,
+                onClose: () => setState(() {
+                  _search.clear();
+                  _query = '';
+                  _searchOpen = false;
+                }),
+              ),
+            ],
             const SizedBox(height: 12),
-            // 搜索框 + 本段操作同一行，下面一排类型筛选（同 iOS）
-            Row(children: [Expanded(child: search), if (rowAction != null) ...[const SizedBox(width: 8), rowAction]]),
-            const SizedBox(height: 10),
             kindFilter,
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             Expanded(child: body),
           ],
         ),
@@ -609,13 +669,6 @@ String _age(DateTime start) {
   return h > 0 ? '$h:${two(s % 3600 ~/ 60)}:${two(s % 60)}' : '${two(s ~/ 60)}:${two(s % 60)}';
 }
 
-/// 已关闭的连接：「用时 X · HH:mm:ss」（用时 = 关闭时刻 − 开始时间）
-String _closedTime(TrackerInfo c, DateTime closedAt) =>
-    '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt).duration)} · ${fmtClockTime(closedAt)}';
-
-/// 行里的时间：活动连接是已持续的时长，已关闭的见 [_closedTime]
-String _timeOf(TrackerInfo c, DateTime? closedAt) => closedAt == null ? _age(c.start) : _closedTime(c, closedAt);
-
 /// 一份连接列表的汇总：代理 / 直连条数（口径同侧栏角标的 ConnStats）与累计上下行。
 class _Sum {
   const _Sum(this.proxied, this.direct, this.up, this.down);
@@ -636,28 +689,22 @@ class _Sum {
   }
 }
 
-/// 标题右侧：当前列表累计 ↑ 上传（玫红箭头）/ ↓ 下载（紫箭头）。
+/// 当前列表累计「↑ 上传 · ↓ 下载」（手机在标题下面一行，两栏在汇总栏里）。
 class _Totals extends StatelessWidget {
   const _Totals({required this.up, required this.down});
   final int up, down;
 
   @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    final style = MeowFont.mono(size: MeowFont.caption, color: mm.t2);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        MeowIcon(MeowGlyph.up, size: 12, color: mm.accent),
-        const SizedBox(width: 3),
-        Text(fmtSize(up), style: style),
-        const SizedBox(width: 10),
-        MeowIcon(MeowGlyph.down, size: 12, color: mm.pur),
-        const SizedBox(width: 3),
-        Text(fmtSize(down), style: style),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Text(
+    '↑ ${fmtSize(up)} · ↓ ${fmtSize(down)}',
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      fontSize: MeowFont.footnote,
+      color: context.cs.onSurfaceVariant,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    ),
+  );
 }
 
 /// 搜索框：卡片底胶囊。
@@ -668,30 +715,35 @@ class _SearchField extends StatelessWidget {
     required this.onChanged,
     required this.height,
     required this.fontSize,
+    this.onClose,
   });
   final TextEditingController controller;
   final String hint;
   final ValueChanged<String> onChanged;
   final double height, fontSize;
 
+  /// 手机：行尾的收起钮（清掉搜索词并收起）；点开时自动聚焦
+  final VoidCallback? onClose;
+
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    return MeowCard(
+    final cs = context.cs;
+    return Container(
       constraints: BoxConstraints(minHeight: height),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      radius: BorderRadius.circular(height / 2),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(color: cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(height / 2)),
       child: Row(
         children: [
-          Icon(Icons.search_rounded, size: 18, color: mm.t2),
-          const SizedBox(width: 8),
+          Icon(Icons.search_rounded, size: 22, color: cs.onSurfaceVariant),
+          const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: controller,
               onChanged: onChanged,
+              autofocus: onClose != null && controller.text.isEmpty,
               textInputAction: TextInputAction.search,
-              cursorColor: mm.accent,
-              style: TextStyle(fontSize: fontSize, color: mm.t1),
+              cursorColor: cs.primary,
+              style: TextStyle(fontSize: fontSize, color: cs.onSurface),
               decoration: InputDecoration(
                 isCollapsed: true,
                 filled: false,
@@ -700,10 +752,17 @@ class _SearchField extends StatelessWidget {
                 focusedBorder: InputBorder.none,
                 hintText: hint,
                 hintMaxLines: 1,
-                hintStyle: TextStyle(fontSize: fontSize, color: mm.t2),
+                hintStyle: TextStyle(fontSize: fontSize, color: cs.onSurfaceVariant),
               ),
             ),
           ),
+          if (onClose != null)
+            IconButton(
+              tooltip: '收起搜索',
+              visualDensity: VisualDensity.compact,
+              onPressed: onClose,
+              icon: Icon(Icons.close_rounded, size: 20, color: cs.onSurfaceVariant),
+            ),
         ],
       ),
     );
@@ -789,19 +848,14 @@ class _CardSlice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    const r = Radius.circular(24);
-    return MeowCard(
-      padding: EdgeInsets.fromLTRB(14, first ? edge : 0, 14, last ? edge : 0),
-      radius: BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
-      openTop: !first,
-      openBottom: !last,
-      child: first
-          ? child
-          : DecoratedBox(
-              decoration: BoxDecoration(border: Border(top: BorderSide(color: mm.line))),
-              child: child,
-            ),
+    const r = Radius.circular(MeowShape.xl);
+    return Container(
+      padding: EdgeInsets.fromLTRB(12, first ? edge + 6 : 0, 12, last ? edge + 6 : 0),
+      decoration: BoxDecoration(
+        color: context.cs.card,
+        borderRadius: BorderRadius.vertical(top: first ? r : Radius.zero, bottom: last ? r : Radius.zero),
+      ),
+      child: child,
     );
   }
 }
@@ -846,97 +900,102 @@ Widget _leadTag(TrackerInfo c) {
 /// 行首标了入站时，TCP / UDP 挪到规则前面。
 String _subOf(TrackerInfo c) => isDesktopUi ? '${c.metadata.network.toUpperCase()} · ${_ruleOf(c)}' : _ruleOf(c);
 
-/// 窄屏连接行（同 iOS）：每条一张小卡。第一行 协议标签 + 主机；第二行 规则选中的出站（DIRECT 绿、拒绝红、其余玫红）+ 规则；
-/// 第三行 ↑ 上传 ↓ 下载 · 时长；右侧关闭。点卡片看详情。
-/// 已关闭的（[closedAt] 不为空）第三行换成「用时 X · 关闭时刻」，没有关闭按钮。
+/// 行首的类型块：推送 / DNS / 拒绝 / 代理 / 直连，各一种色调容器和形状（画布稿 Activity）。
+(String, Color, Color, M3TileShape) _kindTile(TrackerInfo c, ColorScheme cs) {
+  final kinds = connectionKinds(c);
+  final leaf = c.chains.firstOrNull ?? '';
+  if (kinds.contains(ActivityKind.push)) return ('推送', cs.surfaceContainerHighest, cs.onSurface, M3TileShape.leafB);
+  if (kinds.contains(ActivityKind.dns)) return ('DNS', cs.secondaryContainer, cs.onSecondaryContainer, M3TileShape.leafA);
+  if (leaf.startsWith('REJECT')) return ('拒绝', cs.errorContainer, cs.onErrorContainer, M3TileShape.rounded);
+  if (kinds.contains(ActivityKind.proxy)) return ('代理', cs.primaryContainer, cs.onPrimaryContainer, M3TileShape.rounded);
+  return ('直连', cs.tertiaryContainer, cs.onTertiaryContainer, M3TileShape.circle);
+}
+
+/// 窄屏连接行（画布稿 Activity）：分段清单的一行。类型块 + 主机:端口 / 出站 · 规则 + 右侧速率（或累计）与时长；
+/// 点了看详情，左滑关闭。已关闭的（[closedAt] 不为空）右侧写「已结束」与用时，不能滑。
 class _ConnRow extends StatelessWidget {
-  const _ConnRow({required this.c, required this.onTap, required this.onClose, this.closedAt});
+  const _ConnRow({super.key, required this.c, required this.onTap, required this.onClose, this.closedAt});
   final TrackerInfo c;
   final VoidCallback onTap, onClose;
   final DateTime? closedAt;
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final aux = _auxScaler(context);
-    final num = MeowFont.mono(size: MeowFont.caption2, color: mm.t2);
-    // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：第二行写规则选中的那个（组名或 DIRECT），颜色按最终去向
+    // mihomo 的 chains 是「叶子 → … → 规则选中的策略」：写规则选中的那个（组名或 DIRECT）
     final policy = c.chains.lastOrNull ?? '—';
-    final leaf = c.chains.firstOrNull ?? '';
-    final viaColor = leaf == 'DIRECT' ? mm.good : (leaf.startsWith('REJECT') ? mm.slow : mm.accent);
-    const shape = RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(18)));
-    // 不用 clipBehavior 裁剪（每张卡一个圆角裁剪层，列表每 1.5s 重建）：水波纹由 InkWell 的 customBorder 限在圆角里
-    return MeowCardMaterial(
-      shape: shape,
-      child: InkWell(
-        onTap: onTap,
-        customBorder: shape,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(12, 10, closedAt == null ? 2 : 12, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _leadTag(c),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${_hostOf(c)}:${c.metadata.destinationPort}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    // 出站名比规则要紧：放不下时出站最多占六成，其余给规则
-                    Row(
-                      children: [
-                        Flexible(
-                          flex: 3,
-                          child: Text(
-                            policy,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w600, color: viaColor),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          flex: 2,
-                          child: Text(_subOf(c), maxLines: 1, overflow: TextOverflow.ellipsis, style: num),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '↑ ${fmtSize(c.upload)}  ↓ ${fmtSize(c.download)} · ${_timeOf(c, closedAt)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textScaler: aux,
-                      style: num,
-                    ),
-                  ],
-                ),
-              ),
-              if (closedAt == null)
-                Semantics(
-                  button: true,
-                  label: '关闭这条连接',
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: onClose,
-                    child: SizedBox(width: 44, height: 44, child: Icon(Icons.close_rounded, size: 18, color: mm.t2)),
-                  ),
-                ),
-            ],
-          ),
+    final (label, bg, fg, shape) = _kindTile(c, cs);
+    final speed = (c.downloadSpeed ?? 0) + (c.uploadSpeed ?? 0);
+    final rate = closedAt != null
+        ? '已结束'
+        : (c.downloadSpeed != null || c.uploadSpeed != null)
+        ? fmtRate(speed)
+        : '↓ ${fmtSize(c.download)}';
+    final time = closedAt == null ? _age(c.start) : '用时 ${fmtClosedDuration(ClosedConnection(c, closedAt!).duration)}';
+    final row = M3ListRow(
+      title: '${_hostOf(c)}:${c.metadata.destinationPort}',
+      titleSize: 15,
+      subtitle: '$policy · ${_subOf(c)}',
+      subtitleMaxLines: 1,
+      onTap: onTap,
+      leading: M3IconTile(
+        text: label,
+        shape: shape,
+        bg: bg,
+        fg: fg,
+        child: Text(
+          label,
+          maxLines: 1,
+          textScaler: aux,
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg),
         ),
+      ),
+      trailing: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            rate,
+            maxLines: 1,
+            textScaler: aux,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: closedAt == null ? cs.primary : cs.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          Text(
+            time,
+            maxLines: 1,
+            textScaler: aux,
+            style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant, fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ],
+      ),
+    );
+    if (closedAt != null) return row;
+    return Dismissible(
+      key: ValueKey('dismiss:${c.id}'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) => onClose(),
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 24),
+        decoration: BoxDecoration(color: cs.errorContainer, borderRadius: BorderRadius.circular(M3ListRow.outer)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.close_rounded, color: cs.onErrorContainer),
+            const SizedBox(width: 6),
+            Text('关闭', style: TextStyle(fontWeight: FontWeight.w700, color: cs.onErrorContainer)),
+          ],
+        ),
+      ),
+      child: Semantics(
+        customSemanticsActions: {const CustomSemanticsAction(label: '关闭这条连接'): onClose},
+        child: row,
       ),
     );
   }
@@ -951,45 +1010,22 @@ class _KindFilter extends StatelessWidget {
   final bool compact;
 
   @override
-  Widget build(BuildContext context) {
-    final mm = context.mm;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (final k in ActivityKind.values) ...[
-            Material(
-              color: k == value
-                  ? mm.buttonFill(MeowButtonFill.accent, classic: Color.alphaBlend(mm.soft, mm.elev))
-                  : mm.buttonFill(MeowButtonFill.plain),
-              shape: StadiumBorder(side: mm.buttonSide),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () {
-                  if (k != value) MeowHaptics.select();
-                  onChanged(k);
-                },
-                child: Container(
-                  constraints: BoxConstraints(minHeight: compact ? 32 : 40),
-                  padding: EdgeInsets.symmetric(horizontal: compact ? 12 : 16),
-                  alignment: Alignment.center,
-                  child: Text(
-                    k.label,
-                    style: TextStyle(
-                      fontSize: compact ? MeowFont.caption : MeowFont.footnote,
-                      fontWeight: FontWeight.w600,
-                      color: k == value ? mm.accent : mm.t1,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: compact ? 6 : 8),
-          ],
+  Widget build(BuildContext context) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal,
+    child: Row(
+      children: [
+        for (final (i, k) in ActivityKind.values.indexed) ...[
+          if (i > 0) const SizedBox(width: 6),
+          M3FilterChip(
+            label: k.label,
+            selected: k == value,
+            height: compact ? 32 : 36,
+            onTap: k == value ? null : () => onChanged(k),
+          ),
         ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
 
 /// 两栏连接表：一张撑满高度的卡片，表头固定、行懒加载；选中行柔粉底。
@@ -1157,23 +1193,27 @@ class _InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    return MeowCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      radius: BorderRadius.circular(20),
-      color: hero && !mm.glass ? mm.hero : null,
+    final cs = context.cs;
+    final fg = hero ? cs.onPrimaryContainer : cs.onSurface;
+    return M3Card(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      radius: hero ? MeowShape.xl : MeowShape.lInc + 4,
+      color: hero ? cs.primaryContainer : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
+          Text(
+            label,
+            style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w600, color: fg.withValues(alpha: 0.8)),
+          ),
           const SizedBox(height: 4),
           Text(
             value,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
             style: mono
-                ? MeowFont.mono(size: MeowFont.footnote, weight: FontWeight.w600, color: mm.t1)
-                : TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.t1),
+                ? MeowFont.mono(size: MeowFont.subheadline, weight: FontWeight.w600, color: fg)
+                : TextStyle(fontSize: hero ? 17 : 15, fontWeight: FontWeight.w800, color: fg),
           ),
         ],
       ),
@@ -1188,27 +1228,45 @@ class _StatPair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    Widget cell(String label, int bytes) => Expanded(
-      child: MeowCard(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        radius: BorderRadius.circular(18),
+    final cs = context.cs;
+    // 上传第三色、下载主色（同首页网速卡）
+    Widget cell(String label, int bytes, Color tint, IconData icon) => Expanded(
+      child: M3Card(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        radius: MeowShape.lInc + 4,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(fontSize: MeowFont.caption2, color: mm.t2)),
-            const SizedBox(height: 1),
+            Row(
+              children: [
+                Icon(icon, size: 16, color: tint),
+                const SizedBox(width: 4),
+                Text(label, style: TextStyle(fontSize: MeowFont.caption, fontWeight: FontWeight.w600, color: tint)),
+              ],
+            ),
+            const SizedBox(height: 2),
             Text(
               fmtSize(bytes),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: mm.t1, fontFamilyFallback: meowRounded),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: cs.onSurface,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ],
         ),
       ),
     );
-    return Row(children: [cell(S.upload, up), const SizedBox(width: 10), cell(S.download, down)]);
+    return Row(
+      children: [
+        cell(S.upload, up, cs.tertiary, Icons.arrow_upward_rounded),
+        const SizedBox(width: 10),
+        cell(S.download, down, cs.primary, Icons.arrow_downward_rounded),
+      ],
+    );
   }
 }
 
@@ -1247,19 +1305,21 @@ class _ConnDetail extends StatelessWidget {
         const SizedBox(height: 10),
         _StatPair(up: c.upload, down: c.download),
         const SizedBox(height: 10),
-        MeowCard(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          radius: BorderRadius.circular(20),
+        // 分段清单的样子：各行之间 3 的间隔（页面底色、内角小圆角）
+        Material(
+          color: context.cs.card,
+          borderRadius: BorderRadius.circular(MeowShape.lInc + 4),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              for (final (i, f) in facts.indexed)
+              for (final (i, f) in facts.indexed) ...[
+                if (i > 0) const MeSegmentGap(),
                 Container(
-                  constraints: const BoxConstraints(minHeight: 36),
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: i == 0 ? null : BoxDecoration(border: Border(top: BorderSide(color: mm.line))),
+                  constraints: const BoxConstraints(minHeight: 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
                     children: [
-                      Text(f.$1, style: TextStyle(fontSize: MeowFont.caption, color: mm.t2)),
+                      Text(f.$1, style: TextStyle(fontSize: MeowFont.footnote, fontWeight: FontWeight.w600, color: mm.t2)),
                       const SizedBox(width: 8),
                       // 值拿键之外的全部宽度、右对齐
                       Expanded(
@@ -1268,12 +1328,13 @@ class _ConnDetail extends StatelessWidget {
                           textAlign: TextAlign.end,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: MeowFont.mono(size: MeowFont.caption, color: mm.t1),
+                          style: MeowFont.mono(size: MeowFont.footnote, color: mm.t1),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ],
             ],
           ),
         ),
@@ -1291,17 +1352,25 @@ class _CloseConnButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    return MeowCardMaterial(
-      borderRadius: BorderRadius.circular(16),
+    // 危险操作：error 容器的整颗胶囊
+    final cs = context.cs;
+    return Material(
+      color: cs.errorContainer,
+      shape: const StadiumBorder(),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
         onTap: onTap,
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          constraints: const BoxConstraints(minHeight: 52),
           alignment: Alignment.center,
-          child: Text('关闭这条连接', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.slow)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.close_rounded, size: 20, color: cs.onErrorContainer),
+              const SizedBox(width: 6),
+              Text('关闭这条连接', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: cs.onErrorContainer)),
+            ],
+          ),
         ),
       ),
     );
@@ -1461,7 +1530,6 @@ class _LogListState extends ConsumerState<_LogList> {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
     final open = ref.watch(appSettingProvider.select((s) => s.openLogs));
     final all = _all;
     final q = widget.query.toLowerCase();
@@ -1500,7 +1568,7 @@ class _LogListState extends ConsumerState<_LogList> {
                         first: i == 0,
                         last: i == logs.length - 1,
                         edge: 4,
-                        child: _logRow(mm, logs[i]),
+                        child: _logRow(context, logs[i]),
                       ),
                     ),
                   ),
@@ -1510,36 +1578,40 @@ class _LogListState extends ConsumerState<_LogList> {
     );
   }
 
-  Widget _logRow(MeowTokens mm, Log l) {
-    final color = switch (l.logLevel) {
-      LogLevel.error => mm.slow,
-      LogLevel.warning => mm.mid,
-      _ => mm.good,
+  Widget _logRow(BuildContext context, Log l) {
+    final cs = context.cs, x = context.m3;
+    // 级别小块（画布稿）：错误 = error 容器、警告 = warn 容器、DNS 模块的日志 = 次色容器、其余中性
+    final (level, bg, fg) = switch (l.logLevel) {
+      LogLevel.error => ('ERR', cs.errorContainer, cs.onErrorContainer),
+      LogLevel.warning => ('WARN', x.warnContainer, x.onWarnContainer),
+      _ when l.payload.contains('[DNS]') => ('DNS', cs.secondaryContainer, cs.onSecondaryContainer),
+      LogLevel.debug => ('DBG', cs.surfaceContainerHighest, cs.onSurfaceVariant),
+      _ => ('INFO', cs.surfaceContainerHighest, cs.onSurfaceVariant),
     };
     final t = _time.firstMatch(l.dateTime)?.group(0) ?? l.dateTime;
+    final mono = MeowFont.mono(size: MeowFont.caption, color: cs.onSurface).copyWith(height: 17 / 12);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      // 级别点嵌在时间文字里按行居中，整行与消息按基线对齐：任意字号下点都不偏上
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      // 时间、级别块、消息按基线对齐：任意字号下都不错位
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
+          Text(t, style: mono.copyWith(color: cs.onSurfaceVariant)),
+          const SizedBox(width: 10),
           Text.rich(
-            TextSpan(
-              style: MeowFont.mono(size: MeowFont.caption2, color: mm.t2),
-              children: [
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.middle,
-                  child: Padding(padding: const EdgeInsets.only(right: 8), child: StatusDot(color: color, size: 7)),
-                ),
-                TextSpan(text: t),
-              ],
+            WidgetSpan(
+              alignment: PlaceholderAlignment.middle,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(MeowShape.xs + 2)),
+                child: Text(level, style: mono.copyWith(color: fg, fontWeight: FontWeight.w600)),
+              ),
             ),
+            style: mono,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(l.payload, style: MeowFont.mono(size: MeowFont.caption, color: mm.t1).copyWith(height: 17 / 12)),
-          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(l.payload, style: mono)),
         ],
       ),
     );

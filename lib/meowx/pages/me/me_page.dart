@@ -1,5 +1,4 @@
 import 'package:bett_box/common/common.dart';
-import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +10,8 @@ import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../state/wifi_switch.dart';
 import '../../theme/balanced_columns.dart';
-import '../../theme/glass_card.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import '../../theme/two_pane.dart';
@@ -23,6 +23,7 @@ import '../settings/networking_page.dart';
 import '../settings/proxy_apps_page.dart';
 import '../settings/wifi_switch_page.dart';
 import 'account_card.dart';
+import 'appearance_parts.dart' show meowSystemColorAvailable;
 import 'me_kit.dart';
 import 'me_sheet.dart';
 import 'platform_rows.dart';
@@ -48,27 +49,27 @@ class _MePageState extends ConsumerState<MePage> {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
     final twoPane = ref.watch(isTwoPaneProvider);
     final rail = ref.watch(isWideLayoutProvider);
     final account = AccountCard(onError: _showError, compact: twoPane);
     final subs = SubscriptionsCard(onError: _showError, compact: twoPane);
+    final cs = context.cs;
     final errorStrip = _error == null
         ? null
-        : GlassCard(
-            radius: 16,
-            padding: const EdgeInsets.fromLTRB(12, 4, 0, 4),
-            color: mm.slow.withValues(alpha: 0.12),
+        : M3Card(
+            radius: MeowShape.l,
+            padding: const EdgeInsets.fromLTRB(14, 4, 0, 4),
+            color: cs.errorContainer,
             child: Row(
               children: [
-                Icon(Icons.error_outline_rounded, size: 16, color: mm.slow),
-                const SizedBox(width: 8),
+                Icon(Icons.error_outline_rounded, size: 18, color: cs.onErrorContainer),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(_error!, style: TextStyle(fontSize: MeowFont.footnote, color: mm.slow)),
+                  child: Text(_error!, style: TextStyle(fontSize: MeowFont.footnote, color: cs.onErrorContainer)),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
-                  icon: Icon(Icons.close_rounded, size: 16, color: mm.slow),
+                  icon: Icon(Icons.close_rounded, size: 18, color: cs.onErrorContainer),
                   onPressed: () => setState(() => _error = null),
                 ),
               ],
@@ -89,12 +90,12 @@ class _MePageState extends ConsumerState<MePage> {
         padding: rail ? widePagePadding() : EdgeInsets.fromLTRB(16, 0, 16, 24 + MediaQuery.paddingOf(context).bottom),
         children: [
           PageTitle('我的', trailing: scan),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           account,
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           subs,
           if (errorStrip != null) ...[const SizedBox(height: 12), errorStrip],
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           const _EntryList(),
         ],
       );
@@ -119,7 +120,9 @@ class _MePageState extends ConsumerState<MePage> {
       const MeSection(title: '本地代理 · 订阅', children: [LocalProxyRows(), SyncRows()]),
       // 辅助功能：po0 / GGY / AkileCDN 加白（说明收在标题的 ⓘ 里）
       const MeSection(title: '辅助功能 · $whitelistGroupTitle', info: whitelistInfo, children: [AssistRows()]),
-      const MeSection(title: '外观 · 关于', children: [AppearanceRows(), LogSwitchRow(), AboutRows()]),
+      // 外观多了字体 / 文字缩放等几行（M3 改版并进来的），和「关于」拆成两组：三列按分组切，组太大切不匀
+      const MeSection(title: '外观', children: [AppearanceRows()]),
+      const MeSection(title: '日志 · 关于', children: [LogSwitchRow(), AboutRows()]),
     ];
     // 顺序：Windows / Linux 平台专属分组在前（同以前的第 2 列），平板没有那么多专属项、排在通用的「代理 / 流量」后面；
     // 整串按实际高度连续切成三段（接在账户 + 订阅下面 / 第 2 列 / 第 3 列），见 BalancedColumns
@@ -208,7 +211,6 @@ class _EntryList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
     final meow = ref.watch(meowSettingProvider);
     final vpn = ref.watch(vpnSettingProvider);
     final app = ref.watch(appSettingProvider);
@@ -218,17 +220,32 @@ class _EntryList extends ConsumerWidget {
     final bypassCount = meow.bypassDomains.length + meow.bypassCidrs.length;
     final availableUpdate = ref.watch(availableUpdateProvider);
 
-    Widget icon(_Glyph glyph, {bool platform = false}) => Container(
-      width: 32,
-      height: 32,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: platform ? mm.soft : mm.card2, borderRadius: BorderRadius.circular(10)),
-      child: MeowIcon.path(glyph.d, size: 17, color: platform ? mm.accent : mm.t1),
-    );
+    // 图标块（画布稿 Me）：按入口轮换四种色调容器与四种形状，平台专属的几行用第三色容器
+    final cs = context.cs;
+    final tones = [
+      (cs.primaryContainer, cs.onPrimaryContainer),
+      (cs.tertiaryContainer, cs.onTertiaryContainer),
+      (cs.secondaryContainer, cs.onSecondaryContainer),
+      (cs.surfaceContainerHighest, cs.onSurfaceVariant),
+    ];
+    const shapes = [M3TileShape.circle, M3TileShape.rounded, M3TileShape.leafA, M3TileShape.leafB];
+    var n = 0;
+    Widget icon(_Glyph glyph, {bool platform = false}) {
+      final i = n++;
+      final (bg, fg) = platform ? (cs.tertiaryContainer, cs.onTertiaryContainer) : tones[i % tones.length];
+      return M3IconTile(
+        shape: shapes[i % shapes.length],
+        bg: bg,
+        fg: fg,
+        child: MeowIcon.path(glyph.d, size: 20, color: fg),
+      );
+    }
+
     Widget entry(_Glyph glyph, String label, String? value, VoidCallback onTap, {bool platform = false}) => MeRow(
       leading: icon(glyph, platform: platform),
       label: label,
-      value: value,
+      subtitle: value,
+      subtitleMaxLines: 1,
       chevron: true,
       onTap: onTap,
     );
@@ -246,6 +263,7 @@ class _EntryList extends ConsumerWidget {
         );
 
     return MeSection(
+      title: '设置',
       children: [
         entry(_Glyph.proxy, '代理与测速', '${meow.dnsMode.label} · ${meow.latencyMode.label}', page('代理与测速', const ProxyRows())),
         entry(
@@ -314,7 +332,12 @@ class _EntryList extends ConsumerWidget {
         entry(
           _Glyph.appearance,
           '外观',
-          _join([themeModeLabel(themeMode), if (meow.themeStyle == MeowThemeStyle.glass) meow.themeStyle.label]),
+          _join([
+            themeModeLabel(themeMode),
+            meow.followSystemColor && meowSystemColorAvailable
+                ? '跟随系统取色'
+                : (MeowColors.nameOf(meow.accentColor) ?? '自定义主题色'),
+          ]),
           page('外观', const AppearanceRows()),
         ),
         entry(_Glyph.advanced, '高级', '内核配置 · 备份 · 脚本', () => openAdvanced(context)),

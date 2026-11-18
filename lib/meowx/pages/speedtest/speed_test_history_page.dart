@@ -12,7 +12,8 @@ import '../../state/meow_settings.dart';
 import '../../state/speed_test.dart';
 import '../../theme/button_fill.dart';
 import '../../theme/card_surface.dart';
-import '../../theme/haptics.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/morph_menu.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
@@ -187,7 +188,7 @@ class _SpeedTestHistoryPageState extends State<SpeedTestHistoryPage> {
   Widget _deleteBackground(MeowTokens mm) => Container(
     alignment: Alignment.centerRight,
     padding: const EdgeInsets.only(right: 20),
-    decoration: BoxDecoration(color: mm.slow, borderRadius: BorderRadius.circular(18)),
+    decoration: BoxDecoration(color: mm.slow, borderRadius: BorderRadius.circular(MeowShape.lInc)),
     child: const Text('删除', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
   );
 }
@@ -317,11 +318,11 @@ class SpeedTestShareAction {
   Future<void> run(BuildContext context, SpeedTestRecord record) async {
     final theme = Theme.of(context);
     final body = theme.textTheme.bodyMedium;
-    final look = ProviderScope.containerOf(context, listen: false).read(meowLookProvider);
+    final seed = meowSeedOf(ProviderScope.containerOf(context, listen: false).read(meowLookProvider));
     try {
       final bytes = await SpeedTestShareImage.render(
         record,
-        look: look,
+        seed: seed,
         brightness: theme.brightness,
         textStyle: TextStyle(fontFamily: body?.fontFamily, fontFamilyFallback: body?.fontFamilyFallback),
       );
@@ -578,8 +579,8 @@ class SpeedTestSummaryCard extends StatelessWidget {
     final trend = s.trend;
     return MeowCard(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
-      radius: BorderRadius.circular(24),
-      color: mm.glass ? null : mm.hero,
+      radius: BorderRadius.circular(MeowShape.xl),
+      color: mm.hero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -602,10 +603,10 @@ class SpeedTestSummaryCard extends StatelessWidget {
           Row(
             children: [
               _stat(mm, '最快下载', s.fastestDownload == null ? null : fmtRecordMbps(s.fastestDownload!.downloadMbps),
-                  'Mbps', mm.down, s.fastestDownload),
+                  'Mbps', context.cs.primary, s.fastestDownload),
               const SizedBox(width: 8),
               _stat(mm, '最快上传', s.fastestUpload == null ? null : fmtRecordMbps(s.fastestUpload!.uploadMbps), 'Mbps',
-                  mm.accent, s.fastestUpload),
+                  context.cs.tertiary, s.fastestUpload),
               const SizedBox(width: 8),
               _stat(mm, '最低延迟', s.lowestLatency?.latencyMs?.toString(), 'ms', mm.t1, s.lowestLatency),
             ],
@@ -614,7 +615,7 @@ class SpeedTestSummaryCard extends StatelessWidget {
             const SizedBox(height: 10),
             SizedBox(
               height: 64,
-              child: CustomPaint(painter: _TrendPainter(trend, mm.down, mm.elevSolid), size: Size.infinite),
+              child: CustomPaint(painter: _TrendPainter(trend, context.cs.primary, mm.elevSolid), size: Size.infinite),
             ),
             const SizedBox(height: 6),
             Row(
@@ -637,9 +638,8 @@ class SpeedTestSummaryCard extends StatelessWidget {
       Expanded(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-          // 液态玻璃：卡片底是半透明的，小格用卡片里的次级块（elev 换透明度会变成一块不透明的白）
           decoration: BoxDecoration(
-            color: mm.glass ? mm.card2 : mm.elev.withValues(alpha: 0.78),
+            color: mm.elev.withValues(alpha: 0.78),
             borderRadius: BorderRadius.circular(14),
           ),
           child: Column(
@@ -712,27 +712,8 @@ class _FilterChips extends StatelessWidget {
   );
 
   Widget _chip(BuildContext context, String? value, String title) {
-    final mm = context.mm;
     final on = selection == value;
-    return GestureDetector(
-      onTap: () {
-        if (!on) MeowHaptics.select();
-        onChanged(value);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
-        decoration: ShapeDecoration(
-          color: mm.buttonFill(on ? MeowButtonFill.selected : MeowButtonFill.plain),
-          shape: StadiumBorder(side: mm.buttonSide),
-        ),
-        child: Text(
-          title,
-          maxLines: 1,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: on ? mm.onSelected : mm.t2),
-        ),
-      ),
-    );
+    return M3FilterChip(label: title, selected: on, onTap: on ? null : () => onChanged(value));
   }
 }
 
@@ -780,7 +761,7 @@ class SpeedTestRecordRow extends StatelessWidget {
     final mm = context.mm;
     final r = record;
     final card = MeowCardMaterial(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(MeowShape.lInc),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
@@ -808,7 +789,7 @@ class SpeedTestRecordRow extends StatelessWidget {
                 SizedBox(
                   width: 64,
                   height: 30,
-                  child: CustomPaint(painter: _SparklinePainter(r.downloadSamples, mm.down)),
+                  child: CustomPaint(painter: _SparklinePainter(r.downloadSamples, context.cs.primary)),
                 ),
               ],
               const SizedBox(width: 12),
@@ -832,7 +813,7 @@ class SpeedTestRecordRow extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
-                              Text(fmtRecordMbps(r.downloadMbps), style: _numStyle(17, mm.down)),
+                              Text(fmtRecordMbps(r.downloadMbps), style: _numStyle(17, context.cs.primary)),
                               const SizedBox(width: 1),
                               Text('Mbps', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: mm.t2)),
                             ],
@@ -843,7 +824,7 @@ class SpeedTestRecordRow extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
-                                color: mm.accent,
+                                color: context.cs.tertiary,
                                 fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
@@ -907,8 +888,8 @@ class SpeedTestExitLine extends StatelessWidget {
               if (tag != null) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(color: mm.down.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
-                  child: Text(tag, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: mm.down)),
+                  decoration: BoxDecoration(color: context.cs.primary.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
+                  child: Text(tag, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: context.cs.primary)),
                 ),
                 if (org != null) const SizedBox(width: 6),
               ],
@@ -972,7 +953,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
     );
     final errorBox = MeowCard(
       padding: const EdgeInsets.all(16),
-      radius: BorderRadius.circular(18),
+      radius: BorderRadius.circular(MeowShape.lInc),
       child: Text(
         '测速失败：${r.error}',
         textAlign: TextAlign.center,
@@ -981,20 +962,20 @@ class SpeedTestRecordDetail extends StatelessWidget {
     );
     final bigNumbers = Row(
       children: [
-        _big(mm, '下载', mm.down, r.downloadMbps, r.downloadPeakMbps),
+        _big(mm, '下载', context.cs.primary, r.downloadMbps, r.downloadPeakMbps),
         const SizedBox(width: 8),
-        _big(mm, '上传', mm.accent, r.uploadMbps, r.uploadPeakMbps),
+        _big(mm, '上传', context.cs.tertiary, r.uploadMbps, r.uploadPeakMbps),
       ],
     );
     // flexible：曲线撑满父级给的高度（宽版右栏）；没有采样时（失败 / 旧记录）写一句说明
     Widget chartCard({required bool flexible}) {
       final plot = CustomPaint(
-        painter: SpeedTestRecordChartPainter(r.downloadSamples, r.uploadSamples, mm.down, mm.accent, mm.line),
+        painter: SpeedTestRecordChartPainter(r.downloadSamples, r.uploadSamples, context.cs.primary, context.cs.tertiary, context.cs.outlineVariant),
         size: Size.infinite,
       );
       return MeowCard(
         padding: const EdgeInsets.all(18),
-        radius: BorderRadius.circular(24),
+        radius: BorderRadius.circular(MeowShape.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1015,9 +996,9 @@ class SpeedTestRecordDetail extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _legend('下载', mm.down, small),
+                  _legend('下载', context.cs.primary, small),
                   const SizedBox(width: 14),
-                  _legend('上传', mm.accent, small),
+                  _legend('上传', context.cs.tertiary, small),
                   const Spacer(),
                   Text('最高 ${fmtRecordMbps(_peak([...r.downloadSamples, ...r.uploadSamples]))} Mbps', style: small),
                 ],
@@ -1032,7 +1013,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
     final dense = part == SpeedTestRecordPart.table;
     final table = MeowCard(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-      radius: BorderRadius.circular(24),
+      radius: BorderRadius.circular(MeowShape.xl),
       child: Column(
         children: [
           _kv(mm, '延迟', r.latencyMs == null ? '–' : '${r.latencyMs} ms', dense: dense),
@@ -1075,7 +1056,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
   Widget _big(MeowTokens mm, String title, Color tint, double? value, double? peak) => Expanded(
     child: MeowCard(
       padding: const EdgeInsets.all(14),
-      radius: BorderRadius.circular(18),
+      radius: BorderRadius.circular(MeowShape.lInc),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1137,7 +1118,7 @@ class SpeedTestRecordDetail extends StatelessWidget {
   );
 }
 
-// —— 几张小图：自己画 Path，配色同测速页（下载紫 mm.down、上传玫红 mm.accent）——
+// —— 几张小图：自己画 Path，配色同测速页（下载紫 context.cs.primary、上传玫红 mm.accent）——
 
 /// 列表行里的迷你下载曲线
 class _SparklinePainter extends CustomPainter {

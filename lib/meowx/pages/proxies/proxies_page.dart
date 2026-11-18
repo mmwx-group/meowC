@@ -2,7 +2,6 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/views/proxies/common.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +14,9 @@ import '../../state/node_sort.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/haptics.dart';
-import '../../theme/morph_menu.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
+import '../../theme/meow_dialog.dart';
 import '../../theme/motion.dart';
 import '../../theme/page_title.dart';
 import '../../theme/sliver_reveal.dart';
@@ -25,7 +26,6 @@ import '../../theme/widgets.dart';
 import 'group_reveal.dart';
 import 'group_widgets.dart';
 import 'node_grid.dart';
-import 'node_parts.dart';
 
 /// 展开的组（手机列表布局；默认全部收起，不落盘）。
 final expandedGroupsProvider = StateProvider<Set<String>>((ref) => {});
@@ -59,7 +59,6 @@ class ProxiesPage extends ConsumerStatefulWidget {
 }
 
 class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderStateMixin {
-  bool _testingAll = false;
 
   /// 正在展开 / 收起的组（列表布局）。收起中的组还在 [expandedGroupsProvider] 之外画着，播完才拆掉。
   final _reveals = <String, GroupReveal>{};
@@ -121,13 +120,19 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
     }
   }
 
-  /// 列表布局里的一个组 = 组卡（点按展开 / 收起）+ 展开时的「自动选择」行与节点网格，各是独立的 sliver、直接铺在页面底上。
+  /// 列表布局里的一个组 = 组卡（点按展开 / 收起）+ 展开时的节点（清单或网格），各是独立的 sliver、直接铺在页面底上。
   /// 不用 SliverMainAxisGroup：它滚动后的命中测试有偏移，节点点不中。
   /// 每个 sliver 按组名带 key：展开 / 收起一个组会在中间插入 / 抽走 sliver，没有 key 的话后面的 sliver 逐个错位重配——
   /// 组卡被换成另一个组的内容，下方已展开的网格被拆掉重建。
-  /// 展开 / 收起时，组卡下面那段（「自动选择」行 + 网格）由 [SliverReveal] 按 [GroupReveal.height] 露出，
+  /// 展开 / 收起时，组卡下面的节点由 [SliverReveal] 按 [GroupReveal.height] 露出，
   /// 里面的格子按序号错峰（[StaggeredItem]）。静止时同样套着这两层（比例 1、不透明），结构不变、动画结束不重建网格。
-  List<Widget> _groupSlivers(Group g, {required bool expanded, required NodeCardSize size, required EdgeInsets pad}) {
+  List<Widget> _groupSlivers(
+    Group g, {
+    required bool expanded,
+    required NodeCardSize size,
+    required NodeView view,
+    required EdgeInsets pad,
+  }) {
     final side = EdgeInsets.only(left: pad.left, right: pad.right);
     final reveal = _reveals[g.name];
     final shown = expanded || reveal != null;
@@ -149,24 +154,12 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
         ),
       ),
       if (shown) ...[
-        if (g.type.isComputedSelected)
-          KeyedSubtree(
-            key: ValueKey('auto:${g.name}'),
-            child: revealed(
-              SliverPadding(
-                padding: side.copyWith(bottom: 8),
-                sliver: SliverToBoxAdapter(
-                  child: StaggeredItem(reveal: reveal, index: 0, child: AutoSelectToggle(group: g)),
-                ),
-              ),
-            ),
-          ),
         KeyedSubtree(
           key: ValueKey('grid:${g.name}'),
           child: revealed(
             SliverPadding(
               padding: side.copyWith(bottom: 16),
-              sliver: NodeSliverGrid(group: g, size: size, reveal: reveal),
+              sliver: NodeSliverGrid(group: g, size: size, view: view, reveal: reveal),
             ),
           ),
         ),
@@ -174,20 +167,58 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
     ];
   }
 
-  Future<void> _testAll(List<Group> groups) async {
-    if (_testingAll) return;
-    MeowHaptics.tap();
-    setState(() => _testingAll = true);
-    try {
-      await delayTest(allLeafProxies(groups));
-    } finally {
-      if (mounted) setState(() => _testingAll = false);
-    }
+  /// 「节点视图」：从按钮长出来的回弹气泡（2026-11-17 起，以前是锚点菜单）。布局（两栏时布局是定的，不给）、格子大小（只网格）、排序，
+  /// 各一组连接式按钮，点了即时生效。排序存在 Bettbox 的 proxiesStyle 里（托盘节点菜单同一份），其余是 MeowX 自己的设置。
+  void _showViewOptions(BuildContext anchor, bool twoPane) {
+    showMeowPopover<void>(
+      anchor,
+      title: S.nodeView,
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          final meow = ref.watch(meowSettingProvider);
+          final sort = ref.watch(proxiesStyleSettingProvider.select((s) => s.sortType));
+          void update(MeowSettings Function(MeowSettings) f) => ref.read(meowSettingProvider.notifier).updateState(f);
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!twoPane) ...[
+                const MeowDialogLabel(S.layout),
+                M3ButtonGroup<ProxyLayout>(
+                  items: [for (final v in ProxyLayout.values) (v, v.label)],
+                  selected: meow.proxyLayout,
+                  onChanged: (v) => update((s) => s.copyWith(proxyLayout: v)),
+                ),
+              ],
+              const MeowDialogLabel('节点样式'),
+              M3ButtonGroup<NodeView>(
+                items: [for (final v in NodeView.values) (v, v.label)],
+                selected: meow.nodeView,
+                onChanged: (v) => update((s) => s.copyWith(nodeView: v)),
+              ),
+              if (meow.nodeView == NodeView.grid) ...[
+                const MeowDialogLabel(S.cardSize),
+                M3ButtonGroup<NodeCardSize>(
+                  items: [for (final v in NodeCardSize.values) (v, v.label)],
+                  selected: meow.nodeCardSize,
+                  onChanged: (v) => update((s) => s.copyWith(nodeCardSize: v)),
+                ),
+              ],
+              const MeowDialogLabel(S.sort),
+              M3ButtonGroup<ProxiesSortType>(
+                items: [for (final v in ProxiesSortType.values) (v, v.label)],
+                selected: sort,
+                onChanged: (v) =>
+                    ref.read(proxiesStyleSettingProvider.notifier).updateState((s) => s.copyWith(sortType: v)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
     final twoPane = ref.watch(isTwoPaneProvider);
     final groups = ref.watch(currentGroupsStateProvider.select((s) => s.value));
     // 只关心有没有订阅：订阅整个 Profile 的话，点一次节点（selectedMap）、换一次组（currentGroupName）整页都要重建
@@ -199,73 +230,41 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
         ? widePagePadding()
         : EdgeInsets.fromLTRB(16, 0, 16, 12 + MediaQuery.paddingOf(context).bottom);
     final side = EdgeInsets.only(left: pad.left, right: pad.right);
-    final testAll = groups.isEmpty ? null : () => _testAll(groups);
+    // 2026-11-17 用户要求去掉「全部测速」按钮（组卡片上的测速照旧），内容底部不再给它让位
+    final listPad = pad;
 
+    final nodeView = ref.watch(meowSettingProvider.select((s) => s.nodeView));
     final title = PageTitle(
       MeowTab.proxies.label,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          MeowMenuButton<Object>(
-            width: 200,
-            alignEnd: true,
-            fromColor: mm.elev,
-            onSelected: (v) {
-              // 排序存在 Bettbox 的 proxiesStyle 里（托盘节点菜单同一份），其余是 MeowX 自己的设置
-              if (v is ProxiesSortType) {
-                ref.read(proxiesStyleSettingProvider.notifier).updateState((s) => s.copyWith(sortType: v));
-                return;
-              }
+          RoundGlassButton(
+            icon: nodeView == NodeView.list ? Icons.grid_view_rounded : Icons.view_agenda_rounded,
+            tooltip: nodeView == NodeView.list ? '换成网格' : '换成清单',
+            onTap: () {
+              MeowHaptics.select();
               ref
                   .read(meowSettingProvider.notifier)
                   .updateState(
-                    (s) => switch (v) {
-                      ProxyLayout l => s.copyWith(proxyLayout: l),
-                      NodeCardSize c => s.copyWith(nodeCardSize: c),
-                      _ => s,
-                    },
+                    (s) => s.copyWith(nodeView: s.nodeView == NodeView.list ? NodeView.grid : NodeView.list),
                   );
             },
-            entries: () {
-              // 本页不按排序重建（网格自己盯着），打开菜单时现读
-              final sort = ref.read(proxiesStyleSettingProvider).sortType;
-              return [
-                // 两栏时布局是定的，布局切换只给单列（手机、平板竖屏）
-                if (!twoPane) ...[
-                  const MeowMenuCaption(S.layout),
-                  for (final v in ProxyLayout.values) MeowMenuItem<Object>(v, v.label, checked: v == layout),
-                  const MeowMenuDivider(),
-                ],
-                const MeowMenuCaption(S.cardSize),
-                for (final v in NodeCardSize.values) MeowMenuItem<Object>(v, v.label, checked: v == size),
-                const MeowMenuDivider(),
-                const MeowMenuCaption(S.sort),
-                for (final v in ProxiesSortType.values) MeowMenuItem<Object>(v, v.label, checked: v == sort),
-              ];
-            },
-            builder: (_, open) => RoundGlassButton(icon: Icons.grid_view_rounded, tooltip: S.nodeView, onTap: open),
           ),
           const SizedBox(width: 8),
-          if (twoPane)
-            PillButton(label: S.testAll, filled: true, busy: _testingAll, onTap: testAll)
-          else
-            RoundGlassButton(
-              icon: Icons.bolt_rounded,
-              filled: true,
-              busy: _testingAll,
-              tooltip: S.testAll,
-              onTap: testAll,
-            ),
+          Builder(
+            builder: (anchor) =>
+                RoundGlassButton(icon: Icons.tune_rounded, tooltip: S.nodeView, onTap: () => _showViewOptions(anchor, twoPane)),
+          ),
         ],
       ),
       subtitle: Text(
         S.groupsAndNodes(groups.length, allLeafProxies(groups).length),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(fontSize: MeowFont.caption, color: mm.t2),
+        style: TextStyle(fontSize: MeowFont.footnote, color: context.cs.onSurfaceVariant),
       ),
     );
-
     if (!hasProfile || groups.isEmpty) {
       return ListView(
         padding: pad,
@@ -300,14 +299,18 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
                     child: ListView.separated(
                       padding: EdgeInsets.only(bottom: pad.bottom),
                       itemCount: groups.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 6),
-                      itemBuilder: (_, i) => GroupCard(
-                        group: groups[i],
-                        selected: groups[i].name == selected.name,
-                        onTap: () {
-                          if (groups[i].name != selected.name) MeowHaptics.select();
-                          ref.read(selectedGroupProvider.notifier).state = groups[i].name;
-                        },
+                      separatorBuilder: (_, _) => const SizedBox(height: 3),
+                      itemBuilder: (_, i) => M3SegmentSlot(
+                        index: i,
+                        count: groups.length,
+                        child: GroupCard(
+                          group: groups[i],
+                          selected: groups[i].name == selected.name,
+                          onTap: () {
+                            if (groups[i].name != selected.name) MeowHaptics.select();
+                            ref.read(selectedGroupProvider.notifier).state = groups[i].name;
+                          },
+                        ),
                       ),
                     ),
                   ),
@@ -316,7 +319,8 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
                     child: _GroupPage(
                       group: selected,
                       size: size,
-                      bottom: pad.bottom,
+                      view: nodeView,
+                      bottom: listPad.bottom,
                     ),
                   ),
                 ],
@@ -328,7 +332,7 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
     }
 
     if (layout == ProxyLayout.tabs) {
-      return _SingleGroup(groups: groups, size: size, pad: pad, title: title);
+      return _SingleGroup(groups: groups, size: size, view: nodeView, pad: listPad, title: title);
     }
 
     final expanded = ref.watch(expandedGroupsProvider);
@@ -339,8 +343,8 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
           sliver: SliverToBoxAdapter(child: title),
         ),
         for (final g in groups)
-          ..._groupSlivers(g, expanded: expanded.contains(g.name), size: size, pad: pad),
-        SliverPadding(padding: EdgeInsets.only(bottom: pad.bottom)),
+          ..._groupSlivers(g, expanded: expanded.contains(g.name), size: size, view: nodeView, pad: pad),
+        SliverPadding(padding: EdgeInsets.only(bottom: listPad.bottom)),
       ],
     );
   }
@@ -348,9 +352,10 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
 
 /// 宽屏右栏：当前组的摘要卡 + 懒加载节点网格（WNodes 的小一号格子）；滚动位置按组记。
 class _GroupPage extends StatelessWidget {
-  const _GroupPage({required this.group, required this.size, required this.bottom});
+  const _GroupPage({required this.group, required this.size, required this.view, required this.bottom});
   final Group group;
   final NodeCardSize size;
+  final NodeView view;
 
   /// 底部留白。
   final double bottom;
@@ -363,7 +368,7 @@ class _GroupPage extends StatelessWidget {
         SliverToBoxAdapter(child: GroupSummary(group: group, wide: true)),
         SliverPadding(
           padding: EdgeInsets.only(top: 10, bottom: bottom),
-          sliver: NodeSliverGrid(group: group, size: size, dense: true),
+          sliver: NodeSliverGrid(group: group, size: size, view: view, dense: true),
         ),
       ],
     );
@@ -375,13 +380,25 @@ final rememberGroupProvider = Provider<void Function(String name)>(
   (ref) => (name) => globalState.appController.updateCurrentGroupName(name),
 );
 
-/// 单组布局（手机 / 平板竖屏，对齐 iOS）：标题、组按钮、当前组的摘要与懒加载节点网格在同一个滚动视图里。
-/// 点组按钮弹出选组面板换组——以前是一排横向滚动的组标签 + PageView 左右滑动换组，组一多要来回划着找。
-/// 换组：新的一组淡入、旧的当帧撤走（摘要和网格按组名带 key，不让两份大网格同时活着做交叉淡化），并回到顶部。
+/// 组延迟（= 当前选中节点的延迟，同 [GroupSummary]）：单组布局 chip 行尾的测速钮上显示它。
+final _groupDelayProvider = Provider.autoDispose.family<int?, Group>((ref, group) {
+  final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
+  return current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
+});
+
+/// 单组布局（手机 / 平板竖屏，画布稿 Nodes）：标题、代理组 chip（行尾测速本组）与节点（清单或网格，懒加载）在同一个滚动视图里。
+/// 换组：新的一组淡入、旧的当帧撤走（摘要和节点按组名带 key，不让两份大清单同时活着做交叉淡化），并回到顶部。
 class _SingleGroup extends ConsumerStatefulWidget {
-  const _SingleGroup({required this.groups, required this.size, required this.pad, required this.title});
+  const _SingleGroup({
+    required this.groups,
+    required this.size,
+    required this.view,
+    required this.pad,
+    required this.title,
+  });
   final List<Group> groups;
   final NodeCardSize size;
+  final NodeView view;
   final EdgeInsets pad;
   final Widget title;
 
@@ -404,17 +421,9 @@ class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerPro
     super.dispose();
   }
 
-  Future<void> _pick(BuildContext anchor, Group current) async {
-    final name = await showGroupPicker(
-      anchor,
-      groups: widget.groups,
-      current: current.name,
-      wide: ref.read(isWideLayoutProvider),
-    );
-    if (!mounted || name == null || name == current.name) return;
-    MeowHaptics.select();
+  void _pick(String name) {
     ref.read(rememberGroupProvider)(name);
-    if (_scroll.hasClients) _scroll.jumpTo(0);   // 换了组从头看
+    if (_scroll.hasClients && _scroll.offset > 0) _scroll.jumpTo(0);   // 换了组从头看
     if (!MeowMotion.reduced(context)) _fade.forward(from: 0);
   }
 
@@ -430,33 +439,41 @@ class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerPro
       controller: _scroll,
       slivers: [
         SliverPadding(
-          padding: side.copyWith(top: pad.top, bottom: 12),
+          padding: side.copyWith(top: pad.top, bottom: 14),
           sliver: SliverToBoxAdapter(child: widget.title),
         ),
+        // 代理组 chip + 行尾「测速本组」（带组延迟）；组摘要卡去掉了（2026-11-17，同 iOS）：策略写在组卡 / chip 上，
+        // 当前节点在下面的清单里是选中的那一行
         SliverPadding(
-          padding: side.copyWith(bottom: 12),
+          padding: EdgeInsets.only(bottom: 14, right: pad.right),
           sliver: SliverToBoxAdapter(
-            child: GroupPickerButton(
-              group: group,
-              groupCount: groups.length,
-              onTap: (anchor) => _pick(anchor, group),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GroupChipBar(
+                    groups: groups,
+                    selected: group.name,
+                    onSelected: _pick,
+                    padding: EdgeInsets.only(left: pad.left, right: 8),
+                  ),
+                ),
+                GroupTestButton(
+                  key: ValueKey('test:${group.name}'),
+                  group: group,
+                  delay: ref.watch(_groupDelayProvider(group)),
+                  compact: true,
+                  height: 40,
+                ),
+              ],
             ),
-          ),
-        ),
-        SliverFadeTransition(
-          key: ValueKey('summary:${group.name}'),
-          opacity: _opacity,
-          sliver: SliverPadding(
-            padding: side,
-            sliver: SliverToBoxAdapter(child: GroupSummary(group: group)),
           ),
         ),
         SliverFadeTransition(
           key: ValueKey('grid:${group.name}'),
           opacity: _opacity,
           sliver: SliverPadding(
-            padding: EdgeInsets.fromLTRB(pad.left, 12, pad.right, pad.bottom),
-            sliver: NodeSliverGrid(group: group, size: widget.size),
+            padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, pad.bottom),
+            sliver: NodeSliverGrid(group: group, size: widget.size, view: widget.view),
           ),
         ),
       ],

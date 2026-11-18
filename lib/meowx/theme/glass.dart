@@ -64,22 +64,13 @@ abstract final class MeowGlassStyles {
 
   static ColorScheme scheme(BuildContext context) => context.isDarkMode ? _dark : _light;
 
-  /// 「着色」：底色更不透明、模糊更大、对比度更高；「透明」原样
-  static LiquidGlassStyle tune(LiquidGlassStyle style, bool tinted) => !tinted
-      ? style
-      : style.copyWith(
-          tint: style.tint.withValues(alpha: style.tint.a + (1 - style.tint.a) * MeowGlassMetrics.tintedOpacity),
-          blur: style.blur + MeowGlassMetrics.tintedBlur,
-          contrast: style.contrast * MeowGlassMetrics.tintedContrast,
-        );
-
   /// 圆钮 / 胶囊
   static LiquidGlassStyle control(BuildContext context) =>
-      tune(LiquidGlassStyle.regular(scheme(context)), context.mm.glassTinted);
+      LiquidGlassStyle.regular(scheme(context));
 
   /// 弹出菜单与底部卡片：比圆钮更厚（上面是成段的字）
   static LiquidGlassStyle menu(BuildContext context) =>
-      tune(LiquidGlassStyle.menu(scheme(context)), context.mm.glassTinted);
+      LiquidGlassStyle.menu(scheme(context));
 
   static LiquidGlassRim menuRim(BuildContext context) => LiquidGlassRim.menu(scheme(context));
 

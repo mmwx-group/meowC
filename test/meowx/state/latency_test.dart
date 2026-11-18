@@ -3,7 +3,7 @@ import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  const mm = MeowTokens.light;
+  final mm = MeowTokens.light;
 
   test('HTTPS / TCPing 阈值 100 / 200', () {
     expect(latencyColor(100, LatencyMode.url, mm), mm.good);

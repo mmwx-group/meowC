@@ -98,6 +98,27 @@ void main() {
       expect(entryKeyOf(' 198.51.100.20 '), '198.51.100.20');
     });
 
+    test('主控给了入口端口：节点端口在里面才算；空集合谁都不算；老主控没给端口只比 server', () {
+      const entries = [
+        EntryOverride(server: '198.51.100.20', ips: ['198.51.100.21', '198.51.100.22'], active: true, ports: [50520, 50523]),
+        EntryOverride(server: 'empty.example.com', ips: ['203.0.113.1'], active: true, ports: []),
+        EntryOverride(server: 'old.example.com', ips: ['203.0.113.2'], active: true),
+      ];
+      expect(entryOverrideFor('198.51.100.20', entries, port: 50523)?.ips, ['198.51.100.21', '198.51.100.22']);
+      // 入口机器上另开的直连节点：同一个 server、端口不在里面
+      expect(entryOverrideFor('198.51.100.20', entries, port: 443), isNull);
+      expect(entryOverrideFor('198.51.100.20', entries), isNull);
+      expect(entryOverrideFor('empty.example.com', entries, port: 443), isNull);
+      expect(entryOverrideFor('old.example.com', entries, port: 443)?.ips, ['203.0.113.2']);
+    });
+
+    test('解析内核的 ports：没有字段 / null = 没给，数组照收', () {
+      expect(EntryOverride.fromJson({'server': 'a', 'ips': ['1.1.1.1']}).ports, isNull);
+      expect(EntryOverride.fromJson({'server': 'a', 'ips': ['1.1.1.1'], 'ports': null}).ports, isNull);
+      expect(EntryOverride.fromJson({'server': 'a', 'ips': ['1.1.1.1'], 'ports': []}).ports, isEmpty);
+      expect(EntryOverride.fromJson({'server': 'a', 'ips': ['1.1.1.1'], 'ports': [50520, 50523]}).ports, [50520, 50523]);
+    });
+
     test('只认当前配置里用着的（active）', () {
       const entries = [
         EntryOverride(server: 'hk-entry.example.com', ips: ['203.0.113.11'], active: true),

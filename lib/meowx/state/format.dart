@@ -40,3 +40,27 @@ String fmtRelative(DateTime t, [DateTime? now]) {
   if (diff.inDays < 1) return '${diff.inHours} 小时前';
   return '${diff.inDays} 天前';
 }
+
+/// 行首图标块里的字：节点名里有国旗就用那面国旗（🇭🇰，2026-11-17 用户要旗帜、不要 HK 这种字母；Windows 靠主题里的 Twemoji 回落画出来），
+/// 没有国旗取名字里的第一个字母 / 数字 / 汉字。
+String nodeTileLabel(String name) {
+  final runes = name.runes.toList();
+  bool flag(int r) => r >= 0x1F1E6 && r <= 0x1F1FF;
+  for (var i = 0; i + 1 < runes.length; i++) {
+    if (flag(runes[i]) && flag(runes[i + 1])) return String.fromCharCodes([runes[i], runes[i + 1]]);
+  }
+  // 没有国旗：取第一个字母 / 数字 / 汉字，跳过开头的括号与符号（「[AgentB] 节点」→ A）
+  final first = RegExp(r'[\p{L}\p{N}]', unicode: true).firstMatch(name)?.group(0);
+  return first == null ? '?' : first.toUpperCase();
+}
+
+/// 名字旁边已经有图标块画着它的国旗时，名字里那面国旗不再重复写（2026-11-17 用户要求）：去掉 [nodeTileLabel] 取到的那面国旗
+/// 和它后面的空白；名字里没有国旗、或去掉后什么都不剩时原样返回。
+String nodeTitleWithoutFlag(String name) {
+  final flag = nodeTileLabel(name);
+  final runes = flag.runes.toList();
+  if (runes.length != 2 || runes.any((r) => r < 0x1F1E6 || r > 0x1F1FF)) return name;
+  final i = name.indexOf(flag);
+  final rest = (name.substring(0, i) + name.substring(i + flag.length).trimLeft()).trim();
+  return rest.isEmpty ? name : rest;
+}

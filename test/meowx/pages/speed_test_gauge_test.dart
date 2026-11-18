@@ -118,13 +118,13 @@ void main() {
       expect(find.text('挑选测速服务器…'), findsOneWidget);
     });
 
-    testWidgets('下载：大数字是当前速度、阶段字紫；指针追到当前速度后停帧', (tester) async {
+    testWidgets('下载：大数字是当前速度、阶段字主色；指针追到当前速度后停帧', (tester) async {
       await pump(tester, const SpeedTestProgress(phase: 'latency', latencyMs: 38));
       expect(find.text('测延迟…'), findsOneWidget);
       await pump(tester, const SpeedTestProgress(phase: 'download', latencyMs: 38, currentMbps: 41.5));
       expect(find.text('41.5'), findsOneWidget);
       expect(find.text('下载中'), findsOneWidget);
-      expect(_colorOf(tester, '下载中'), MeowTokens.light.down);
+      expect(_colorOf(tester, '下载中'), MeowTokens.light.accent);   // 下载 = 主色（同首页网速卡）
       expect(find.text('38 ms', findRichText: true), findsOneWidget);
       expect(_needle(tester), 0, reason: '弹簧从 0 起步');
       await tester.pump(const Duration(milliseconds: 100));
@@ -137,14 +137,14 @@ void main() {
       expect(_dial(tester).animating, isFalse);
     });
 
-    testWidgets('上传：阶段字玫红；测完：数字是下载平均、阶段字绿，指针回到 0', (tester) async {
+    testWidgets('上传：阶段字第三色；测完：数字是下载平均、阶段字绿，指针回到 0', (tester) async {
       await pump(
         tester,
         const SpeedTestProgress(phase: 'upload', source: SpeedTestSource.apple, downloadMbps: 257.4, currentMbps: 120),
       );
       expect(find.text('120'), findsOneWidget);
       expect(find.text('上传中'), findsOneWidget);
-      expect(_colorOf(tester, '上传中'), MeowTokens.light.accent);
+      expect(_colorOf(tester, '上传中'), MeowTokens.light.down);   // 上传 = 第三色
       await tester.pump(const Duration(seconds: 3));
       expect(_needle(tester), speedGaugePosition(120));
 

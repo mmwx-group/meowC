@@ -12,9 +12,9 @@ import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/exit_ip.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
-import 'package:bett_box/meowx/theme/card_surface.dart';
+import 'package:bett_box/meowx/theme/m3.dart';
+import 'package:bett_box/meowx/theme/m3_kit.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
-import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -310,12 +310,13 @@ void main() {
     expect(find.text('已连接'), findsOneWidget);
     expect(find.text('已运行 02:14:36'), findsOneWidget);
     // 当前节点：名字连国旗原样显示，路径是组链
-    expect(find.text('🇭🇰 香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
+    // 当前节点：国旗在图标块里，名字不重复写国旗；另一面是国际出口 IP 的归属地国旗
+    expect(find.text('🇭🇰'), findsNWidgets(2));
+    expect(find.text('香港 01 · IEPL 专线（名字很长很长很长的节点）'), findsOneWidget);
     expect(find.text('节点选择 › 自动选择'), findsOneWidget);
     expect(find.text('38 ms'), findsOneWidget);
-    expect(find.text('会话 86.2 MB'), findsOneWidget);
-    expect(find.text('会话 1.42 GB'), findsOneWidget);
-    expect(find.text('128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
+    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
+    expect(find.text('已用 128.4 / 500 GB · 到期 2026-12-31'), findsOneWidget);
     expect(find.text('3 小时前更新'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
     expect(find.text('41'), findsOneWidget);
@@ -349,7 +350,7 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
     // 首次构建用的是当时的值
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 86.2 MB'), findsOneWidget);
+    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     useReleaseProviderFrames();
@@ -368,20 +369,20 @@ void main() {
       await tester.pump();
     }
     expect(find.text('已运行 02:14:36'), findsOneWidget);
-    expect(find.text('会话 86.2 MB'), findsOneWidget);
+    expect(find.text('会话 ↑ 86.2 MB · ↓ 1.42 GB'), findsOneWidget);
     expect(find.text('23'), findsOneWidget);
 
     // 切回首页：这一帧就是最新值（数据一直在 provider 里攒着），之后照常每秒跟
     container.read(meowTabProvider.notifier).state = MeowTab.home;
     await tester.pump();
     expect(find.text('已运行 02:14:39'), findsOneWidget);
-    expect(find.text('会话 203.0 MB'), findsOneWidget);
+    expect(find.text('会话 ↑ 203.0 MB · ↓ 1.42 GB'), findsOneWidget);
     expect(find.text('33'), findsOneWidget);
     expect(container.read(trafficsProvider).list.last.up.value, 1024 * 3);
     tick(4);
     await tester.pump();
     expect(find.text('已运行 02:14:40'), findsOneWidget);
-    expect(find.text('会话 204.0 MB'), findsOneWidget);
+    expect(find.text('会话 ↑ 204.0 MB · ↓ 1.42 GB'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
 
     // 运行时长有两路在写，同一秒里的第二次写入不重建
@@ -426,7 +427,7 @@ void main() {
       textScale: 1,
     );
     final container = ProviderScope.containerOf(tester.element(find.byType(DashboardPage)));
-    expect(find.text('点按右侧按钮开始'), findsOneWidget);
+    expect(find.text('点右边的按钮开始连接'), findsOneWidget);
 
     // 别的页上点了连接（侧栏电源键 / 通知栏开关）
     container.read(runTimeProvider.notifier).value = 0;
@@ -440,7 +441,7 @@ void main() {
     expect(find.text('未连接'), findsWidgets);
     container.read(meowTabProvider.notifier).state = MeowTab.home;
     await tester.pump();
-    expect(find.text('点按右侧按钮开始'), findsOneWidget);
+    expect(find.text('点右边的按钮开始连接'), findsOneWidget);
     expect(find.textContaining('已运行'), findsNothing);
   });
 
@@ -529,12 +530,13 @@ void main() {
     expect(find.byType(HomeSpeedCard), isDesktopUi ? findsOneWidget : findsNothing);
   });
 
-  testWidgets('首页卡片设置：「代理应用」只在 Android 上列出（这里不是 Android）', (tester) async {
+  testWidgets('首页卡片设置（回弹对话框）：「代理应用」只在 Android 上列出（这里不是 Android）', (tester) async {
     await _pump(tester, _page(), size: const Size(412, 892), overrides: _overrides(running: true, profile: _profile), textScale: 1);
     await tester.tap(find.byTooltip('首页卡片'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(SwitchListTile, '代理连接'), findsOneWidget);
-    expect(find.widgetWithText(SwitchListTile, '代理应用'), findsNothing);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.descendant(of: find.widgetWithText(M3ListRow, '代理连接'), matching: find.byType(Switch)), findsOneWidget);
+    expect(find.widgetWithText(M3ListRow, '代理应用'), findsNothing);
     expect(HomeCard.apps.label, '代理应用');
   });
 
@@ -683,38 +685,28 @@ void main() {
     expect(find.text('白名单 · 只代理选中的 3 个应用'), findsOneWidget);
 
     await pump(const AccessControl(enable: true, rejectList: ['a', 'b']));
-    expect(find.text('黑名单 · 选中的 2 个应用不走代理'), findsOneWidget);
+    expect(find.text('黑名单 · 2 个应用不走代理'), findsOneWidget);
   });
 
-  testWidgets('液态玻璃：连接主卡连没连上都是和其它卡片一样的磨砂玻璃（不再换成樱粉渐变）；经典主题照旧', (tester) async {
-    Future<void> pump(MeowLook look, {required bool running}) => _pump(
+  testWidgets('连接主卡：连上是主色容器底、没连是次级底', (tester) async {
+    Future<void> pump({required bool running}) => _pump(
       tester,
       const SingleChildScrollView(child: HomeHeroCard()),
       size: const Size(412, 892),
       overrides: _overrides(running: running, profile: _profile),
       textScale: 1,
-      theme: meowThemeData(brightness: Brightness.light, look: look),
+      theme: meowThemeData(brightness: Brightness.light),
     );
-    // 主卡自己那层（电源键经典画法里也有 AnimatedContainer，在它里面、排在后面）
     BoxDecoration card() => tester
             .widget<AnimatedContainer>(find.descendant(of: find.byType(HomeHeroCard), matching: find.byType(AnimatedContainer)).first)
             .decoration!
         as BoxDecoration;
 
-    for (final running in [false, true]) {
-      await pump(const MeowLook(style: MeowThemeStyle.glass), running: running);
-      final frost = tester.widget<MeowFrostBox>(find.descendant(of: find.byType(HomeHeroCard), matching: find.byType(MeowFrostBox)));
-      expect(frost.enabled, isTrue, reason: '连上了也画玻璃（running: $running）');
-      expect(frost.tint, isNull, reason: '和其它卡片同一种白色填充');
-      expect(card().color, isNull);
-      expect(card().gradient, isNull);
-    }
-
-    await pump(MeowLook.classic, running: true);
-    expect(find.byType(MeowFrostBox), findsNothing);
-    expect(card().color, MeowTokens.light.hero);
-    await pump(MeowLook.classic, running: false);
-    expect(card().color, MeowTokens.light.card2);
+    final cs = MeowColors.scheme(MeowColors.brandSeed, Brightness.light);
+    await pump(running: true);
+    expect(card().color, cs.primaryContainer);
+    await pump(running: false);
+    expect(card().color, cs.surfaceContainerHighest);
   });
 
   // 放在最后：要给 globalState 装一个真的 AppController（切模式经它改配置），装上就撤不掉

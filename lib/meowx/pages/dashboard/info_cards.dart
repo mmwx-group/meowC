@@ -19,12 +19,11 @@ import '../../state/exit_ip.dart';
 import '../../state/format.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
-import '../../theme/button_fill.dart';
-import '../../theme/glass_card.dart';
 import '../../theme/haptics.dart';
 import '../../theme/morph_menu.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
-import '../../theme/widgets.dart';
 import '../settings/proxy_apps_page.dart';
 
 // 这个文件里的卡片都可能放在宽屏首页的 IntrinsicHeight 里（见 dashboard_page.dart），不要用 LayoutBuilder。
@@ -150,18 +149,17 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final dense = widget.dense;
     final profile = ref.watch(currentProfileProvider);
+    final caption = TextStyle(fontSize: dense ? 12 : 13, color: cs.onSurfaceVariant);
     if (profile == null) {
-      return GlassCard(
-        radius: dense ? 22 : 24,
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: dense ? 10 : 12),
+      return M3Card(
         onTap: () => goTab(ref, MeowTab.me),
         child: Row(
           children: [
-            const IconTile(icon: Icons.add_rounded),
-            const SizedBox(width: 12),
+            M3IconTile(icon: Icons.add_rounded, bg: cs.primaryContainer, fg: cs.onPrimaryContainer, size: 44),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,19 +168,13 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
                     S.noSubscription,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
+                    style: TextStyle(fontSize: dense ? 17 : 20, fontWeight: FontWeight.w800, color: cs.onSurface),
                   ),
-                  Text(
-                    '去「我的」导入订阅',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2),
-                  ),
+                  Text('去「我的」导入订阅', maxLines: 1, overflow: TextOverflow.ellipsis, style: caption),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            MeowIcon(MeowGlyph.chevron, size: 16, color: mm.t2),
+            Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
           ],
         ),
       );
@@ -190,7 +182,6 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
 
     final direct = isDirectProfile(profile.id);
     final importing = ref.watch(importingSubProvider) != null;
-    final foot = TextStyle(fontSize: 11, color: mm.t2);
 
     Widget menu({required bool alignEnd, required Widget Function(VoidCallback open) trigger}) => MeowMenuButton<_SubPick>(
       width: 240,
@@ -204,49 +195,42 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
       alignEnd: false,
       trigger: (open) => InkWell(
         onTap: open,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Text(
-            profile.label ?? profile.id,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
-          ),
+        borderRadius: BorderRadius.circular(MeowShape.s),
+        child: Text(
+          profile.label ?? profile.id,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: dense ? 17 : 20, fontWeight: FontWeight.w800, color: cs.onSurface),
         ),
       ),
     );
 
-    // 直连档 = 实心「选择订阅」（墨色底配页面底色的字，同实心主按钮）；在用订阅 = 淡粉底玫红字「切换订阅」。
-    // 液态玻璃主题下两种都是按钮那档静态半透明（见 button_fill.dart）
-    final fg = direct ? mm.onProminent : mm.accent;
+    // 直连档 = 主色实心「选择订阅」；在用订阅 = 次色容器「切换订阅」（画布稿）
+    final (chipBg, chipFg) = direct ? (cs.primary, cs.onPrimary) : (cs.secondaryContainer, cs.onSecondaryContainer);
     final chip = menu(
       alignEnd: true,
       trigger: (open) => Material(
-        color: mm.buttonFill(direct ? MeowButtonFill.prominent : MeowButtonFill.accent),
-        shape: StadiumBorder(side: mm.buttonSide),
+        color: chipBg,
+        shape: const StadiumBorder(),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: open,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: dense ? 28 : 30),
+          child: SizedBox(
+            height: dense ? 36 : 40,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: dense ? 10 : 12, vertical: 4),
+              padding: EdgeInsets.symmetric(horizontal: dense ? 14 : 16),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     direct ? '选择订阅' : '切换订阅',
                     maxLines: 1,
-                    style: TextStyle(fontSize: dense ? 12 : 13, fontWeight: FontWeight.w600, color: fg),
+                    style: TextStyle(fontSize: dense ? 13 : 14, fontWeight: FontWeight.w700, color: chipFg),
                   ),
-                  const SizedBox(width: 3),
-                  importing
-                      ? SizedBox.square(
-                          dimension: 10,
-                          child: CircularProgressIndicator(strokeWidth: 1.5, color: fg),
-                        )
-                      : MeowIcon.path('M6 9l6 6 6-6', size: dense ? 11 : 12, stroke: 2.8, color: fg),
+                  if (importing) ...[
+                    const SizedBox(width: 6),
+                    SizedBox.square(dimension: 12, child: CircularProgressIndicator(strokeWidth: 1.6, color: chipFg)),
+                  ],
                 ],
               ),
             ),
@@ -255,21 +239,11 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
       ),
     );
 
-    final children = <Widget>[
-      Row(
-        children: [
-          Expanded(child: Align(alignment: Alignment.centerLeft, child: name)),
-          const SizedBox(width: 8),
-          chip,
-        ],
-      ),
-    ];
-
+    String line;
+    Widget? progress;
+    Widget? updated;
     if (direct) {
-      children.addAll([
-        SizedBox(height: dense ? 4 : 6),
-        Text('未使用订阅，流量全部直连', maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2)),
-      ]);
+      line = '未使用订阅，流量全部直连';
     } else {
       final info = profile.subscriptionInfo;
       final used = (info?.upload ?? 0) + (info?.download ?? 0);
@@ -277,82 +251,73 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
       final expire = info?.expire ?? 0;
       final frac = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
       final hasUsage = total > 0 || used > 0;
-      final String left;
       if (!hasUsage && expire <= 0) {
-        // 订阅没给 subscription-userinfo：写明，免得只剩右边一个更新时间
-        left = profile.url.isEmpty ? '本地配置' : '订阅未提供用量信息';
+        // 订阅没给 subscription-userinfo：写明，免得只剩下面一个更新时间
+        line = profile.url.isEmpty ? '本地配置' : '订阅未提供用量信息';
       } else {
         final expiry = expire <= 0
             ? '未知到期'
             : isPermanentExpire(expire)
             ? '永久'
             : '到期 ${fmtDate(DateTime.fromMillisecondsSinceEpoch(expire * 1000))}';
-        left = hasUsage ? '${_usageText(used, total)} · $expiry' : expiry;
+        line = hasUsage ? '已用 ${_usageText(used, total)} · $expiry' : expiry;
+      }
+      if (total > 0) {
+        progress = M3WavyProgress(value: frac, color: frac > 0.9 ? cs.error : null, animate: _refreshing);
       }
       final at = profile.lastUpdateDate;
-      final updatedText = Text(at == null ? '未更新' : '${fmtRelative(at)}更新', maxLines: 1, style: foot);
-      final Widget? updated = profile.url.isEmpty
-          ? (at == null ? null : updatedText)
+      final footStyle = TextStyle(fontSize: MeowFont.caption, color: cs.onSurfaceVariant);
+      final updatedRow = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _refreshing
+              ? SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 1.6, color: cs.onSurfaceVariant))
+              : Icon(Icons.refresh_rounded, size: 16, color: cs.onSurfaceVariant),
+          const SizedBox(width: 6),
+          Text(at == null ? '未更新' : '${fmtRelative(at)}更新', maxLines: 1, style: footStyle),
+        ],
+      );
+      updated = profile.url.isEmpty
+          ? (at == null ? null : updatedRow)
           : Tooltip(
               message: '刷新订阅',
               child: InkWell(
                 onTap: _refreshing ? null : () => _refresh(profile),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      updatedText,
-                      const SizedBox(width: 4),
-                      _refreshing
-                          ? SizedBox.square(
-                              dimension: 10,
-                              child: CircularProgressIndicator(strokeWidth: 1.5, color: mm.t2),
-                            )
-                          : MeowIcon(MeowGlyph.refresh, size: 11, stroke: 2.4, color: mm.t2),
-                    ],
-                  ),
-                ),
+                borderRadius: BorderRadius.circular(MeowShape.s),
+                child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: updatedRow),
               ),
             );
-      if (total > 0) {
-        children.addAll([
-          SizedBox(height: dense ? 6 : 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: LinearProgressIndicator(
-              value: frac,
-              minHeight: 6,
-              backgroundColor: mm.card2,
-              color: frac > 0.9 ? mm.slow : mm.fill,
-            ),
-          ),
-        ]);
-      }
-      children.addAll([
-        SizedBox(height: dense ? 4 : 6),
-        // 一行放不下（窄屏 / 大字号）时更新时间折到下一行
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8,
-          runSpacing: 0,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Text(left, maxLines: 2, overflow: TextOverflow.ellipsis, style: foot),
-            ),
-            ?updated,
-          ],
-        ),
-      ]);
     }
 
-    return GlassCard(
-      radius: dense ? 22 : 24,
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: dense ? 12 : 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, mainAxisSize: MainAxisSize.min, children: children),
+    return M3Card(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: dense ? 16 : 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    name,
+                    const SizedBox(height: 2),
+                    Text(line, maxLines: 2, overflow: TextOverflow.ellipsis, style: caption),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              chip,
+            ],
+          ),
+          if (progress != null) ...[const SizedBox(height: 12), progress],
+          if (updated != null) ...[
+            SizedBox(height: progress != null ? 8 : 10),
+            Align(alignment: Alignment.centerLeft, child: updated),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -377,94 +342,180 @@ String _wrapIp(String ip) {
   return at < 0 || at == ip.length - 1 ? ip : '${ip.substring(0, at + 1)}\n${ip.substring(at + 1)}';
 }
 
-/// Android 专属：分应用代理的状态与入口。
+/// 首页的功能块（画布稿 Main 的「喵窝」「代理应用」两格）：色调容器底、图标在上、标题 + 一行说明在下，
+/// 两格并排时圆角不对称（[borderRadius]），只有一格时整行（调用方给普通圆角）。
+class HomeFeatureTile extends StatelessWidget {
+  const HomeFeatureTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.bg,
+    required this.fg,
+    required this.borderRadius,
+    this.trailing,
+    this.onTap,
+    this.single = false,
+  });
+
+  final Widget icon;
+  final String title, subtitle;
+
+  /// 只有这一格（没有并排的另一格）：排成横向一行（图标、标题与说明、行尾开关或箭头），不占 120 高
+  final bool single;
+  final Color bg, fg;
+  final BorderRadius borderRadius;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: bg,
+    borderRadius: borderRadius,
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(onTap: onTap, child: single ? _row() : _tile()),
+  );
+
+  Widget _row() => Padding(
+    padding: EdgeInsets.fromLTRB(16, 14, trailing == null ? 12 : 8, 14),
+    child: Row(
+      children: [
+        IconTheme(data: IconThemeData(color: fg, size: 28), child: icon),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: fg)),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: MeowFont.caption, color: fg.withValues(alpha: 0.85)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        trailing ?? Icon(Icons.chevron_right_rounded, color: fg.withValues(alpha: 0.8)),
+      ],
+    ),
+  );
+
+  Widget _tile() => ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 120),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              SizedBox(
+                height: 32,
+                child: Row(
+                  children: [
+                    IconTheme(data: IconThemeData(color: fg, size: 28), child: icon),
+                    const Spacer(),
+                    ?trailing,
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: fg),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: MeowFont.caption, color: fg.withValues(alpha: 0.85)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// Android 专属：分应用代理的状态与入口（次色容器的功能块）。
 class HomeProxyAppsRow extends ConsumerWidget {
-  const HomeProxyAppsRow({super.key, this.dense = false});
-  final bool dense;
+  const HomeProxyAppsRow({super.key, this.borderRadius = const BorderRadius.all(Radius.circular(MeowShape.xl)), this.single = false});
+  final BorderRadius borderRadius;
+  final bool single;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mm = context.mm;
+    final cs = context.cs;
     final access = ref.watch(vpnSettingProvider.select((s) => s.accessControl));
     final count = access.currentList.length;
     final summary = !access.enable
         ? '全部应用都走代理'
         : access.mode == AccessControlMode.acceptSelected
         ? '白名单 · 只代理选中的 $count 个应用'
-        : '黑名单 · 选中的 $count 个应用不走代理';
-    return GlassCard(
-      radius: 20,
-      padding: const EdgeInsets.fromLTRB(14, 8, 12, 8),
+        : '黑名单 · $count 个应用不走代理';
+    return HomeFeatureTile(
+      icon: const Icon(Icons.apps_rounded),
+      title: '代理应用',
+      subtitle: summary,
+      bg: cs.secondaryContainer,
+      fg: cs.onSecondaryContainer,
+      borderRadius: borderRadius,
+      single: single,
       onTap: () => BaseNavigator.push(context, const ProxyAppsPage()),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 40),
-        child: Row(
-          children: [
-            const IconTile(glyph: MeowGlyph.apps),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '代理应用',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: dense ? 14 : 15, fontWeight: FontWeight.w600, color: mm.t1),
-                  ),
-                  Text(
-                    summary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: dense ? 11 : 12, color: mm.t2),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            MeowIcon(MeowGlyph.chevron, size: 16, color: mm.t2),
-          ],
-        ),
-      ),
     );
   }
 }
 
-/// 指标小格：标题 11 次级色 + 数值圆体粗字；一行最多四格，放不下时标题和数值各自整体缩小（不截断）。
+/// 指标小格（surfaceContainer 底、圆角 20）：标题 11 次级色 + 数值粗字；一行最多四格，放不下时各自整体缩小（不截断）。
 class _Tile extends StatelessWidget {
-  const _Tile({required this.label, required this.value, required this.dense, this.onTap});
+  const _Tile({required this.label, required this.value, required this.dense, this.onTap, this.small = false});
   final String label, value;
   final bool dense;
   final VoidCallback? onTap;
 
+  /// 数值是文字（DNS 模式）时用小一号
+  final bool small;
+
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
-    return GlassCard(
-      radius: 18,
-      padding: EdgeInsets.symmetric(horizontal: dense ? 12 : 10, vertical: 10),
+    final cs = context.cs;
+    return M3Card(
+      color: cs.card,
+      radius: MeowShape.lInc,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       onTap: onTap,
-      // 标题与数值在格子里居中（与 iOS / iPad 首页一致；之前照画板靠左）
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(label, maxLines: 1, style: TextStyle(fontSize: 11, color: mm.t2)),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
+            ),
           ),
-          SizedBox(height: dense ? 1 : 2),
+          const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               maxLines: 1,
               style: TextStyle(
-                fontSize: dense ? 20 : 18,
-                fontWeight: FontWeight.w700,
-                color: mm.t1,
-                fontFamilyFallback: meowRounded,
+                fontSize: small ? 16 : (dense ? 22 : 22),
+                fontWeight: FontWeight.w800,
+                color: cs.onSurface,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -542,6 +593,7 @@ class _DnsTile extends ConsumerWidget {
     return Tooltip(
       message: '点按切换：跟随订阅 → Redir-Host → Fake-IP',
       child: _Tile(
+        small: true,
         label: dense ? (follow ? 'DNS · 跟随订阅' : 'DNS · 手动指定') : (follow ? 'DNS · 跟随' : 'DNS · 手动'),
         value: _effective(mode, declared),
         dense: dense,
@@ -599,19 +651,19 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final dense = widget.dense;
     final running = ref.watch(isRunningProvider);
     final st = ref.watch(exitIpProvider);
 
     Widget tile(String title, IpInfo? info, {required bool loading, required String placeholder}) {
       final text = info?.ip ?? (loading ? S.querying : placeholder);
-      final style = MeowFont.mono(size: dense ? 14 : 13, color: info == null ? mm.t2 : mm.t1);
+      final style = MeowFont.mono(size: 14, weight: FontWeight.w600, color: info == null ? cs.onSurfaceVariant : cs.onSurface);
       final code = info?.countryCode.toUpperCase() ?? '';
-      return GlassCard(
-        radius: 18,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        // 标题与地址在格子里居中（与 iOS / iPad 首页一致）
+      return M3Card(
+        color: cs.card,
+        radius: MeowShape.lInc,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           mainAxisAlignment: MainAxisAlignment.center,
@@ -621,13 +673,17 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: mm.t2),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: cs.onSurfaceVariant),
             ),
-            SizedBox(height: dense ? 4 : 5),
+            const SizedBox(height: 6),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                if (code.length == 2) ...[RegionTag(code), const SizedBox(width: 6)],
+                // 归属地画成国旗（2026-11-17 用户要求，以前是 HK / US 字母块；Windows 靠主题里的 Twemoji 回落）
+                if (RegExp(r'^[A-Z]{2}$').hasMatch(code)) ...[
+                  Text(utils.countryCodeToEmoji(code), style: const TextStyle(fontSize: 18, height: 1.1)),
+                  const SizedBox(width: 6),
+                ],
                 Flexible(
                   // IP 要完整显示：放不下就整体缩小，长的 IPv6 先折成两行再缩（半格宽排不下 39 个字符）
                   child: FittedBox(

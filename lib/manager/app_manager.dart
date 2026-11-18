@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:bett_box/clash/core.dart';
 import 'package:bett_box/common/common.dart';
-import 'package:bett_box/enum/enum.dart';
-import 'package:bett_box/manager/window_manager.dart';
 import 'package:bett_box/plugins/app.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
@@ -49,16 +47,8 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
         }
       });
     });
-    ref.listenManual(checkIpProvider, (prev, next) {
-      if (next.b && (prev?.a != next.a)) {
-        detectionState.startCheck();
-      }
-    });
-    ref.listenManual(checkMediaUnlockProvider, (prev, next) {
-      if (next.b && (prev?.a != next.a)) {
-        mediaUnlockState.startCheckOnNodeChange();
-      }
-    });
+    // MeowX：Bettbox 首页的「网络检测」「流媒体解锁」格子（2026-11-17 随 Bettbox 界面删掉）没有了，不再在启动 / 回前台 /
+    // 换节点时在后台查出口 IP 与解锁（首页的出口 IP 是 MeowX 自己的 exitIpProvider）。
     ref.listenManual(configStateProvider, (prev, next) {
       if (prev != next) {
         globalState.appController.savePreferencesDebounce();
@@ -66,8 +56,6 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _updateDashboardRefreshState();
-      detectionState.tryStartCheck();
-      mediaUnlockState.tryStartCheck();
       // MeowX：这里原来还排了一趟 updateGroupsDebounce()。AppController.init() 自己必定会拉代理组，
       // 首帧后 600ms 这趟要么是白拉第二遍，要么在核心还没装载配置时拿到空表、
       // 占着 _coreLifecycleLock 做四连重试，反过来挡住 init 里的 applyProfile。
@@ -206,13 +194,6 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
         }
       }
 
-      final hasDetection = ref
-          .read(dashboardStateProvider)
-          .dashboardWidgets
-          .contains(DashboardWidget.networkDetection);
-      if (hasDetection) {
-        detectionState.tryStartCheck();
-      }
     }
     if (state == AppLifecycleState.resumed && system.isAndroid) {
       final hidden = ref.read(appSettingProvider.select((s) => s.hidden));
@@ -220,11 +201,6 @@ class _AppStateManagerState extends ConsumerState<AppStateManager>
       SystemChrome.setSystemUIOverlayStyle(
         globalState.appState.systemUiOverlayStyle,
       );
-    }
-    if (state == AppLifecycleState.inactive) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        detectionState.tryStartCheck();
-      });
     }
     _updateDashboardRefreshState();
   }
@@ -250,228 +226,4 @@ class AppEnvManager extends StatelessWidget {
   // 调试包 / 预发布包从「我的 → 关于」的版本号辨认。
   @override
   Widget build(BuildContext context) => child;
-}
-
-/// MeowX 壳自己负责导航（手机底栏 / 宽屏 IconRail）。留成函数而不是常量，方便以后按设置切回 Bettbox 原界面。
-bool _meowShellOwnsNavigation() => true;
-
-class AppSidebarContainer extends ConsumerWidget {
-  final Widget child;
-
-  const AppSidebarContainer({super.key, required this.child});
-
-  Widget _buildLoading() {
-    return Consumer(
-      builder: (_, ref, _) {
-        final loading = ref.watch(loadingProvider);
-        final isMobileView = ref.watch(isMobileViewProvider);
-        return loading && !isMobileView
-            ? RotatedBox(
-                quarterTurns: 1,
-                child: const LinearProgressIndicator(),
-              )
-            : Container();
-      },
-    );
-  }
-
-  Widget _buildBackground({
-    required BuildContext context,
-    required Widget child,
-  }) {
-    final isLight = context.colorScheme.brightness == Brightness.light;
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colorScheme.surfaceContainerHigh,
-        border: Border(
-          right: BorderSide(
-            color: context.colorScheme.outlineVariant.withValues(
-              alpha: isLight ? 0.6 : 0.45,
-            ),
-          ),
-        ),
-      ),
-      child: Material(color: Colors.transparent, child: child),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final navigationState = ref.watch(navigationStateProvider);
-    final navigationItems = navigationState.navigationItems;
-    final isMobileView = navigationState.viewMode == ViewMode.mobile;
-    // MeowX：壳自带左侧图标栏（IconRail），Bettbox 的桌面侧栏一律不显示，否则出现双重菜单
-    if (isMobileView || _meowShellOwnsNavigation()) {
-      return child;
-    }
-    final currentIndex = navigationState.currentIndex;
-    final showLabel = ref.watch(appSettingProvider).showLabel;
-    return Row(
-      children: [
-        Stack(
-          alignment: Alignment.topRight,
-          children: [
-            _buildBackground(
-              context: context,
-              child: SafeArea(
-                left: true,
-                top: true,
-                right: false,
-                bottom: false,
-                child: Column(
-                  children: [
-                    if (system.isMacOS) const SizedBox(height: 22),
-                    const SizedBox(height: 16),
-                    if (!system.isMacOS) ...[
-                      const AppIcon(),
-                      const SizedBox(height: 12),
-                    ],
-                    Expanded(
-                      child: ScrollConfiguration(
-                        behavior: HiddenBarScrollBehavior(),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            return SingleChildScrollView(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  minHeight: constraints.maxHeight,
-                                ),
-                                child: IntrinsicHeight(
-                                  child: CallbackShortcuts(
-                                    bindings: <ShortcutActivator, VoidCallback>{
-                                      const SingleActivator(
-                                        LogicalKeyboardKey.arrowUp,
-                                      ): () {
-                                        if (currentIndex > 0) {
-                                          globalState.appController.toPage(
-                                            navigationItems[currentIndex - 1]
-                                                .label,
-                                          );
-                                        }
-                                      },
-                                      const SingleActivator(
-                                        LogicalKeyboardKey.arrowDown,
-                                      ): () {
-                                        if (currentIndex <
-                                            navigationItems.length - 1) {
-                                          globalState.appController.toPage(
-                                            navigationItems[currentIndex + 1]
-                                                .label,
-                                          );
-                                        }
-                                      },
-                                      const SingleActivator(
-                                        LogicalKeyboardKey.select,
-                                      ): () {},
-                                      const SingleActivator(
-                                        LogicalKeyboardKey.enter,
-                                      ): () {},
-                                    },
-                                    child: Focus(
-                                      autofocus: true,
-                                      child: NavigationRail(
-                                        backgroundColor: Colors.transparent,
-                                        indicatorColor:
-                                            context.colorScheme.primary
-                                                .withValues(
-                                                  alpha:
-                                                      context
-                                                              .colorScheme
-                                                              .brightness ==
-                                                          Brightness.light
-                                                      ? 0.20
-                                                      : 0.26,
-                                                ),
-                                        indicatorShape:
-                                            const RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.all(
-                                                Radius.circular(16),
-                                              ),
-                                            ),
-                                        selectedIconTheme: IconThemeData(
-                                          color: context.colorScheme.primary,
-                                        ),
-                                        unselectedIconTheme: IconThemeData(
-                                          color:
-                                              context.colorScheme.onSurfaceVariant,
-                                        ),
-                                        selectedLabelTextStyle: context
-                                            .textTheme
-                                            .labelLarge!
-                                            .copyWith(
-                                              color: context.colorScheme.primary,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                        unselectedLabelTextStyle: context
-                                            .textTheme
-                                            .labelLarge!
-                                            .copyWith(
-                                              color: context
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                        destinations: navigationItems
-                                            .map(
-                                              (e) => NavigationRailDestination(
-                                                icon: e.icon,
-                                                label: Text(
-                                                  e.label.localizedName,
-                                                ),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onDestinationSelected: (index) {
-                                          final label =
-                                              navigationItems[index].label;
-                                          if (currentIndex == index) {
-                                            final pageContext = GlobalObjectKey(
-                                              label,
-                                            ).currentContext;
-                                            if (pageContext != null) {
-                                              Navigator.of(
-                                                pageContext,
-                                              ).popUntil(
-                                                (route) => route.isFirst,
-                                              );
-                                            }
-                                          }
-                                          globalState.appController.toPage(
-                                            label,
-                                          );
-                                        },
-                                        extended: showLabel,
-                                        selectedIndex: currentIndex,
-                                        labelType: showLabel
-                                            ? NavigationRailLabelType.none
-                                            : NavigationRailLabelType.all,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            _buildLoading(),
-          ],
-        ),
-        Expanded(
-          flex: 1,
-          child: ClipRect(
-            child: MediaQuery.removePadding(
-              context: context,
-              removeLeft: true,
-              child: child,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }

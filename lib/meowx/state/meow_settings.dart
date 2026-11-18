@@ -1,6 +1,7 @@
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/state.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../theme/tokens.dart';
@@ -23,6 +24,20 @@ class MeowSetting extends AutoDisposeNotifier<MeowSettings> with AutoDisposeNoti
 
 final meowSettingProvider = AutoDisposeNotifierProvider<MeowSetting, MeowSettings>(MeowSetting.new);
 
-/// 外观（主题风格 / 玻璃样式 / 卡片颜色）：两份主题按它推 token（application.dart），玻璃宿主按它开关（glass_host.dart）。
-/// 只在这三项变了才通知，改别的设置不会让整棵树换主题。
+/// 外观（主题色 / 跟随系统取色）：两份主题按它定种子色（application.dart）。只在这两项变了才通知，改别的设置不会让整棵树换主题。
 final meowLookProvider = Provider.autoDispose<MeowLook>((ref) => ref.watch(meowSettingProvider.select(MeowLook.of)));
+
+/// 主题的种子色：跟随系统时安卓 12+ 用桌布生成的色板（主色 40 档）、Windows / 其它用系统强调色，取不到就用设置里的主题色。
+Color meowSeedOf(MeowLook look) {
+  if (look.followSystem) {
+    final palette = globalState.corePalette;
+    if (palette != null) return Color(palette.primary.get(40));
+    try {
+      return globalState.accentColor;
+    } catch (_) {
+      // 系统取色没成（late 字段没赋值）
+    }
+  }
+  return Color(look.seed);
+}
+

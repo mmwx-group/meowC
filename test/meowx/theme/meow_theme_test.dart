@@ -1,3 +1,4 @@
+import 'package:bett_box/meowx/theme/m3.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:bett_box/meowx/theme/tokens.dart';
 import 'package:flutter/material.dart';
@@ -27,8 +28,10 @@ void main() {
     final a = themes.of(pageTransitionsTheme: transitions);
     expect(a.light.brightness, Brightness.light);
     expect(a.dark.brightness, Brightness.dark);
-    expect(a.light.extension<MeowTokens>(), MeowTokens.light);
-    expect(a.dark.extension<MeowTokens>(), MeowTokens.dark);
+    expect(a.light.extension<MeowTokens>()!.bg, MeowTokens.light.bg);
+    expect(a.dark.extension<MeowTokens>()!.bg, MeowTokens.dark.bg);
+    expect(a.light.extension<MeowM3>(), isNotNull);
+    expect(a.light.colorScheme.primary, MeowColors.scheme(MeowColors.brandSeed, Brightness.light).primary);
 
     final b = themes.of(pageTransitionsTheme: const PageTransitionsTheme());
     expect(identical(a.light, b.light), isTrue);
@@ -38,6 +41,11 @@ void main() {
     expect(identical(harmony.light, a.light), isFalse);
     expect(harmony.light.textTheme.bodyMedium!.fontFamily, 'HarmonyOS_Sans');
     expect(identical(themes.of(fontFamily: 'HarmonyOS_Sans', pageTransitionsTheme: transitions).dark, harmony.dark), isTrue);
+
+    // 换主题色才换一对
+    final blue = themes.of(fontFamily: 'HarmonyOS_Sans', pageTransitionsTheme: transitions, seed: const Color(0xFF2D6FB0));
+    expect(identical(blue.light, harmony.light), isFalse);
+    expect(blue.light.colorScheme.primary, MeowColors.scheme(const Color(0xFF2D6FB0), Brightness.light).primary);
 
     themes.clear();
     expect(identical(themes.of(fontFamily: 'HarmonyOS_Sans', pageTransitionsTheme: transitions).light, harmony.light), isFalse);

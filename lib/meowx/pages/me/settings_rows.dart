@@ -3,12 +3,12 @@ import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
-import 'package:bett_box/views/views.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/strings.dart';
+import '../advanced/advanced_page.dart';
 import '../../config/meow_patch.dart';
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
@@ -302,15 +302,13 @@ class LogSwitchRow extends ConsumerWidget {
   }
 }
 
-/// 外观：深浅色 / 主题风格（经典 · 液态玻璃）/ 玻璃样式（只在液态玻璃下）/ 卡片颜色 / 启动卡片颜色 / 强调色 / App 图标（只 Android）。后几项见 appearance_parts.dart。
+/// 外观：深浅色 / 跟随系统取色（设备支持时）/ 主题色 / App 图标（只 Android）。后几项见 appearance_parts.dart。
 class AppearanceRows extends ConsumerWidget {
   const AppearanceRows({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeSettingProvider.select((s) => s.themeMode));
-    final glass = ref.watch(meowSettingProvider.select((s) => s.themeStyle == MeowThemeStyle.glass));
-    final art = ref.watch(meowSettingProvider.select((s) => s.bgPattern == MeowBgPattern.art));
     return MeRows(
       children: [
         MePickerRow<ThemeMode>(
@@ -320,14 +318,27 @@ class AppearanceRows extends ConsumerWidget {
           text: themeModeLabel,
           onChanged: (v) => ref.read(themeSettingProvider.notifier).updateState((s) => s.copyWith(themeMode: v)),
         ),
-        const ThemeStyleRow(),
-        if (glass) const GlassTintRow(),
-        // 液态玻璃下是「底色」（单色 / 渐变），经典下是卡片颜色
-        if (glass) const GlassBgRow() else const ColorChoiceRow(MeowColorKind.card),
-        if (glass) ...[const GlassPatternRow(), if (art) const GlassArtRow(), const GlassFrostRow()],
-        const ColorChoiceRow(MeowColorKind.hero),
-        const ColorChoiceRow(MeowColorKind.accent),
+        if (meowSystemColorAvailable) const FollowSystemColorRow(),
+        const ThemeColorRow(),
         if (ref.watch(appIconSupportedProvider)) const AppIconRow(),
+        // 以下几项原在 Bettbox 的「主题」页（M3 改版后并到这里；纯黑模式不要了，M3 的深色色板本身就是近黑）
+        MeSwitchRow(
+          label: 'HarmonyOS Sans 字体',
+          subtitle: '界面文字改用随包的 HarmonyOS Sans',
+          value: ref.watch(themeSettingProvider.select((s) => s.useHarmonyFont)),
+          onChanged: (v) => ref.read(themeSettingProvider.notifier).updateState((s) => s.copyWith(useHarmonyFont: v)),
+        ),
+        const TextScaleRow(),
+        if (system.isDesktop)
+          MeSwitchRow(
+            label: '托盘图标反色',
+            subtitle: '托盘图标看不清时打开',
+            value: ref.watch(themeSettingProvider.select((s) => s.invertTrayIcon)),
+            onChanged: (v) async {
+              ref.read(themeSettingProvider.notifier).updateState((s) => s.copyWith(invertTrayIcon: v));
+              await globalState.appController.updateTray(true);
+            },
+          ),
       ],
     );
   }
@@ -382,5 +393,5 @@ const meowDisclaimer = [
   '使用本软件即表示你已阅读、理解并同意本声明。',
 ];
 
-/// 进 Bettbox 的完整设置与工具（内核配置、备份、脚本等）。
-void openAdvanced(BuildContext context) => BaseNavigator.push(context, const ToolsView());
+/// 进「高级」（内核配置、备份、脚本等；M3 改版后是我们自己的页面，见 advanced/advanced_page.dart）。
+void openAdvanced(BuildContext context) => BaseNavigator.push(context, const AdvancedPage());

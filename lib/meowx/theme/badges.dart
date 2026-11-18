@@ -60,6 +60,16 @@ class TypeBadge extends StatelessWidget {
   };
 }
 
+/// 代理组类型的中文写法（M3 改版后组卡上的类型标签用它）
+String groupTypeLabel(String type) => switch (type.toLowerCase()) {
+  'selector' || 'select' => '手动选择',
+  'urltest' || 'url-test' => '延迟最低',
+  'fallback' => '故障转移',
+  'loadbalance' || 'load-balance' => '负载均衡',
+  'relay' => '链式代理',
+  final other => other,
+};
+
 const groupTypeNames = {'selector', 'urltest', 'fallback', 'loadbalance', 'relay'};
 
 bool isGroupType(String type) => groupTypeNames.contains(type.toLowerCase());
