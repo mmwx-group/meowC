@@ -417,12 +417,10 @@ void main() {
       overrides: _overrides(meow: MeowSettings(account: _account.copyWith(avatarUrl: '/api/user/avatar/ab?v=2'))),
       textScale: 1,
     );
+    // 头像经本地缓存加载（_CachedAvatar → AvatarCache），这里只看交给它的地址
     final urls = tester
-        .widgetList<Image>(find.byType(Image))
-        .map((i) => i.image)
-        .map((p) => p is ResizeImage ? p.imageProvider : p)
-        .whereType<NetworkImage>()
-        .map((n) => n.url)
+        .widgetList(find.byWidgetPredicate((w) => w.runtimeType.toString() == '_CachedAvatar'))
+        .map((w) => (w as dynamic).url as String)
         .toList();
     expect(urls, ['https://panel.example.com/api/user/avatar/ab?v=2']);
   });

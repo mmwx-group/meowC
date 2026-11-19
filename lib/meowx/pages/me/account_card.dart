@@ -1,9 +1,11 @@
 import 'package:bett_box/common/common.dart';
+import 'package:flutter/foundation.dart' show Uint8List;
 import 'package:bett_box/state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../panel/account.dart';
+import '../../panel/avatar_cache.dart';
 import '../../panel/client.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/m3.dart';
@@ -16,7 +18,7 @@ import '../scan/scan_page.dart';
 /// 账户头像（网络图）的解码宽度上限，见 [AccountCard] 里的用处。
 const _avatarCacheWidth = 720;
 
-/// 账户卡（M3 主色容器，画布稿 Me）：饼干形头像 + 昵称 + 同步状态，同一行末尾一颗「退出登录」；
+/// 账户卡（M3 主色容器，画布稿 Me）：圆角方块头像 + 昵称 + 同步状态，同一行末尾一颗「退出登录」；
 /// 未登录时下面是「扫码登录」/「账号登录」和说明。
 /// [compact] = 宽屏第 1 列里的小一号。
 class AccountCard extends ConsumerWidget {
@@ -54,24 +56,13 @@ class AccountCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              // 主控上的头像剪成饼干形（画布稿）；没有头像时的猫娘头本身透明，不裁
+              // 主控上的头像剪成圆角方块（同 iOS：圆角 = 边长的 1/3）；没有头像时的猫娘头本身透明，不裁。
+              // 以前剪成九瓣饼干形，头像自带的深底露成一朵花（2026-11-18 用户要求删掉）
               avatarUrl.isEmpty
                   ? fallback
-                  : ClipPath(
-                      clipper: const _CookieClip(),
-                      child: Image.network(
-                        avatarUrl,
-                        width: avatarSize,
-                        height: avatarSize,
-                        fit: BoxFit.cover,
-                        // 主控给多大的图就解多大，碰上几千像素的头像要占十几 MB：解码宽度封顶（比这小的图原样解）。
-                        // 只限宽度——两个方向都限会把非正方形的头像压变形；取 60dp × 3 倍屏 × 4：引擎缩图用的是不带 mipmap 的双线性，
-                        // 一步缩太多会出锯齿，剩下的几倍交给绘制时的 mipmap。
-                        // 用常数、不跟头像大小和屏幕缩放比走：宽度是图片缓存键的一部分，一变就得重新下载一次（网络图没有磁盘缓存），
-                        // 窗口拖过两栏断点 / 换到另一块屏时头像会空一下，主控不通还会落到品牌头像
-                        cacheWidth: _avatarCacheWidth,
-                        errorBuilder: (_, _, _) => fallback,
-                      ),
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(avatarSize / 3),
+                      child: _CachedAvatar(url: avatarUrl, size: avatarSize, fallback: fallback),
                     ),
               SizedBox(width: compact ? 12 : 14),
               Expanded(
@@ -185,15 +176,47 @@ class AccountCard extends ConsumerWidget {
   }
 }
 
-/// 头像的饼干形（九瓣、浅凹，同电源键连上时的形状）
-class _CookieClip extends CustomClipper<Path> {
-  const _CookieClip();
+/// 主控上的头像：经 [AvatarCache] 走本地缓存（下过一次之后从磁盘读，不再每次请求主控）；没拿到时显示 [fallback]。
+class _CachedAvatar extends StatefulWidget {
+  const _CachedAvatar({required this.url, required this.size, required this.fallback});
+  final String url;
+  final double size;
+  final Widget fallback;
 
   @override
-  Path getClip(Size size) => meowPolarShape(size, lobes: 9, depth: 0.08);
+  State<_CachedAvatar> createState() => _CachedAvatarState();
+}
+
+class _CachedAvatarState extends State<_CachedAvatar> {
+  late Future<Uint8List?> _bytes = AvatarCache.shared.load(widget.url);
 
   @override
-  bool shouldReclip(covariant CustomClipper<Path> oldClipper) => false;
+  void didUpdateWidget(_CachedAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.url != widget.url) _bytes = AvatarCache.shared.load(widget.url);
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: _bytes,
+    initialData: AvatarCache.shared.peek(widget.url),
+    builder: (_, snap) {
+      final bytes = snap.data;
+      if (bytes == null) return widget.fallback;
+      return Image.memory(
+        bytes,
+        width: widget.size,
+        height: widget.size,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        // 主控给多大的图就解多大，碰上几千像素的头像要占十几 MB：解码宽度封顶（比这小的图原样解）。
+        // 只限宽度——两个方向都限会把非正方形的头像压变形；取 60dp × 3 倍屏 × 4：引擎缩图用的是不带 mipmap 的双线性，
+        // 一步缩太多会出锯齿，剩下的几倍交给绘制时的 mipmap。
+        cacheWidth: _avatarCacheWidth,
+        errorBuilder: (_, _, _) => widget.fallback,
+      );
+    },
+  );
 }
 
 /// 扫一扫：MeowX 登录码 → 登录；订阅链接 → 导入。

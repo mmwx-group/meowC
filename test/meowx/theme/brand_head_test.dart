@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:bett_box/meowx/pages/me/account_card.dart';
+import 'package:bett_box/meowx/panel/avatar_cache.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
@@ -53,9 +55,10 @@ void main() {
     }
   });
 
-  testWidgets('账户头像（主控给的网络图）：解码宽度封顶在同一个常数（两种布局、各种缩放比共用一条图片缓存），不限高度，小图不放大', (tester) async {
+  testWidgets('账户头像（主控给的图，经本地缓存）：解码宽度封顶在同一个常数（两种布局、各种缩放比共用一条图片缓存），不限高度，小图不放大', (tester) async {
     addTearDown(tester.view.reset);
     const account = MeowAccount(host: 'https://panel.example.com', token: 't', nickname: 'n', avatarUrl: 'https://panel.example.com/a.png');
+    AvatarCache.shared.seed(account.avatarUrl, Uint8List.fromList(List.filled(8, 0)));
     final keys = <Object>{};
     for (final (compact, ratio) in const [(false, 2.0), (true, 2.0), (false, 1.0), (true, 3.0)]) {
       tester.view.devicePixelRatio = ratio;
@@ -68,13 +71,13 @@ void main() {
           ),
         ),
       );
-      final avatar = tester.widgetList<Image>(find.byType(Image)).map((i) => i.image).whereType<ResizeImage>().singleWhere((i) => i.imageProvider is NetworkImage);
+      final avatar = tester.widgetList<Image>(find.byType(Image)).map((i) => i.image).whereType<ResizeImage>().singleWhere((i) => i.imageProvider is MemoryImage);
       expect(avatar.width, 720, reason: 'compact=$compact ratio=$ratio');
       expect(avatar.height, isNull);
       expect(avatar.allowUpscaling, isFalse);
       keys.add(await avatar.obtainKey(ImageConfiguration.empty));
     }
-    // 缓存键只有一个：换布局 / 换屏不会再下载一次
+    // 缓存键只有一个：换布局 / 换屏不会再解码一次
     expect(keys, hasLength(1));
   });
 }
