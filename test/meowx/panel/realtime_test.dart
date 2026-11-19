@@ -138,5 +138,33 @@ void main() {
       expect(entryOverrideLabel(e, now: at.add(const Duration(minutes: 3))), '主控指定入口 203.0.113.11, 203.0.113.12 · 3 分钟前');
       expect(entryOverrideLabel(const EntryOverride(server: 'hk', ips: ['1.2.3.4'])), '主控指定入口 1.2.3.4');
     });
+
+    test('入口服务器名称：有名称写「名称（IP）」，没名称的 IP 只写 IP', () {
+      final at = DateTime(2026, 11, 19, 12);
+      final e = EntryOverride.fromJson({
+        'server': 'hk',
+        'ips': ['203.0.113.11', '203.0.113.12'],
+        'updatedAt': at.millisecondsSinceEpoch,
+        'active': true,
+        'names': {'203.0.113.11': '香港入口 A'},
+      });
+      expect(entryOverrideLabel(e, now: at.add(const Duration(minutes: 3))), '主控指定入口 香港入口 A（203.0.113.11）, 203.0.113.12 · 3 分钟前');
+    });
+
+    test('入口服务器名称的解析：没有 / 形状不对 = 没有，值不是字符串或空白的跳过', () {
+      EntryOverride parse(Object? names) => EntryOverride.fromJson({'server': 'a', 'ips': ['1.1.1.1'], 'names': ?names});
+      expect(parse(null).names, isNull);
+      expect(parse(['1.1.1.1']).names, isNull);
+      expect(parse('x').names, isNull);
+      expect(parse({'1.1.1.1': 5, '2.2.2.2': '  '}).names, isNull);
+      expect(parse({'1.1.1.1': ' 香港入口 A ', '2.2.2.2': null}).names, {'1.1.1.1': '香港入口 A'});
+    });
+
+    test('同一个 rev 补上名称也算变了（界面要跟着换）', () {
+      const a = EntryOverride(server: 'hk', ips: ['1.1.1.1'], rev: 1, active: true);
+      const b = EntryOverride(server: 'hk', ips: ['1.1.1.1'], rev: 1, active: true, names: {'1.1.1.1': '香港入口 A'});
+      expect(a == b, isFalse);
+      expect(b == const EntryOverride(server: 'hk', ips: ['1.1.1.1'], rev: 1, active: true, names: {'1.1.1.1': '香港入口 A'}), isTrue);
+    });
   });
 }
