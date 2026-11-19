@@ -357,7 +357,7 @@ class SpeedTestController extends ChangeNotifier {
     try {
       version = globalState.packageInfo.version;
     } catch (_) {}
-    return SpeedBoardClientInfo(platform: Platform.isAndroid ? 'android' : 'windows', version: version);
+    return SpeedBoardClientInfo(platform: Platform.isAndroid ? 'android' : Platform.isLinux ? 'linux' : 'windows', version: version);
   }
 
   /// 这条记录正在上传或删除

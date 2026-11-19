@@ -66,7 +66,7 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     FrameLog.install();
     // 主控 RPC 的 User-Agent 带上版本，主控日志与安全事件里认得出是哪个版本的 MeowX
     try {
-      PanelClient.userAgent = 'MeowX/${globalState.packageInfo.version} (${system.isAndroid ? 'Android' : 'Windows'})';
+      PanelClient.userAgent = 'MeowX/${globalState.packageInfo.version} (${system.isAndroid ? 'Android' : system.isLinux ? 'Linux' : 'Windows'})';
     } catch (e) {
       commonPrint.log('set PanelClient.userAgent failed: $e');
     }
