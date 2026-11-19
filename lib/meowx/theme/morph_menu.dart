@@ -419,7 +419,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
       child: Material(type: MaterialType.transparency, child: content),
     );
 
-    final menuStyle = glass ? MeowGlassStyles.menu(context) : null;
+    final menuStyle = glass ? MeowGlassStyles.popover(context) : null;   // 同气泡的薄玻璃（2026-11-18 用户要求）
     final menuRim = glass ? MeowGlassStyles.menuRim(context) : null;
     return Stack(
       children: [
