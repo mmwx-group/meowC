@@ -6,6 +6,7 @@ import '../theme/tokens.dart';
 enum UnlockCategory {
   streaming('流媒体'),
   ai('AI'),
+  exchange('交易所'),
   other('其他');
 
   const UnlockCategory(this.label);
@@ -44,7 +45,10 @@ const unlockServices = <UnlockServiceMeta>[
   UnlockServiceMeta('youtube_cdn', 'YouTube CDN', UnlockCategory.streaming, info: true),
   UnlockServiceMeta('netflix_cdn', 'Netflix CDN', UnlockCategory.streaming, info: true),
   UnlockServiceMeta('sdggge', 'SD Gundam G Generation Eternal', UnlockCategory.other),
-  UnlockServiceMeta('spotify', 'Spotify 注册', UnlockCategory.streaming),
+  // 交易所（主控 2026-11 加的；Spotify 注册同时去掉了）。OKX 的判定会带出它识别到的地区，按信息类展示
+  UnlockServiceMeta('bybit', 'Bybit', UnlockCategory.exchange),
+  UnlockServiceMeta('binance', 'Binance', UnlockCategory.exchange),
+  UnlockServiceMeta('okx', 'OKX', UnlockCategory.exchange, info: true),
 ];
 
 final _byKey = {for (final s in unlockServices) s.key: s};

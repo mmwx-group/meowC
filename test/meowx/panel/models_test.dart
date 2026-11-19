@@ -190,6 +190,21 @@ void main() {
     expect(NodeUnlocks.parse({'success': true, 'nodes': []}), isEmpty);
   });
 
+  test('主控新加的交易所三项（2026-11）进「交易所」分组，OKX 是信息类只显示地区', () {
+    final n = NodeUnlocks.parse({'success': true, 'nodes': [
+      {'name': 'JP', 'unlocks': [
+        {'service': 'okx', 'status': 'yes', 'region': 'JP'},
+        {'service': 'bybit', 'status': 'no'},
+        {'service': 'binance', 'status': 'yes'},
+        {'service': 'netflix', 'status': 'yes'},
+      ]},
+    ]})['JP']!;
+    expect(n.grouped[UnlockCategory.exchange]!.map((e) => e.service), ['bybit', 'binance', 'okx']);   // 目录顺序
+    expect(n.entries.firstWhere((e) => e.service == 'okx').statusText, 'JP');
+    expect(n.entries.firstWhere((e) => e.service == 'binance').statusText, '已解锁');
+    expect(unlockServiceMeta('binance').label, 'Binance');
+  });
+
   test('登录深链', () {
     final r = parseLoginLink(Uri.parse('miaomiaowu://login?host=panel.example.com&code=abc'));
     expect(r?.base, 'https://panel.example.com');

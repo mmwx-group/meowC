@@ -89,12 +89,13 @@ class _UnlockDetailState extends State<UnlockDetail> {
           Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(color: mm.t1.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(9)),
-            // 三段拉成等高：被 FittedBox 缩小的那段，选中底也不比别的段矮（只有 3 段，IntrinsicHeight 开销可忽略）
+            // 各段拉成等高：被 FittedBox 缩小的那段，选中底也不比别的段矮（至多 4 段，IntrinsicHeight 开销可忽略）
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (final c in UnlockCategory.values)
+                  // 没有条目的分类不出分段（老主控没有交易所那几项）
+                  for (final c in UnlockCategory.values.where((c) => _groups[c]!.isNotEmpty || c == _tab))
                     Expanded(
                       child: GestureDetector(
                         onTap: () => setState(() => UnlockDetail.lastTab = _tab = c),
