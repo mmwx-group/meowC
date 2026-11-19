@@ -79,6 +79,29 @@ abstract final class MeowGlassStyles {
 
   static LiquidGlassRim menuRim(BuildContext context) => LiquidGlassRim.menu(scheme(context));
 
+  /// 锚在按钮上的气泡（首页卡片设置、节点视图…）：比菜单薄得多、透得出背后的画面，同 iOS 27 的 popover
+  /// （2026-11-18 用户：透明度不够、不像 iOS 27 的液态玻璃）。着色从 55% / 63% 降到 26% / 36%，模糊 12 → 4.5，
+  /// 边缘折射照旧（看得出是一块玻璃）；里面的行再按 [meowOnGlassTheme] 半透明。
+  static LiquidGlassStyle popover(BuildContext context) {
+    final cs = scheme(context);
+    return context.isDarkMode
+        ? LiquidGlassStyle(
+            tint: cs.surfaceContainerHighest.withValues(alpha: 0.36),
+            contrast: -0.35,
+            blur: 4.5,
+            saturation: 1.7,
+            brightness: 1.45,
+            rim: 0,
+          )
+        : LiquidGlassStyle(
+            tint: cs.surfaceBright.withValues(alpha: 0.26),
+            blur: 4.5,
+            saturation: 1.9,
+            brightness: 1.06,
+            rim: 0,
+          );
+  }
+
   static List<BoxShadow> menuShadows(BuildContext context, [double depth = 1]) =>
       glassMenuShadows(scheme(context), depth);
 

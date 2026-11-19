@@ -8,17 +8,18 @@ import 'package:flutter/physics.dart';
 
 /// iOS 27 弹出菜单 / popover 的「水滴」变形（2026-11-18 对着 iOS 27 模拟器录屏逐帧照抄，第二版）：
 /// - 从按钮中心冒出一颗小的圆形玻璃水滴（一出来就是玻璃、透出背后放大发糊的画面），不是从按钮的矩形长出来；
-/// - 从小到大慢慢长：约 0.3 秒到顶、冲过头约 10% 再弹回来，约 0.5 秒停住（第二版只冲 3%，用户说回弹没了；
-///   第三版太快，用户说一瞬间就展开了）。动画在气泡第一帧画出来之后才开始计时；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
+/// - 从小到大慢慢长：约 0.21 秒到顶、冲过头约 8% 再弹回来，约 0.35 秒停住（第二版只冲 3%，用户说回弹没了；
+///   第三版太快，用户说一瞬间就展开了；第四版 0.3 秒到顶，用户说比 iOS 27 慢，现在约 0.21 秒）。动画在气泡第一帧画出来之后才开始计时；形状一路是「短边一半」的圆角（圆 → 胶囊），快到位才收成面板的圆角；
 /// - 内容按最终尺寸钉在最终位置，面板只是把它一点点露出来（不跟着面板拉伸——第一版拉伸了，用户说内容没有自适应）；
 ///   前一半只看得到玻璃，之后内容才由糊变清（展开途中内容不完整显示）；
-/// - 关：内容糊掉、面板缩回按钮中心的水滴，约 0.16 秒，最后一点淡掉。
+/// - 关：内容糊掉、面板缩回按钮中心的水滴，约 0.13 秒，最后一点淡掉。
 abstract final class DropletMorph {
-  /// 开的弹簧：约 0.3 秒到顶、冲过头约 10%（看得出「啵」地弹一下）、约 0.5 秒停住
-  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 170, ratio: 0.6);
+  /// 开的弹簧：约 0.21 秒到顶、冲过头约 8%（看得出「啵」地弹一下）、约 0.35 秒停住
+  /// （2026-11-18 用户：比 iOS 27 慢。以前 170 / 0.6 是 0.3 秒到顶；计时从气泡第一帧开始，不会再「一瞬间就展开」）
+  static final spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 360, ratio: 0.62);
 
   /// 关的时长与曲线
-  static const closeDuration = Duration(milliseconds: 160);
+  static const closeDuration = Duration(milliseconds: 130);
   static const closeCurve = Curves.easeInCubic;
 
   /// 起点：按钮中心的一颗小圆（直径约按钮短边的七成，夹在 24–44）
@@ -77,7 +78,7 @@ abstract final class DropletMorph {
 class DropletSpringCurve extends Curve {
   const DropletSpringCurve();
 
-  static const duration = Duration(milliseconds: 700);
+  static const duration = Duration(milliseconds: 500);
 
   @override
   double transformInternal(double t) {

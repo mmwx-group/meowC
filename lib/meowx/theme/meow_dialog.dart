@@ -131,11 +131,11 @@ ThemeData meowOnGlassTheme(ThemeData t) {
   final dark = t.brightness == Brightness.dark;
   final ink = dark ? Colors.white : Colors.black;
   final cs = t.colorScheme.copyWith(
-    surfaceContainerLowest: dark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.5),
-    surfaceContainerLow: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.42),
-    surfaceContainer: ink.withValues(alpha: dark ? 0.10 : 0.05),
-    surfaceContainerHigh: ink.withValues(alpha: dark ? 0.12 : 0.07),
-    surfaceContainerHighest: ink.withValues(alpha: dark ? 0.16 : 0.09),
+    surfaceContainerLowest: Colors.white.withValues(alpha: dark ? 0.05 : 0.32),
+    surfaceContainerLow: Colors.white.withValues(alpha: dark ? 0.06 : 0.26),
+    surfaceContainer: ink.withValues(alpha: dark ? 0.08 : 0.04),
+    surfaceContainerHigh: ink.withValues(alpha: dark ? 0.10 : 0.055),
+    surfaceContainerHighest: ink.withValues(alpha: dark ? 0.13 : 0.07),
   );
   return t.copyWith(colorScheme: cs);
 }
@@ -358,7 +358,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
             );
             final Widget panel = glass
                 ? MeowGlassBox(
-                    style: MeowGlassStyles.menu(context).scale(DropletMorph.glassAmount(p)),
+                    style: MeowGlassStyles.popover(context).scale(DropletMorph.glassAmount(p)),
                     radius: radius,
                     rim: MeowGlassStyles.menuRim(context).scale(DropletMorph.glassAmount(p)),
                     shadows: MeowGlassStyles.menuShadows(context, pc),
