@@ -125,6 +125,21 @@ class MeowDialogLabel extends StatelessWidget {
   );
 }
 
+/// 玻璃气泡里的内容：把清单行、分段底、开关轨道用的几档 surfaceContainer 换成半透明，透得出背后的玻璃
+/// （2026-11-18 用户：首页卡片 / 节点视图气泡里是纯色底，没有透明效果）。
+ThemeData meowOnGlassTheme(ThemeData t) {
+  final dark = t.brightness == Brightness.dark;
+  final ink = dark ? Colors.white : Colors.black;
+  final cs = t.colorScheme.copyWith(
+    surfaceContainerLowest: dark ? Colors.white.withValues(alpha: 0.06) : Colors.white.withValues(alpha: 0.5),
+    surfaceContainerLow: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.42),
+    surfaceContainer: ink.withValues(alpha: dark ? 0.10 : 0.05),
+    surfaceContainerHigh: ink.withValues(alpha: dark ? 0.12 : 0.07),
+    surfaceContainerHighest: ink.withValues(alpha: dark ? 0.16 : 0.09),
+  );
+  return t.copyWith(colorScheme: cs);
+}
+
 /// 对话框里清单行的底色：对话框是 surfaceContainerHigh，行要比它浅一档才分得出（浅色 lowest、深色 low）
 Color meowDialogRowColor(ColorScheme cs) =>
     cs.brightness == Brightness.dark ? cs.surfaceContainerLow : cs.surfaceContainerLowest;
@@ -286,6 +301,22 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
     final maxH = (below ? spaceBelow : spaceAbove).clamp(160.0, screen.height * 0.75);
     final glass = meowPopupGlassOn(context);
 
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+          child: Text(route.title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface)),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
+            child: Builder(builder: route.builder),
+          ),
+        ),
+      ],
+    );
     final content = KeyedSubtree(
       key: _contentKey,
       child: SizedBox(
@@ -294,19 +325,8 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
           constraints: BoxConstraints(maxHeight: maxH),
           child: Material(
             type: MaterialType.transparency,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-                  child: Text(route.title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface)),
-                ),
-                Flexible(
-                  child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(12, 4, 12, 14), child: route.builder(context)),
-                ),
-              ],
-            ),
+            // 玻璃气泡里的行 / 分段 / 开关轨道换成半透明（同 iOS：透得出玻璃），实色气泡照旧
+            child: glass ? Theme(data: meowOnGlassTheme(Theme.of(context)), child: body) : body,
           ),
         ),
       ),
