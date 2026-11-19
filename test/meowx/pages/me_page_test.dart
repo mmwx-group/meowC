@@ -12,6 +12,7 @@ import 'package:bett_box/meowx/pages/settings/overrides_pages.dart';
 import 'package:bett_box/meowx/pages/settings/ggy_tokens_page.dart';
 import 'package:bett_box/meowx/pages/settings/po0_servers_page.dart';
 import 'package:bett_box/meowx/panel/akile.dart';
+import 'package:bett_box/meowx/panel/avatar_cache.dart';
 import 'package:bett_box/meowx/panel/ggy.dart';
 import 'package:bett_box/meowx/panel/po0.dart';
 import 'package:bett_box/meowx/pages/settings/sys_proxy_bypass_page.dart';
@@ -410,6 +411,8 @@ void main() {
   });
 
   testWidgets('账户卡头像：主控上传的站内路径接上主控地址再去加载', (tester) async {
+    // 先放进快取：没放的话会去碰 appPath，Linux 测试环境（CI）下 Bettbox 的 AppPath 取下载目录会抛错
+    AvatarCache.shared.seed('https://panel.example.com/api/user/avatar/ab?v=2', Uint8List.fromList(List.filled(8, 0)));
     await _pump(
       tester,
       const MePage(),
