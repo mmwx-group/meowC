@@ -138,17 +138,17 @@ class HomeSpeedCard extends ConsumerWidget {
     final columns = Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 下载在前（2026-11-18 起三端统一）
-        if (down)
+        // 上传在左、下载在右（2026-11-20 用户要求，同 Mac 面板；11-18 曾改成下载在前）
+        if (up)
           Expanded(
-            child: rate(Icons.arrow_downward_rounded, downColor, S.download, last?.down.value ?? 0, total.down.value),
+            child: rate(Icons.arrow_upward_rounded, upColor, S.upload, last?.up.value ?? 0, total.up.value),
           ),
         // 右栏往左让一点，标题不碰右上角的测速胶囊（安卓字比 iOS 宽，实机上挨着了）
-        if (up)
+        if (down)
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(right: 20),
-              child: rate(Icons.arrow_upward_rounded, upColor, S.upload, last?.up.value ?? 0, total.up.value),
+              child: rate(Icons.arrow_downward_rounded, downColor, S.download, last?.down.value ?? 0, total.down.value),
             ),
           ),
         if (!up && !down)
