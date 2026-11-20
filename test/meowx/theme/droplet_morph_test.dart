@@ -10,11 +10,39 @@ void main() {
   const anchor = Rect.fromLTWH(300, 60, 44, 44);
   const target = Rect.fromLTWH(124, 60, 220, 250);
   const radius = 16.0;
+  // 同样大小、但整个在按钮下方的菜单（不盖按钮）：那段「先荡出去再收回」的位移只对它还完整保留
+  const below = Rect.fromLTWH(124, 112, 220, 250);
 
   DropletFrame open(double raw, double t) =>
       DropletMorph.open(anchor: anchor, target: target, finalRadius: radius, raw: raw, elapsed: t);
   DropletFrame close(double raw, double t) =>
       DropletMorph.close(anchor: anchor, target: target, finalRadius: radius, raw: raw, elapsed: t);
+
+  group('盖着按钮的气泡全程不离开按钮（以前荡出去时整块飘到列表中间、按钮又露出来，真机上看着闪一下）', () {
+    test('打开：每一帧面板都盖着按钮中心，起点是按钮、终点是气泡', () {
+      for (var ms = 0; ms <= 600; ms += 8) {
+        final t = ms / 1000;
+        // raw 用一条粗略的弹簧进度（0 → 1），连同过冲前后的各种组合都要成立
+        for (final raw in [math.min(1.0, t / 0.25), math.min(1.0, t / 0.12), 1.0]) {
+          final f = open(raw, t);
+          expect(f.platter.inflate(0.01).contains(anchor.center), isTrue, reason: 't=$t raw=$raw platter=${f.platter}');
+        }
+      }
+      expect(open(0, 0).platter, anchor);
+      expect(open(1, 0.6).platter.center.dy, closeTo(target.center.dy, 0.5));
+    });
+
+    test('关闭：每一帧面板都盖着（被撞开的）按钮中心', () {
+      for (var ms = 0; ms <= 400; ms += 8) {
+        final t = ms / 1000;
+        for (final raw in [math.max(0.0, 1 - t / 0.2), math.max(0.0, 1 - t / 0.1), 0.5]) {
+          final f = DropletMorph.close(anchor: anchor, target: target, finalRadius: radius, raw: raw, elapsed: t, menu: false);
+          final kick = DropletMorph.triggerRecoil(target.center - anchor.center, t, menu: false);
+          expect(f.platter.inflate(0.01).contains(anchor.center + kick), isTrue, reason: 't=$t raw=$raw platter=${f.platter}');
+        }
+      }
+    });
+  });
 
   group('打开', () {
     test('第一帧：按钮缩成的那颗圆（短边为直径），按钮那颗圆还在', () {
@@ -31,8 +59,10 @@ void main() {
       expect(open(0.4, 0.09).hasBlob, isFalse);
     });
 
-    test('面板中心先往远离按钮的方向冲出去（约 110ms 到顶、中等菜单约 66px），0.40s 收干净', () {
-      double lead(double t) => open(1, t).platter.center.dy - target.center.dy;
+    test('不盖按钮的菜单：面板中心先往远离按钮的方向冲出去（约 110ms 到顶、中等菜单约 66px），0.40s 收干净', () {
+      double lead(double t) =>
+          DropletMorph.open(anchor: anchor, target: below, finalRadius: radius, raw: 1, elapsed: t).platter.center.dy -
+          below.center.dy;
       final peak = [for (var ms = 60; ms <= 160; ms += 10) lead(ms / 1000)].reduce(math.max);
       expect(peak, inInclusiveRange(55, 70));
       expect(lead(0.11), greaterThan(55));
@@ -76,8 +106,9 @@ void main() {
       expect(f.hasBlob, isFalse);
     });
 
-    test('以按钮中心为支点等比缩放，同时先被推离按钮', () {
-      final f = close(0.5, 0.09);
+    test('不盖按钮的菜单：以按钮中心为支点等比缩放，同时先被推离按钮', () {
+      const target = below;
+      final f = DropletMorph.close(anchor: anchor, target: target, finalRadius: radius, raw: 0.5, elapsed: 0.09);
       expect(f.platter.width, closeTo(220 * 0.6, 0.5));
       // 只按支点缩放时的中心
       final fy = (anchor.center.dy - target.top) / target.height;

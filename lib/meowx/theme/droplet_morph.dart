@@ -113,6 +113,7 @@ abstract final class DropletMorph {
     final driftY = travel.dy.sign * _openDrift(elapsed, target.height);
     var center = Rect.lerp(core, target, sizeP)!.center + Offset(driftX, driftY);
     if (allowed != null) center = _keepInside(center, Size(w, h), core, allowed);
+    if (_coversAnchor(target, core)) center = _keepAttached(center, Size(w, h), core);
     final platter = Rect.fromCenter(center: center, width: w, height: h);
 
     final blend = ((pathT - sizeP).abs() * 150 * _blendAttenuation(scaleDelta)).clamp(0.0, 28.0);
@@ -185,7 +186,10 @@ abstract final class DropletMorph {
     } else if (alignX > 0.1) {
       cx = math.min(cx, trigX + tw / 2 - w / 2);
     }
-    final platter = Rect.fromCenter(center: Offset(cx, raw0.dy), width: w, height: h);
+    var closeCenter = Offset(cx, raw0.dy);
+    // 钉在被撞开的按钮此刻所在的位置上（尾巴最后要流回那里）
+    if (_coversAnchor(target, core)) closeCenter = _keepAttached(closeCenter, Size(w, h), core.shift(push));
+    final platter = Rect.fromCenter(center: closeCenter, width: w, height: h);
 
     // 按钮那颗圆：等面板缩到够近、时间也到了才冒出来（不出现孤零零的一个点），直接 0.45 起
     final blobCenter = pivot + push;
@@ -296,6 +300,22 @@ abstract final class DropletMorph {
   static Rect _core(Rect anchor) {
     final d = math.max(1.0, anchor.shortestSide);
     return Rect.fromCenter(center: anchor.center, width: d, height: d);
+  }
+
+  /// 终态盖着按钮的气泡（[showMeowPopover]：贴着按钮那一角展开、把按钮盖住）。下拉菜单在按钮外面，不算。
+  static bool _coversAnchor(Rect target, Rect core) => target.inflate(0.5).contains(core.center);
+
+  /// 盖着按钮的气泡全程不离开按钮：面板中心夹在「面板仍盖住按钮那颗圆」的范围里（面板比按钮还小时就钉在按钮中心）。
+  /// 以前展开 / 收起时那段「先荡出去再收回」的位移（最多约 66dp）会让面板整块离开按钮：模糊的一块飘到列表中间、
+  /// 按钮又原样露出来、最后才跳回去盖住按钮，真机上看着是屏幕闪一下（2026-11-20 用户实报，节点页的「节点视图」按钮）。
+  static Offset _keepAttached(Offset center, Size size, Rect core) {
+    final pin = core.center;
+    final r = core.shortestSide / 2;
+    final sx = math.max(0.0, size.width / 2 - r), sy = math.max(0.0, size.height / 2 - r);
+    return Offset(
+      center.dx.clamp(pin.dx - sx, pin.dx + sx).toDouble(),
+      center.dy.clamp(pin.dy - sy, pin.dy + sy).toDouble(),
+    );
   }
 
   static double _scaleDelta(Size from, Size to) {
