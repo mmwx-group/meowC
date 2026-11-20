@@ -7,7 +7,7 @@ import '../../theme/popover.dart';
 import '../../theme/tokens.dart';
 
 /// 节点格上的「主控指定入口」小标（入口即时切换，规格 §6 的诊断显示）：这个节点的 server 现在被主控指定成某几个入口 IP 时
-/// 画一个小图标，点开（桌面上悬停也行）看「主控指定入口 IP · 切换时间」。没有覆盖时什么都不画、不占位。
+/// 画一个小图标，点开（桌面上悬停也行）看「主控指定入口 IP · 切换时间」（主控给了入口服务器名称时 IP 写成「名称（IP）」）。没有覆盖时什么都不画、不占位。
 class EntryOverrideBadge extends ConsumerWidget {
   const EntryOverrideBadge(this.nodeName, {super.key, this.size = 14});
 

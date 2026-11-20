@@ -82,6 +82,7 @@ class EntryOverride {
     this.updatedAt = 0,
     this.active = false,
     this.ports,
+    this.names,
   });
 
   final String server;
@@ -103,6 +104,16 @@ class EntryOverride {
   /// 为什么要它：转发链入口所在的机器上另开的直连节点 server 和入口键一样，只比 server 会被当成转发节点。
   final List<int>? ports;
 
+  /// 入口服务器名称（规格 §2.2，2026-11-19 加）：入口 IP → 主控里那台入口服务器的名字，只给界面显示。
+  /// 只有管理员账号的连接才有；没有名字的 IP 不在表里，一个都没有时为 null（照旧只显示 IP）。
+  final Map<String, String>? names;
+
+  /// 这个 IP 在界面上的写法：有名称「香港入口 A（203.0.113.11）」，没有就是 IP
+  String ipLabel(String ip) {
+    final name = names?[ip];
+    return name == null ? ip : '$name（$ip）';
+  }
+
   factory EntryOverride.fromJson(Map<String, dynamic> j) => EntryOverride(
     server: j['server']?.toString() ?? '',
     ips: [
@@ -115,7 +126,18 @@ class EntryOverride {
     updatedAt: (j['updatedAt'] as num?)?.toInt() ?? 0,
     active: j['active'] == true,
     ports: j['ports'] is List ? [for (final p in j['ports'] as List) if (p is num) p.toInt()] : null,
+    names: _parseNames(j['names']),
   );
+
+  /// 名称表：不是对象 = 没有；值不是字符串 / 空白的那一项跳过（内核已经按集合筛过、截过长度）
+  static Map<String, String>? _parseNames(Object? raw) {
+    if (raw is! Map) return null;
+    final out = <String, String>{
+      for (final MapEntry(:key, :value) in raw.entries)
+        if (value is String && value.trim().isNotEmpty) key.toString(): value.trim(),
+    };
+    return out.isEmpty ? null : out;
+  }
 
   /// 端口 [port] 的节点用不用这条覆盖：没给端口集合（老主控）时都用。
   bool matchesPort(int? port) => ports == null || (port != null && ports!.contains(port));
@@ -128,10 +150,15 @@ class EntryOverride {
       other.active == active &&
       other.updatedAt == updatedAt &&
       other.ips.join(',') == ips.join(',') &&
-      other.ports?.join(',') == ports?.join(',');
+      other.ports?.join(',') == ports?.join(',') &&
+      // 同一个 rev 也可能补上名称（主控升级后的快照），名称要算进来，界面才会跟着换
+      _namesKey(other.names) == _namesKey(names);
 
   @override
-  int get hashCode => Object.hash(server, rev, active, updatedAt, ips.join(','), ports?.join(','));
+  int get hashCode => Object.hash(server, rev, active, updatedAt, ips.join(','), ports?.join(','), _namesKey(names));
+
+  static String? _namesKey(Map<String, String>? m) =>
+      m == null ? null : (m.entries.map((e) => '${e.key}=${e.value}').toList()..sort()).join('\n');
 }
 
 /// 解析核心 `entries` 的列表；只留有 IP 的。
@@ -177,8 +204,9 @@ EntryOverride? entryOverrideFor(String server, List<EntryOverride> entries, {int
 }
 
 /// 节点详情里的一行：「主控指定入口 203.0.113.11, 203.0.113.12 · 3 分钟前」（时间是本机换上这份入口的时间）。
+/// 主控给了入口服务器名称时写成「主控指定入口 香港入口 A（203.0.113.11）, 203.0.113.12 · 3 分钟前」，没名称的 IP 只写 IP。
 String entryOverrideLabel(EntryOverride e, {DateTime? now}) {
-  final ips = e.ips.join(', ');
+  final ips = e.ips.map(e.ipLabel).join(', ');
   if (e.updatedAt <= 0) return '主控指定入口 $ips';
   return '主控指定入口 $ips · ${fmtRelative(DateTime.fromMillisecondsSinceEpoch(e.updatedAt), now)}';
 }
