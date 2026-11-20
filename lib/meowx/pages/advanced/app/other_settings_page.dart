@@ -285,11 +285,11 @@ class _TrayClickDialogState extends State<_TrayClickDialog> {
         children: [
           const Text('左键点击'),
           const SizedBox(height: 8),
-          M3ButtonGroup<TrayClickBehavior>(items: items, selected: _left, onChanged: (v) => setState(() => _left = v)),
+          MeowSlideSegment<TrayClickBehavior>(items: items, selected: _left, onChanged: (v) => setState(() => _left = v)),
           const SizedBox(height: 20),
           const Text('右键点击'),
           const SizedBox(height: 8),
-          M3ButtonGroup<TrayClickBehavior>(items: items, selected: _right, onChanged: (v) => setState(() => _right = v)),
+          MeowSlideSegment<TrayClickBehavior>(items: items, selected: _right, onChanged: (v) => setState(() => _right = v)),
         ],
       ),
       actions: [

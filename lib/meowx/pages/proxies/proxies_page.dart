@@ -201,14 +201,14 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
             children: [
               if (!twoPane) ...[
                 const MeowDialogLabel(S.layout),
-                M3ButtonGroup<ProxyLayout>(
+                MeowSlideSegment<ProxyLayout>(
                   items: [for (final v in ProxyLayout.values) (v, v.label)],
                   selected: meow.proxyLayout,
                   onChanged: (v) => update((s) => s.copyWith(proxyLayout: v)),
                 ),
               ],
               const MeowDialogLabel(S.cardSize),
-              M3ButtonGroup<NodeCardSize>(
+              MeowSlideSegment<NodeCardSize>(
                 items: [for (final v in NodeCardSize.values) (v, v.label)],
                 selected: meow.nodeCardSize,
                 onChanged: (v) => update((s) => s.copyWith(nodeCardSize: v)),

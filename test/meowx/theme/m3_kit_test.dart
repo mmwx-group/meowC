@@ -1,6 +1,7 @@
 import 'package:bett_box/meowx/theme/m3.dart';
 import 'package:bett_box/meowx/theme/m3_kit.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
+import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -16,35 +17,27 @@ BoxDecoration _decorationAbove(WidgetTester tester, Finder f) => tester
         .decoration!
     as BoxDecoration;
 
-/// 按钮组的形状画在 ClipRRect 上（水波跟着裁），底色在里面的 AnimatedContainer 上
-BorderRadius? _clipAbove(WidgetTester tester, Finder f) =>
-    tester.widget<ClipRRect>(find.ancestor(of: f, matching: find.byType(ClipRRect)).first).borderRadius as BorderRadius?;
-
 void main() {
-  testWidgets('连接式按钮组：选中的是主色胶囊，其余首尾外侧大圆角、内侧小圆角；点了回调、点选中的不回调', (tester) async {
+  testWidgets('分段（MeowSegment）就是 iOS 同款滑块分段：轨道圆角 14、反色滑块圆角 11；点了回调、点选中的不回调', (tester) async {
     String? picked;
     await tester.pumpWidget(
       _app(
-        M3ButtonGroup<String>(
+        MeowSegment<String>(
           items: const [('rule', '规则'), ('global', '全局'), ('direct', '直连')],
-          selected: 'rule',
+          value: 'rule',
           onChanged: (v) => picked = v,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    final rule = _decorationAbove(tester, find.text('规则'));
-    final global = _decorationAbove(tester, find.text('全局'));
-    final direct = _decorationAbove(tester, find.text('直连'));
-    expect(rule.color, _cs.primary);
-    expect(_clipAbove(tester, find.text('规则')), BorderRadius.circular(24));
-    expect(global.color, _cs.surfaceContainerHighest);
-    expect(_clipAbove(tester, find.text('全局')), BorderRadius.circular(MeowShape.s));
-    expect(
-      _clipAbove(tester, find.text('直连')),
-      const BorderRadius.horizontal(left: Radius.circular(MeowShape.s), right: Radius.circular(24)),
-    );
-    expect(direct.color, _cs.surfaceContainerHighest);
+    expect(find.byType(MeowSlideSegment<String>), findsOneWidget);
+    final radii = tester
+        .widgetList<DecoratedBox>(
+          find.descendant(of: find.byType(MeowSlideSegment<String>), matching: find.byType(DecoratedBox)),
+        )
+        .map((d) => (d.decoration as BoxDecoration).borderRadius)
+        .toSet();
+    expect(radii, containsAll([BorderRadius.circular(14), BorderRadius.circular(11)]));
 
     await tester.tap(find.text('规则'));
     expect(picked, isNull);
@@ -75,7 +68,7 @@ void main() {
     expect(tester.getTopLeft(find.text('B')).dy - tester.getTopLeft(find.text('A')).dy, greaterThan(40));
   });
 
-  testWidgets('筛选 chip：没选中描边方角，选中次色容器底、圆角 = 半高', (tester) async {
+  testWidgets('筛选 chip：选没选中都是胶囊（圆角 = 半高）；没选中透明底描边，选中次色容器底', (tester) async {
     var on = false;
     await tester.pumpWidget(
       _app(
@@ -86,7 +79,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     var d = _decorationAbove(tester, find.text('代理'));
-    expect(d.borderRadius, BorderRadius.circular(MeowShape.m));
+    expect(d.borderRadius, BorderRadius.circular(18));
     expect(d.color, Colors.transparent);
     await tester.tap(find.text('代理'));
     await tester.pumpAndSettle();

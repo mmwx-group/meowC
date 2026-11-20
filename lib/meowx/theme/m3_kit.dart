@@ -166,69 +166,6 @@ class M3SectionLabel extends StatelessWidget {
   );
 }
 
-/// 连接式按钮组（出站模式、连接 / 日志）：按钮之间隔 4，首尾外侧大圆角、内侧小圆角；选中的那个变成整颗胶囊、主色实心，
-/// 圆角变化走弹簧回弹。[onSurfaceColor] = 没选中的按钮底（放在主卡上时用半透明白，缺省 surfaceContainerHighest）。
-class M3ButtonGroup<T> extends StatelessWidget {
-  const M3ButtonGroup({
-    super.key,
-    required this.items,
-    required this.selected,
-    required this.onChanged,
-    this.height = 48,
-    this.unselectedColor,
-    this.dimmed = const {},
-  });
-
-  final List<(T value, String label)> items;
-  final T? selected;
-  final ValueChanged<T>? onChanged;
-  final double height;
-  final Color? unselectedColor;
-
-  /// 画成次级字的项（如当前不可用的模式），仍然可点
-  final Set<T> dimmed;
-
-  static const gap = 4.0;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = context.cs;
-    final outer = height / 2;
-    const inner = MeowShape.s;
-    return Semantics(
-      container: true,
-      child: Row(
-        children: [
-          for (final (i, (value, label)) in items.indexed) ...[
-            if (i > 0) const SizedBox(width: gap),
-            Expanded(
-              child: _GroupButton(
-                label: label,
-                selected: value == selected,
-                height: height,
-                radius: value == selected
-                    ? BorderRadius.circular(outer)
-                    : BorderRadius.horizontal(
-                        left: Radius.circular(i == 0 ? outer : inner),
-                        right: Radius.circular(i == items.length - 1 ? outer : inner),
-                      ),
-                bg: value == selected ? cs.primary : (unselectedColor ?? cs.surfaceContainerHighest),
-                fg: value == selected ? cs.onPrimary : (dimmed.contains(value) ? cs.onSurfaceVariant : cs.onSurface),
-                onTap: onChanged == null || value == selected
-                    ? null
-                    : () {
-                        MeowHaptics.select();
-                        onChanged!(value);
-                      },
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// 滑块分段（同 iOS 的 MeowSegment，2026-11-18 用户要求首页模式与动态页分段换成它）：
 /// 一条比卡片深一档的轨道（圆角 14、内边距 3）+ 一块选中滑块（圆角 11），换段时只有滑块弹簧平移过去（弹跳弹簧，同 iOS 的 MeowMotion.slide）。
 /// 选中块用反色：浅色下深底浅字、深色下浅底深字（iOS 经典主题的 MM.strong / 深色的近白）。
@@ -266,8 +203,15 @@ class MeowSlideSegment<T> extends StatefulWidget {
 class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTickerProviderStateMixin {
   int get _index => widget.items.indexWhere((e) => e.$1 == widget.selected);
 
-  /// 滑块位置（按段的序号，弹簧会稍微越过终点；画的时候夹在两端之间）
-  late final _pos = AnimationController.unbounded(vsync: this, value: math.max(0, _index).toDouble());
+  /// 滑块位置（按段的序号，弹簧会稍微越过终点；画的时候夹在两端之间）。在 initState 里建：选中值不在这一排时 build 不碰它，
+  /// 懒建的话会拖到 dispose 才建（那时已经不能再取 TickerMode，测速源分两排时第二排一拆就报错）
+  late final AnimationController _pos;
+
+  @override
+  void initState() {
+    super.initState();
+    _pos = AnimationController.unbounded(vsync: this, value: math.max(0, _index).toDouble());
+  }
 
   @override
   void didUpdateWidget(MeowSlideSegment<T> old) {
@@ -374,65 +318,6 @@ class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTi
   }
 }
 
-class _GroupButton extends StatelessWidget {
-  const _GroupButton({
-    required this.label,
-    required this.selected,
-    required this.height,
-    required this.radius,
-    required this.bg,
-    required this.fg,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final double height;
-  final BorderRadius radius;
-  final Color bg, fg;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      // 形状与水波同一个裁切：水波 / 按下高亮裁在正在变形的形状里（以前 InkWell 按目标圆角画、不随形状裁，
-      // 选中那一下按钮背后露出一块方角的灰底）。底色单独渐变，不让 AnimatedContainer 再对圆角插值一遍（会拖慢半拍）。
-      child: TweenAnimationBuilder<BorderRadius?>(
-        tween: BorderRadiusTween(end: radius),
-        duration: MeowSprings.shapeDuration,
-        curve: MeowSprings.shapeCurve,
-        builder: (_, r, child) => ClipRRect(borderRadius: _nonNegative(r!), child: child),
-        child: AnimatedContainer(
-          duration: MeowSprings.effectsDuration,
-          curve: MeowSprings.effectsCurve,
-          height: height,
-          color: bg,
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              onTap: onTap,
-              child: Center(
-                child: AnimatedDefaultTextStyle(
-                  duration: MeowSprings.effectsDuration,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                    color: fg,
-                    fontFamilyFallback: linuxTextFallback,
-                  ),
-                  child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// 回弹插值会让圆角短暂小于 0：夹住
 BorderRadius _nonNegative(BorderRadius r) {
   Radius c(Radius x) => Radius.elliptical(math.max(0, x.x), math.max(0, x.y));
@@ -444,7 +329,7 @@ BorderRadius _nonNegative(BorderRadius r) {
   );
 }
 
-/// 筛选 chip：没选中是描边方角（12），选中变成次色容器底、圆角变大（形状随弹簧变）。[icon] 只在选中时画（勾）。
+/// 筛选 chip：一律胶囊（同 iOS；2026-11-20 以前没选中是描边方角 12、选中才变胶囊）。没选中描边、选中次色容器底。[showCheck] 时选中前面画勾。
 class M3FilterChip extends StatelessWidget {
   const M3FilterChip({
     super.key,
@@ -466,29 +351,22 @@ class M3FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    final r = selected ? height / 2 : MeowShape.m;
+    final radius = BorderRadius.circular(height / 2);
     return Semantics(
       button: true,
       selected: selected,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: r),
-        duration: MeowSprings.shapeDuration,
-        curve: MeowSprings.shapeCurve,
-        // 水波裁在正在变形的形状里（同 [M3ButtonGroup]）
-        builder: (_, radius, child) => ClipRRect(
-          borderRadius: BorderRadius.circular(math.max(0, radius)),
-          child: AnimatedContainer(
-            duration: MeowSprings.effectsDuration,
-            height: height,
-            decoration: BoxDecoration(
-              color: selected ? cs.secondaryContainer : Colors.transparent,
-              borderRadius: BorderRadius.circular(math.max(0, radius)),
-              border: Border.all(color: selected ? Colors.transparent : cs.outlineVariant),
-            ),
-            child: child,
+      // 水波裁在胶囊里
+      child: ClipRRect(
+        borderRadius: radius,
+        child: AnimatedContainer(
+          duration: MeowSprings.effectsDuration,
+          height: height,
+          decoration: BoxDecoration(
+            color: selected ? cs.secondaryContainer : Colors.transparent,
+            borderRadius: radius,
+            border: Border.all(color: selected ? Colors.transparent : cs.outlineVariant),
           ),
-        ),
-        child: Material(
+          child: Material(
           type: MaterialType.transparency,
           child: InkWell(
             onTap: onTap == null
@@ -519,6 +397,7 @@ class M3FilterChip extends StatelessWidget {
               ),
             ),
           ),
+        ),
         ),
       ),
     );

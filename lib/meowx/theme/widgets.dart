@@ -102,9 +102,9 @@ class _GlyphPainter extends CustomPainter {
   bool shouldRepaint(_GlyphPainter old) => old.path != path || old.color != color || old.stroke != stroke;
 }
 
-/// 分段选择（M3 改版后就是 [M3ButtonGroup]：连接式按钮组，选中的变主色胶囊）。旧调用点的参数照收：
-/// [onCard] = 放在卡片上（没选中的用 surfaceContainerHighest，否则 surfaceContainerHigh）、[track] 换没选中的底色，
-/// [fontSize] / [glass] 不再起作用。
+/// 分段选择：就是 [MeowSlideSegment]（同 iOS 的 MeowSegment：轨道圆角 14 + 滑块圆角 11）。2026-11-20 起全 App 的分段
+/// 统一成这一种（用户：按钮圆角不统一；以前这里是 M3 的连接式按钮组，首尾大圆角、中间小圆角、选中变胶囊）。
+/// 旧调用点的参数照收：[track] 换轨道色；[onCard] / [glass] 不再起作用（轨道缺省比所在的卡片深一档，玻璃气泡里自动变半透明）。
 class MeowSegment<T> extends StatelessWidget {
   const MeowSegment({
     super.key,
@@ -132,13 +132,14 @@ class MeowSegment<T> extends StatelessWidget {
   final Set<T> dimmed;
 
   @override
-  Widget build(BuildContext context) => M3ButtonGroup<T>(
+  Widget build(BuildContext context) => MeowSlideSegment<T>(
     items: items,
     selected: value,
     onChanged: onChanged,
     height: height,
+    track: track,
+    fontSize: fontSize,
     dimmed: dimmed,
-    unselectedColor: track ?? (onCard ? context.cs.surfaceContainerHighest : context.cs.surfaceContainerHigh),
   );
 }
 

@@ -316,9 +316,9 @@ class _TakeoverToggles extends ConsumerWidget {
           excludeSemantics: true,
           child: Material(
             color: mm.buttonFill(value ? MeowButtonFill.selected : MeowButtonFill.plain),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: mm.buttonSide),
+            shape: StadiumBorder(side: mm.buttonSide),
             child: InkWell(
-              borderRadius: BorderRadius.circular(10),
+              customBorder: const StadiumBorder(),
               onTap: onTap,
               child: Container(
                 constraints: const BoxConstraints(minHeight: 32),

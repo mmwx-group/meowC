@@ -156,7 +156,7 @@ class _ConnRuleCardState extends ConsumerState<ConnRuleCard> {
   }
 }
 
-/// 动作按钮：没选 = surfaceContainerHigh 底、动作色的字、圆角 12；选中 = 主色实心的整颗胶囊（形状随弹簧变）。
+/// 动作按钮：一律胶囊（同 iOS；2026-11-20 以前没选是圆角 12、选中才变胶囊）。没选 = surfaceContainerHigh 底、动作色的字；选中 = 主色实心。
 class _ActionButton extends StatelessWidget {
   const _ActionButton({required this.label, required this.color, required this.selected, required this.onTap});
   final String label;
@@ -170,16 +170,10 @@ class _ActionButton extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: TweenAnimationBuilder<double>(
-        tween: Tween(end: selected ? 24 : MeowShape.m),
-        duration: MeowSprings.shapeDuration,
-        curve: MeowSprings.shapeCurve,
-        builder: (_, r, child) => Material(
-          color: selected ? cs.primary : cs.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(r.clamp(0, 99)),
-          clipBehavior: Clip.antiAlias,
-          child: child,
-        ),
+      child: Material(
+        color: selected ? cs.primary : cs.surfaceContainerHigh,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
           child: Container(

@@ -943,7 +943,7 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
         color: isSelected
             ? colorScheme.primaryContainer
             : colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12), // 胶囊（高 24），同全 App 的按钮
         border: Border.all(
           color: isSelected
               ? colorScheme.primary.withAlpha(120)
@@ -951,7 +951,7 @@ class FindPanel extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
         onTap: onPressed,
         child: Center(
           child: Text(
