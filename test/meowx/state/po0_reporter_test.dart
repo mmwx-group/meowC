@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:bett_box/meowx/panel/po0.dart';
@@ -22,11 +23,14 @@ class _Harness {
         sends++;
         sentUrls = urls;
         await sendGate?.future;
+        if (reply != null) return reply!(urls);
         return '[{"url":"${urls.first}","status":200,"body":"{\\"enabled\\":true,\\"whitelist\\":[{\\"ip\\":\\"1.2.3.4\\",\\"slot\\":1}],\\"limit\\":5,\\"currentIp\\":\\"1.2.3.4\\"}"}]';
       },
       connectivity: () => conn.stream,
       currentConnectivity: current == null ? null : () async => current,
       onDirectHosts: directHosts.add,
+      onResults: resultEvents.add,
+      onPanelServers: panelEvents.add,
       log: logs.add,
       interval: interval,
       connectivityDebounce: debounce,
@@ -43,6 +47,11 @@ class _Harness {
   int fetches = 0, sends = 0;
   bool failFetch = false;
   final directHosts = <List<String>>[];
+  final resultEvents = <Map<String, Po0Result>>[];
+  final panelEvents = <List<Po0Server>>[];
+
+  /// 非空时用它造核心的应答（缺省只回第一个地址的成功应答）
+  String Function(List<String> urls)? reply;
   List<String> sentUrls = const [];
   List<Po0Server>? servers = const [
     Po0Server(serverId: 2, name: 'AgentB-Exit', ip: '209.248.57.93', token: 't', url: 'https://209.248.57.93/api/firewall/t/add?slot=1', slot: 1),
@@ -280,5 +289,76 @@ void main() {
     expect(h.sends, 2);
     expect(h.sentUrls.last, 'https://1.2.3.4/api/firewall/pgnfw_abcd/add');
     h.dispose();
+  });
+
+  group('结果（Design/po0-ggy-results.md）', () {
+    test('每台按上报地址记一条结论：成功 / 槽位冲突 / 连不上；主控列表回调给界面', () async {
+      final h = _Harness(enabled: true);
+      h.custom = const [Po0CustomServer(address: '198.51.100.7', token: 'pgnfw_FAKEtoken00009999')];
+      const customUrl = 'https://198.51.100.7/api/firewall/pgnfw_FAKEtoken00009999/add';
+      const panelUrl = 'https://209.248.57.93/api/firewall/t/add?slot=1';
+      h.reply = (urls) => '[{"url":"$panelUrl","status":403,"body":"{\\"currentIp\\":\\"1.2.3.4\\"}"},'
+          '{"url":"$customUrl","error":"Post \\"$customUrl\\": dial tcp: i/o timeout"}]';
+      await h.reporter.refresh(force: true);
+      expect(h.panelEvents.last.map((s) => s.url), [panelUrl]);
+      final r = h.reporter.results;
+      expect(r.keys.toSet(), {panelUrl, customUrl});
+      expect(r[panelUrl]!.kind, Po0ResultKind.slotConflict);
+      expect(r[panelUrl]!.slot, 1);
+      expect(r[panelUrl]!.currentIp, '1.2.3.4');
+      expect(r[customUrl]!.kind, Po0ResultKind.failed);
+      expect(r[customUrl]!.summary, '失败：dial tcp: i/o timeout');
+      expect(h.resultEvents.last, r);
+      // 日志里也写槽位冲突
+      expect(h.logs.any((l) => l.contains('槽位冲突')), isTrue);
+      h.dispose();
+    });
+
+    test('核心漏回的、核心调用异常：记成失败', () async {
+      final h = _Harness(enabled: true);
+      h.custom = const [Po0CustomServer(address: '198.51.100.7', token: 'pgnfw_FAKEtoken00009999')];
+      await h.reporter.refresh(force: true);
+      const customUrl = 'https://198.51.100.7/api/firewall/pgnfw_FAKEtoken00009999/add';
+      expect(h.reporter.results[customUrl]!.summary, '失败：核心无响应');
+      expect(h.reporter.results.values.first.kind, Po0ResultKind.success);
+      h.dispose();
+    });
+
+    test('删掉的服务器结论跟着丢；关掉开关清空结论与主控列表', () async {
+      final h = _Harness(enabled: true);
+      h.custom = const [Po0CustomServer(address: '198.51.100.7', token: 'pgnfw_FAKEtoken00009999')];
+      h.reply = (urls) => json.encode([
+        for (final u in urls) {'url': u, 'status': 200, 'body': '{"enabled":true,"whitelist":["1.2.3.4"],"limit":5,"currentIp":"1.2.3.4"}'},
+      ]);
+      await h.reporter.refresh(force: true);
+      expect(h.reporter.results.length, 2);
+      h.custom = const [];
+      await h.reporter.refresh(force: true);
+      expect(h.reporter.results.keys, ['https://209.248.57.93/api/firewall/t/add?slot=1']);
+      h.enabled = false;
+      h.reporter.stop();
+      expect(h.reporter.results, isEmpty);
+      expect(h.resultEvents.last, isEmpty);
+      expect(h.panelEvents.last, isEmpty);
+      h.dispose();
+    });
+
+    test('上报在飞时删掉服务器：回来的结论不记它', () async {
+      final h = _Harness(enabled: true);
+      h.custom = const [Po0CustomServer(address: '198.51.100.7', token: 'pgnfw_FAKEtoken00009999')];
+      h.reply = (urls) => json.encode([
+        for (final u in urls) {'url': u, 'status': 200, 'body': '{"enabled":true,"whitelist":[],"limit":5,"currentIp":"1.2.3.4"}'},
+      ]);
+      h.sendGate = Completer<void>();
+      final first = h.reporter.refresh(force: true);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      // 在飞期间关掉开关：stop 清空列表
+      h.enabled = false;
+      h.reporter.stop();
+      h.sendGate!.complete();
+      await first;
+      expect(h.reporter.results, isEmpty);
+      h.dispose();
+    });
   });
 }

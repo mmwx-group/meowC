@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../panel/ggy.dart';
 import 'meow_settings.dart';
+import 'whitelist_demo.dart';
 
 /// GGY（咕咕云）客户端 IP 加白：用本机出口 IP 打开用户填的每个 token 的白名单分享链接。
 ///
@@ -177,7 +178,8 @@ final ggyResultsProvider = StateProvider<Map<String, GgyResult>>((ref) => const 
 
 final ggyReporterProvider = Provider<GgyReporter>((ref) {
   final reporter = GgyReporter(
-    isEnabled: () => ref.read(meowSettingProvider).ggyEnabled,
+    // 截图示例（debug）里不发请求
+    isEnabled: () => !whitelistDemo && ref.read(meowSettingProvider).ggyEnabled,
     tokens: () => ref.read(meowSettingProvider).ggyTokens,
     send: (urls) => clashCore.clashInterface.invoke<String>(
       method: ActionMethod.meowPo0Report,

@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../panel/ggy.dart';
+import '../../panel/whitelist_common.dart';
 import '../../state/ggy_reporter.dart';
 import '../../state/meow_settings.dart';
 import '../../theme/page_title.dart';
+import '../../theme/tokens.dart';
 import '../me/me_kit.dart';
+import 'whitelist_widgets.dart';
 
-/// GGY 加白的 token 列表：本机偏好、退出登录不清。列表里 token 只显示脱敏写法与上一次结果，
-/// 完整 token 只在添加时的输入框里出现（可以直接粘贴整条分享链接）。
+/// GGY 加白的 token 列表：本机偏好、退出登录不清。列表里 token 只显示脱敏写法（有备注时标题是备注）与上一次结果，
+/// 完整 token 只在添加时的输入框里出现（可以直接粘贴整条分享链接）。点一行改备注（不触发上报）。
 /// 增删后由 MeowRoot 的 GGY 监听统一处理：开关开着时新增的立刻上报一次。
 class GgyTokensPage extends ConsumerWidget {
   const GgyTokensPage({super.key});
@@ -18,30 +21,80 @@ class GgyTokensPage extends ConsumerWidget {
     final tokens = ref.watch(meowSettingProvider.select((s) => s.ggyTokens));
     final enabled = ref.watch(meowSettingProvider.select((s) => s.ggyEnabled));
     final results = ref.watch(ggyResultsProvider);
-    // 关着时没有结论（关掉即清），每行都是「还没报过」
+    // 关着时没有结论（关掉即清），每行都是「还没上报」
     final invalid = tokens.any((t) => results[t]?.kind == GgyResultKind.tokenInvalid);
+    final notes = ref.watch(meowSettingProvider.select((s) => s.ggyTokenNotes));
+    final mm = context.mm;
     return MeSubPage.list(
       title: 'GGY token',
       actions: [
         RoundGlassButton(icon: Icons.add_rounded, filled: true, tooltip: '添加', onTap: () => _add(context, ref)),
       ],
       children: [
-        MeItemsCard(
-          items: [for (final t in tokens) maskGgyToken(t)],
-          subtitles: [for (final t in tokens) results[t]?.summary ?? '还没报过'],
-          empty: '添加 GGY 白名单分享链接里的 token，本机出口 IP 会上报给它加白。点右上角「+」添加',
-          onDelete: (i) => ref
-              .read(meowSettingProvider.notifier)
-              .updateState((s) => s.copyWith(ggyTokens: [...s.ggyTokens]..removeAt(i))),
+        WhitelistClock(
+          builder: (context) => MeSection(
+            children: [
+              if (tokens.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                  child: Text(
+                    '添加 GGY 白名单分享链接里的 token，本机出口 IP 会上报给它加白。点右上角「+」添加',
+                    style: TextStyle(fontSize: MeowFont.subheadline, color: mm.t2),
+                  ),
+                ),
+              for (final t in tokens) _row(context, ref, t, notes[t] ?? '', results[t]),
+            ],
+          ),
         ),
         if (invalid) const MeCaption('标着「token 无效或已失效」的分享链接已失效：到 GGY 重新生成分享链接，删掉旧的再添加新的 token。'),
-        MeCaption(enabled ? '每 10 分钟及网络变化时上报本机出口 IP，上报走直连；没登录也会上报。' : '「GGY 加白」开关未打开，打开后才会上报这里的 token。'),
+        MeCaption(enabled ? '每 10 分钟及网络变化时上报本机出口 IP，上报走直连；没登录也会上报。点一行可以改备注。' : '「GGY 加白」开关未打开，打开后才会上报这里的 token。'),
       ],
     );
   }
 
+  Widget _row(BuildContext context, WidgetRef ref, String token, String note, GgyResult? r) {
+    final (title, subtitle) = ggyTokenLabels(token, note);
+    return WhitelistItemRow(
+      title: title,
+      monoTitle: subtitle == null,
+      subtitle: subtitle,
+      result: ggyResultLine(r),
+      tone: switch (r?.kind) {
+        null => WhitelistTone.none,
+        GgyResultKind.ok => WhitelistTone.good,
+        _ => WhitelistTone.bad,
+      },
+      onTap: () => _editNote(context, ref, token, note),
+      actions: [
+        IconButton(
+          tooltip: '删除',
+          icon: Icon(Icons.close_rounded, size: 18, color: context.mm.t2),
+          // 备注跟着 token 一起删
+          onPressed: () => ref
+              .read(meowSettingProvider.notifier)
+              .updateState(
+                (s) => s.copyWith(
+                  ggyTokens: s.ggyTokens.where((x) => x != token).toList(),
+                  ggyTokenNotes: {...s.ggyTokenNotes}..remove(token),
+                ),
+              ),
+        ),
+      ],
+    );
+  }
+
+  /// 改备注：只改 [ggyTokenNotes]，token 列表不动（不触发上报）；空备注 = 删掉这一项。
+  Future<void> _editNote(BuildContext context, WidgetRef ref, String token, String current) async {
+    final note = await editWhitelistNote(context, subject: maskGgyToken(token), initial: current);
+    if (note == null) return;
+    ref
+        .read(meowSettingProvider.notifier)
+        .updateState((s) => s.copyWith(ggyTokenNotes: setGgyTokenNote(s.ggyTokenNotes, s.ggyTokens, token, note)));
+  }
+
   Future<void> _add(BuildContext context, WidgetRef ref) async {
     final token = TextEditingController();
+    final note = TextEditingController();
     String? err;
     await showDialog<void>(
       context: context,
@@ -50,21 +103,28 @@ class GgyTokensPage extends ConsumerWidget {
           // 横屏弹键盘时高度不够：整体可滚，别把输入框压到按钮上
           scrollable: true,
           title: const Text('添加 GGY token'),
-          content: TextField(
-            controller: token,
-            autofocus: true,
-            obscureText: true,
-            autocorrect: false,
-            enableSuggestions: false,
-            keyboardType: TextInputType.visiblePassword,
-            decoration: InputDecoration(
-              labelText: 'Token',
-              hintText: 'ctecsfw_…',
-              helperText: '分享链接里 token= 后面那段，也可以直接粘贴整条链接',
-              helperMaxLines: 2,
-              errorText: err,
-              errorMaxLines: 3,
-            ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: token,
+                autofocus: true,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                keyboardType: TextInputType.visiblePassword,
+                decoration: InputDecoration(
+                  labelText: 'Token',
+                  hintText: 'ctecsfw_…',
+                  helperText: '分享链接里 token= 后面那段，也可以直接粘贴整条链接',
+                  helperMaxLines: 2,
+                  errorText: err,
+                  errorMaxLines: 3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              whitelistNoteField(note),
+            ],
           ),
           actions: [
             TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('取消')),
@@ -75,7 +135,15 @@ class GgyTokensPage extends ConsumerWidget {
                   setState(() => err = e);
                   return;
                 }
-                ref.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(ggyTokens: [...s.ggyTokens, t!]));
+                final n = normalizeWhitelistNote(note.text);
+                ref
+                    .read(meowSettingProvider.notifier)
+                    .updateState(
+                      (s) => s.copyWith(
+                        ggyTokens: [...s.ggyTokens, t!],
+                        ggyTokenNotes: setGgyTokenNote(s.ggyTokenNotes, [...s.ggyTokens, t], t, n),
+                      ),
+                    );
                 Navigator.of(ctx).pop();
               },
               child: const Text('添加'),

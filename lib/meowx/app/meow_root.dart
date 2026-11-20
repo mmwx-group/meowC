@@ -25,6 +25,7 @@ import '../state/home_widget.dart';
 import '../state/mesh.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
+import '../state/whitelist_demo.dart';
 import '../state/realtime_sync.dart';
 import '../state/status.dart';
 import '../state/wifi_switch.dart';
@@ -63,6 +64,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   void initState() {
     super.initState();
     FrameLog.install();
+    // 加白结果的截图示例（只 debug + MEOWX_WHITELIST_DEMO）
+    if (whitelistDemo) WidgetsBinding.instance.addPostFrameCallback((_) => applyWhitelistDemo(ref));
     // 主控 RPC 的 User-Agent 带上版本，主控日志与安全事件里认得出是哪个版本的 MeowX
     try {
       PanelClient.userAgent = 'MeowX/${globalState.packageInfo.version} (${system.isAndroid ? 'Android' : 'Windows'})';

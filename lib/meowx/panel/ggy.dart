@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'whitelist_common.dart';
+
 // ---- GGY（咕咕云）客户端 IP 加白（五端同一套规则：iOS / macOS / meowC / OpenWrt） ----
 //
 // GGY 腾讯云 ECS 防火墙插件的白名单分享链接：谁打开就把谁的公网 IP 加进那台服务器的防火墙白名单。
@@ -165,15 +167,20 @@ class GgyResult {
     return redactGgy(line, [token]);
   }
 
-  /// 列表行里「上一次结果」的文字。
-  String get summary {
-    String two(int n) => n.toString().padLeft(2, '0');
-    return switch (kind) {
-      GgyResultKind.ok => '成功 · ${two(at.hour)}:${two(at.minute)}',
-      GgyResultKind.tokenInvalid => 'token 无效或已失效',
-      GgyResultKind.failed => '失败：$reason',
-    };
-  }
+  /// 列表行里「上一次结果」的文字（不含时间，时间见 `fmtReportTime`）：成功 =「已加白」，GGY 回了 msg 就接在后面；
+  /// msg / 原因里混进的 `token=…` 换成脱敏写法（原样出现的 token 在 [parseGgyReport] 里已换掉）。
+  String get summary => redactGgy(switch (kind) {
+    GgyResultKind.ok => reason.isEmpty ? '已加白' : '已加白 · $reason',
+    GgyResultKind.tokenInvalid => 'token 无效或已失效',
+    GgyResultKind.failed => '失败：$reason',
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is GgyResult && other.kind == kind && other.reason == reason && other.note == note && other.at == at;
+
+  @override
+  int get hashCode => Object.hash(kind, reason, note, at);
 }
 
 /// 一次上报的核心结果（与 po0 同一个 `meowPo0Report` 通道，见 core/meow_ggy.go）：`[{url, status, body, error}]`。
@@ -193,11 +200,18 @@ Map<String, GgyResult> parseGgyReport(String raw, List<String> tokens, {DateTime
     final token = byUrl[r['url']?.toString() ?? ''];
     if (token == null) continue;
     final status = r['status'];
-    out[token] = GgyResult.judge(
+    final judged = GgyResult.judge(
       status: status is num ? status.toInt() : int.tryParse('$status') ?? 0,
       body: r['body']?.toString() ?? '',
       error: redactGgy((r['error']?.toString() ?? '').replaceFirst(_urlErrorPrefix, ''), tokens),
       at: at,
+    );
+    // GGY 的 msg 会显示在列表里：里面要是带着 token（原样或 token=…）先换成脱敏写法
+    out[token] = GgyResult(
+      kind: judged.kind,
+      reason: redactGgy(judged.reason, tokens),
+      note: judged.note,
+      at: judged.at,
     );
   }
   return out;
@@ -205,3 +219,23 @@ Map<String, GgyResult> parseGgyReport(String raw, List<String> tokens, {DateTime
 
 /// Go 的 url.Error 写成 `Get "<整个上报地址>": <原因>`：地址对用户没用，只留原因
 final _urlErrorPrefix = RegExp(r'^[A-Za-z]+ "[^"]*": ');
+
+/// 列表行里结果那一行：`<结果> · <上次上报时间>`；还没报过 =「还没上报」。
+String ggyResultLine(GgyResult? r, [DateTime? now]) =>
+    r == null ? whitelistNeverReported : '${r.summary} · ${fmtReportTime(r.at, now)}';
+
+/// 一个 token 在列表里的标题与副标题（规格 §4）：有备注时标题 = 备注、副标题 = 脱敏写法；没备注时标题 = 脱敏写法、没有副标题。
+(String title, String? subtitle) ggyTokenLabels(String token, String note) {
+  final n = note.trim();
+  return n.isEmpty ? (maskGgyToken(token), null) : (n, maskGgyToken(token));
+}
+
+/// 设一个 token 的备注（规范化；空串 = 删掉这一项），顺手丢掉已经不在 [tokens] 里的旧备注。
+Map<String, String> setGgyTokenNote(Map<String, String> notes, List<String> tokens, String token, String note) {
+  final n = normalizeWhitelistNote(note);
+  return {
+    for (final e in notes.entries)
+      if (e.key != token && tokens.contains(e.key)) e.key: e.value,
+    if (n.isNotEmpty && tokens.contains(token)) token: n,
+  };
+}

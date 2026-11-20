@@ -296,31 +296,271 @@ class Po0ReportResult {
   Po0Whitelist? get whitelist => Po0Whitelist.parse(body);
 }
 
-class Po0Whitelist {
-  const Po0Whitelist({required this.enabled, required this.count, required this.limit, required this.currentIp});
+/// po0 白名单里的一项：`ip` 可能是精确 IP，也可能是 `x.x.x.0/24`（服务端按 C 段加白）；[slot] 有值 = 钉在这个槽位、
+/// 不会被挤掉，null = 普通条目（名单满了按写入时间先进先出挤掉最旧的）。
+class Po0WhitelistEntry {
+  const Po0WhitelistEntry({required this.ip, this.slot});
 
+  final String ip;
+  final int? slot;
+
+  @override
+  bool operator ==(Object other) => other is Po0WhitelistEntry && other.ip == ip && other.slot == slot;
+
+  @override
+  int get hashCode => Object.hash(ip, slot);
+}
+
+/// po0 成功应答（照 po0 官方脚本 reallinzc/po0fw 的读法）：`{enabled, whitelist, limit, currentIp}`。
+/// `whitelist` 每项是 `{ip, slot}`，旧版服务端是纯 IP 字符串（= 没有槽位），两种都认。
+/// 老版 po0 可能只回个确认、缺字段（规格 §1.1「缺字段时信 200」）：`enabled` 缺省按开启，其余缺了就是 null。
+class Po0Whitelist {
+  const Po0Whitelist({required this.enabled, this.entries, this.limit, this.currentIp});
+
+  /// 只有应答里明写 `enabled: false` 才是 false
   final bool enabled;
 
-  /// 白名单里现有条目数
-  final int count;
-  final int limit;
-  final String currentIp;
+  /// 整份名单，按应答顺序；应答里没有 `whitelist` 数组时为 null
+  final List<Po0WhitelistEntry>? entries;
+  final int? limit;
 
+  /// po0 看到的本机出口（可能是 `x.x.x.0/24`）；没有 / 空串时为 null
+  final String? currentIp;
+
+  /// 白名单里现有条目数（没有名单算 0）
+  int get count => entries?.length ?? 0;
+
+  /// 解析不出（空正文 / 不是 JSON 对象）→ null。
   static Po0Whitelist? parse(String body) {
-    if (body.isEmpty) return null;
-    final dynamic decoded;
-    try {
-      decoded = json.decode(body);
-    } catch (_) {
-      return null;
-    }
-    if (decoded is! Map) return null;
+    final decoded = _jsonObject(body);
+    if (decoded == null) return null;
     final list = decoded['whitelist'];
+    final ip = decoded['currentIp']?.toString().trim() ?? '';
     return Po0Whitelist(
-      enabled: decoded['enabled'] == true,
-      count: list is List ? list.length : 0,
-      limit: Po0Server._int(decoded['limit']) ?? 0,
-      currentIp: decoded['currentIp']?.toString() ?? '',
+      enabled: decoded['enabled'] != false,
+      entries: list is! List
+          ? null
+          : [
+              for (final e in list)
+                if (e is String)
+                  Po0WhitelistEntry(ip: e.trim())
+                else if (e is Map)
+                  Po0WhitelistEntry(ip: e['ip']?.toString().trim() ?? '', slot: Po0Server._int(e['slot'])),
+            ],
+      limit: Po0Server._int(decoded['limit']),
+      currentIp: ip.isEmpty ? null : ip,
     );
   }
+}
+
+Map<dynamic, dynamic>? _jsonObject(String body) {
+  if (body.trim().isEmpty) return null;
+  try {
+    final decoded = json.decode(body);
+    return decoded is Map ? decoded : null;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// 同段判断（同 po0 官方脚本 `sameC24`）：两边字符串相等算同一个；任一边以 `/24` 结尾时，去掉 `/24` 后按 `.` 分成 4 段，
+/// 前三段相同算同一个；两边都是精确 IP 时必须全等。IPv6 只按全等。
+bool po0SameC24(String a, String b) {
+  final x = a.trim(), y = b.trim();
+  if (x.isEmpty || y.isEmpty) return false;
+  if (x == y) return true;
+  if (!x.endsWith('/24') && !y.endsWith('/24')) return false;
+  List<String>? parts(String s) {
+    final ip = s.endsWith('/24') ? s.substring(0, s.length - 3) : s;
+    final p = ip.split('.');
+    return p.length == 4 ? p : null;
+  }
+
+  final px = parts(x), py = parts(y);
+  if (px == null || py == null) return false;
+  return px[0] == py[0] && px[1] == py[1] && px[2] == py[2];
+}
+
+/// 上报地址里的槽位（`?slot=N`）；没有 / 写错 → null。
+int? po0SlotFromUrl(String url) => int.tryParse(Uri.tryParse(url)?.queryParameters['slot'] ?? '');
+
+enum Po0ResultKind {
+  /// 200、防火墙开着、名单里有本机
+  success,
+
+  /// 200、`enabled == false`
+  disabled,
+
+  /// 200、防火墙开着但名单里没有本机
+  notApplied,
+
+  /// 403 且上报地址带槽位：本机 IP 已占用这台 po0 的另一个槽位
+  slotConflict,
+
+  /// 403 且不带槽位：token 无效
+  invalidToken,
+
+  /// 其它状态码 / 连不上 / 应答无法解析
+  failed,
+}
+
+/// 槽位冲突的说明（列表行与气泡里同一句）
+const po0SlotConflictMessage = '槽位冲突：本机 IP 已在这台 po0 的其它槽位，先到 po0 面板删除旧槽位';
+
+/// 每台 po0 上一次上报的结论（五端同一份规格：MeowX 仓库 Design/po0-ggy-results.md §1.3）。
+/// 键是这台 po0 的上报地址（含 token，只当键用、不显示）；结论里的文字绝不带完整 token。
+class Po0Result {
+  const Po0Result({
+    required this.kind,
+    this.message = '',
+    required this.date,
+    this.enabled,
+    this.limit,
+    this.currentIp,
+    this.entries,
+    this.slot,
+  });
+
+  final Po0ResultKind kind;
+
+  /// 失败原因 / 冲突说明；成功时空（已脱敏）
+  final String message;
+  final DateTime date;
+
+  /// 200 时有
+  final bool? enabled;
+  final int? limit;
+
+  /// po0 看到的本机出口（可能是 /24）；403 正文是 JSON 且带 currentIp 时也记下
+  final String? currentIp;
+
+  /// 200 时的整份名单，按应答顺序；应答里没有名单（老版 po0）时为 null，气泡里不画名单
+  final List<Po0WhitelistEntry>? entries;
+
+  /// 这次上报用的槽位（上报地址里的 `?slot=N`）
+  final int? slot;
+
+  /// 有 200 的名单可画（气泡里画名单）
+  bool get hasWhitelist => kind == Po0ResultKind.success || kind == Po0ResultKind.disabled || kind == Po0ResultKind.notApplied;
+
+  /// 名单里哪一项是本机（与 [currentIp] 同段）；没有 → -1
+  int get selfIndex {
+    final ip = currentIp, list = entries;
+    if (ip == null || ip.isEmpty || list == null) return -1;
+    return list.indexWhere((e) => po0SameC24(e.ip, ip));
+  }
+
+  bool get ok => kind == Po0ResultKind.success;
+
+  /// 判断核心回来的一条结果。[raw] 是核心的原始结果（状态码 + 应答原文 / 错误），槽位从上报地址里取。
+  static Po0Result judge(Po0ReportResult raw, {DateTime? at}) {
+    final when = at ?? DateTime.now();
+    final slot = po0SlotFromUrl(raw.url);
+    if (raw.error.isNotEmpty) {
+      return Po0Result(kind: Po0ResultKind.failed, message: po0ErrorText(raw.error), date: when, slot: slot);
+    }
+    if (raw.status == 403) {
+      final ip = _jsonObject(raw.body)?['currentIp']?.toString().trim();
+      return Po0Result(
+        kind: slot == null ? Po0ResultKind.invalidToken : Po0ResultKind.slotConflict,
+        message: slot == null ? '' : po0SlotConflictMessage,
+        date: when,
+        currentIp: ip == null || ip.isEmpty ? null : ip,
+        slot: slot,
+      );
+    }
+    if (raw.status != 200) {
+      return Po0Result(kind: Po0ResultKind.failed, message: 'HTTP ${raw.status}', date: when, slot: slot);
+    }
+    final w = Po0Whitelist.parse(raw.body);
+    if (w == null) return Po0Result(kind: Po0ResultKind.failed, message: '应答无法解析', date: when, slot: slot);
+    // 名单与 currentIp 都有才比得了；缺一个（老版 po0 只回个确认）无从比对，信 200
+    final list = w.entries, ip = w.currentIp;
+    final missed = list != null && ip != null && !list.any((e) => po0SameC24(e.ip, ip));
+    return Po0Result(
+      kind: !w.enabled ? Po0ResultKind.disabled : (missed ? Po0ResultKind.notApplied : Po0ResultKind.success),
+      date: when,
+      enabled: w.enabled,
+      limit: w.limit,
+      currentIp: ip,
+      entries: list,
+      slot: slot,
+    );
+  }
+
+  /// 列表行文字（不含时间）。
+  String get summary => switch (kind) {
+    Po0ResultKind.success => '已加白$_countSuffix',
+    Po0ResultKind.disabled => 'po0 没有开启防火墙',
+    Po0ResultKind.notApplied => '加白未生效$_countSuffix',
+    Po0ResultKind.slotConflict => po0SlotConflictMessage,
+    Po0ResultKind.invalidToken => 'token 无效',
+    Po0ResultKind.failed => '失败：$message',
+  };
+
+  /// 名单条数与 limit 都知道时的「 · 条数/limit」，缺一个就不写
+  String get _countSuffix {
+    final list = entries, l = limit;
+    return list == null || l == null ? '' : ' · ${list.length}/$l';
+  }
+
+  /// 气泡里的概况：`防火墙已开启 · 名单 <条数>/<limit>`（条数或 limit 不知道时只写「防火墙已开启」）/ `防火墙未开启`。
+  String get overview {
+    if (enabled == false) return '防火墙未开启';
+    final suffix = _countSuffix;
+    return suffix.isEmpty ? '防火墙已开启' : '防火墙已开启 · 名单${suffix.substring(2)}';
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is Po0Result &&
+      other.kind == kind &&
+      other.message == message &&
+      other.date == date &&
+      other.enabled == enabled &&
+      other.limit == limit &&
+      other.currentIp == currentIp &&
+      other.slot == slot &&
+      _listEq(other.entries ?? const [], entries ?? const []) &&
+      (other.entries == null) == (entries == null);
+
+  @override
+  int get hashCode => Object.hash(kind, message, date, enabled, limit, currentIp, slot, Object.hashAll(entries ?? const []));
+}
+
+bool _listEq<T>(List<T> a, List<T> b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
+/// Go 的 url.Error 写成 `Post "<整个上报地址>": <原因>`：地址对用户没用，只留原因
+final _urlErrorPrefix = RegExp(r'^[A-Za-z]+ "[^"]*": ');
+
+/// 核心回的错误 → 界面里的失败原因：去掉 url.Error 带的整个地址，剩下的 token 换成脱敏写法。
+String po0ErrorText(String error) => redactPo0(error.trim().replaceFirst(_urlErrorPrefix, ''));
+
+/// 列表里一台 po0 的脱敏写法：`地址 · pgnfw_••••<后4位>[@N]`（地址、token 与槽位都从上报地址里取）。
+/// 取不出地址的退回只给脱敏 token。
+String po0UrlLabel(String url) {
+  final uri = Uri.tryParse(url);
+  if (uri == null) return redactPo0(url);
+  final seg = uri.pathSegments;
+  final i = seg.indexOf('firewall');
+  final token = i >= 0 && i + 1 < seg.length ? seg[i + 1] : '';
+  final slot = uri.queryParameters['slot'];
+  final masked = maskPo0Token(slot == null || slot.isEmpty ? token : '$token@$slot');
+  final host = uri.host.contains(':') ? '[${uri.host}]' : uri.host;
+  final address = uri.hasPort ? '$host:${uri.port}' : host;
+  return address.isEmpty ? masked : '$address · $masked';
+}
+
+/// 自定义条目在列表 / 气泡里的名字与副标题（规格 §4）：有备注时标题 = 备注、副标题 = `地址 · 脱敏 token`；
+/// 没备注时照旧（标题 = 地址、副标题 = 脱敏 token）。
+(String title, String subtitle) po0CustomLabels(Po0CustomServer c) {
+  final masked = maskPo0Token(c.token);
+  final note = c.note.trim();
+  return note.isEmpty ? (c.address, masked) : (note, '${c.address} · $masked');
 }
