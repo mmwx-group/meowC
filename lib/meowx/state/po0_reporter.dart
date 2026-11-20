@@ -15,6 +15,7 @@ import '../panel/account.dart';
 import '../panel/po0.dart';
 import 'meow_settings.dart';
 import 'status.dart';
+import 'whitelist_demo.dart';
 
 /// po0 客户端 IP 加白：把本机出口 IP 上报到用户在主控里登记的 po0 服务器，以及用户在客户端里自己添加的。
 ///
@@ -34,6 +35,8 @@ class Po0Reporter {
     required this.connectivity,
     this.currentConnectivity,
     this.onDirectHosts,
+    this.onResults,
+    this.onPanelServers,
     required this.log,
     this.interval = const Duration(minutes: 10),
     this.connectivityDebounce = const Duration(seconds: 3),
@@ -61,6 +64,12 @@ class Po0Reporter {
   /// po0 服务器主机集合变了（拿到新列表 / 自定义条目增删 / 列表变空 / 停止时清空）：调用方据此更新直连规则并热重载配置
   final void Function(List<String> hosts)? onDirectHosts;
 
+  /// 每台 po0 上一次的结论变了（键 = 上报地址；名单里没有了的、关掉开关后都不在里面）
+  final void Function(Map<String, Po0Result> results)? onResults;
+
+  /// 主控下发的那部分列表变了（界面据此列出主控登记的服务器与它们的结论；停止时清空）
+  final void Function(List<Po0Server> servers)? onPanelServers;
+
   /// 定时兜底间隔
   final Duration interval;
 
@@ -75,6 +84,7 @@ class Po0Reporter {
 
   /// 最近一次拉到的主控列表：拉取失败时沿用它（自己添加的每次现取，不受影响）
   List<Po0Server> _panelServers = const [];
+  Map<String, Po0Result> _results = const {};
   Timer? _timer;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
   Timer? _connDebounce;
@@ -86,6 +96,9 @@ class Po0Reporter {
   bool _reportAgain = false;
 
   List<Po0Server> get servers => _servers;
+
+  /// 每台 po0 上一次的结论，键 = 上报地址
+  Map<String, Po0Result> get results => _results;
 
   /// 定时器与网络监听是否在跑
   bool get isWatching => _timer != null;
@@ -132,10 +145,12 @@ class Po0Reporter {
       stop();
       return;
     }
-    _panelServers = panel ?? const [];
+    _setPanelServers(panel ?? const []);
     _servers = merged;
     _refreshedAt = DateTime.now();
     _setDirectHosts(po0DirectHosts(merged));
+    // 删掉的服务器的结论一并丢掉
+    _record(const {});
     if (_servers.isEmpty) return;
     _ensureWatchers();
     await report();
@@ -166,17 +181,58 @@ class Po0Reporter {
       raw = await send([for (final s in servers) s.url]);
     } catch (e) {
       log('po0 上报失败：核心调用异常 ${redactPo0('$e')}');
+      _recordFailure(servers, '核心调用异常');
       return;
     }
     final results = Po0ReportResult.parseList(raw);
     if (results.isEmpty) {
       log('po0 上报失败：核心无响应');
+      _recordFailure(servers, '核心无响应');
       return;
     }
+    final now = DateTime.now();
+    final fresh = <String, Po0Result>{};
     for (final r in results) {
       final name = servers.firstWhereOrNull((s) => s.url == r.url)?.name ?? r.url;
       log(describeResult(name, r));
+      fresh[r.url] = Po0Result.judge(r, at: now);
     }
+    // 核心漏回的（不该发生）记成失败，免得界面停在上一次的结论
+    for (final s in servers) {
+      fresh.putIfAbsent(
+        s.url,
+        () => Po0Result(kind: Po0ResultKind.failed, message: '核心无响应', date: now, slot: po0SlotFromUrl(s.url)),
+      );
+    }
+    _record(fresh);
+  }
+
+  void _recordFailure(List<Po0Server> servers, String reason) {
+    final now = DateTime.now();
+    _record({
+      for (final s in servers)
+        s.url: Po0Result(kind: Po0ResultKind.failed, message: reason, date: now, slot: po0SlotFromUrl(s.url)),
+    });
+  }
+
+  /// 并入新结论，只留还在列表里的上报地址（上报期间可能删了服务器 / 关了开关），变了才回调。
+  void _record(Map<String, Po0Result> fresh) {
+    final keep = {for (final s in _servers) s.url};
+    final next = {
+      for (final e in {..._results, ...fresh}.entries)
+        if (keep.contains(e.key)) e.key: e.value,
+    };
+    if (mapEquals(next, _results)) return;
+    _results = next;
+    onResults?.call(next);
+  }
+
+  void _setPanelServers(List<Po0Server> panel) {
+    final same =
+        panel.length == _panelServers.length &&
+        panel.indexed.every((e) => e.$2.url == _panelServers[e.$1].url && e.$2.name == _panelServers[e.$1].name);
+    _panelServers = panel;
+    if (!same) onPanelServers?.call(panel);
   }
 
   /// 一条上报结果的日志文案。token 一律脱敏：[name] 找不到时是上报地址本身，核心回的错误（Go 的 url.Error）也带着整个地址。
@@ -184,11 +240,13 @@ class Po0Reporter {
 
   static String _describe(String name, Po0ReportResult r) {
     if (r.error.isNotEmpty) return 'po0 加白 $name 失败：${r.error}';
-    if (r.tokenInvalid) return 'po0 加白 $name 失败：po0 token 无效';
+    if (r.tokenInvalid) {
+      return po0SlotFromUrl(r.url) == null ? 'po0 加白 $name 失败：po0 token 无效' : 'po0 加白 $name 失败：$po0SlotConflictMessage';
+    }
     if (!r.ok) return 'po0 加白 $name 失败：HTTP ${r.status}';
     final w = r.whitelist;
     if (w == null) return 'po0 加白 $name 失败：响应无法解析';
-    return 'po0 加白 $name：白名单 ${w.count}/${w.limit}，当前 IP ${w.currentIp}${w.enabled ? '' : '（白名单未启用）'}';
+    return 'po0 加白 $name：白名单 ${w.count}/${w.limit ?? '?'}，当前 IP ${w.currentIp ?? '?'}${w.enabled ? '' : '（白名单未启用）'}';
   }
 
   void _ensureWatchers() {
@@ -228,10 +286,14 @@ class Po0Reporter {
     _connSub = null;
     _lastConn = null;
     _servers = const [];
-    _panelServers = const [];
     _refreshedAt = null;
     _refreshAgain = false;
+    final hadPanel = _panelServers.isNotEmpty, hadResults = _results.isNotEmpty;
+    _panelServers = const [];
+    _results = const {};
     if (notify) {
+      if (hadPanel) onPanelServers?.call(const []);
+      if (hadResults) onResults?.call(const {});
       // 首次 stop 时 _directHosts 可能还是初始空表，但设置里可能留着上次的主机：总是回调一次，由调用方比对
       _directHosts = const [];
       onDirectHosts?.call(const []);
@@ -242,7 +304,8 @@ class Po0Reporter {
 final po0ReporterProvider = Provider<Po0Reporter>((ref) {
   final debug = debugPo0Urls;
   final reporter = Po0Reporter(
-    isEnabled: () => debug.isNotEmpty || ref.read(meowSettingProvider).po0Enabled,
+    // 截图示例（debug）里不发请求
+    isEnabled: () => !whitelistDemo && (debug.isNotEmpty || ref.read(meowSettingProvider).po0Enabled),
     fetchServers: () async {
       if (debug.isNotEmpty) {
         return [
@@ -272,8 +335,16 @@ final po0ReporterProvider = Provider<Po0Reporter>((ref) {
       // 与「绕过代理」等覆写同一方式热生效：规则在 patchRawConfig 里拼，连着就重新应用配置
       if (ref.read(isRunningProvider)) globalState.appController.applyProfileDebounce(silence: true);
     },
+    onResults: (r) => ref.read(po0ResultsProvider.notifier).state = r,
+    onPanelServers: (s) => ref.read(po0PanelServersProvider.notifier).state = s,
     log: commonPrint.log,
   );
   ref.onDispose(() => reporter.stop(notify: false));
   return reporter;
 });
+
+/// 每台 po0 上一次的结论（只在内存里；po0 服务器页每行的结果与槽位气泡）。键 = 上报地址。
+final po0ResultsProvider = StateProvider<Map<String, Po0Result>>((ref) => const {});
+
+/// 主控下发的 po0 服务器（只在内存里，开关开着、拉到列表后才有；po0 服务器页列出它们的名字与结论）。
+final po0PanelServersProvider = StateProvider<List<Po0Server>>((ref) => const []);

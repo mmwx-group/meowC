@@ -271,11 +271,13 @@ abstract class MeowAccount with _$MeowAccount {
 /// 用户在客户端里自己添加的 po0 服务器（本机偏好，退出登录不清）。
 /// [address] 是规范化后的 `host[:port]`（见 `normalizePo0Address`），[token] 是 trim 后的原文（可带 `@槽位`）。
 /// token 在界面 / 日志里一律用 `maskPo0Token` 的脱敏写法。
+/// [note] 是用户写的备注（去掉首尾空白、最多 40 个字符，空串 = 没有备注），只存本机、不进上报；有备注时列表标题用它。
 @freezed
 abstract class Po0CustomServer with _$Po0CustomServer {
   const factory Po0CustomServer({
     @Default('') String address,
     @Default('') String token,
+    @Default('') String note,
   }) = _Po0CustomServer;
 
   factory Po0CustomServer.fromJson(Map<String, Object?> json) =>
@@ -399,6 +401,9 @@ abstract class MeowSettings with _$MeowSettings {
 
     /// GGY 白名单分享链接里的 token（规范化后的原文，去重，最多 20 个）；界面 / 日志里一律用 `maskGgyToken` 的脱敏写法
     @Default([]) List<String> ggyTokens,
+
+    /// GGY token 的备注：token → 备注（去掉首尾空白、最多 40 个字符），只存本机、不进上报；删 token 时一起删
+    @Default({}) Map<String, String> ggyTokenNotes,
 
     /// AkileCDN 白名单：打开后启动 / 网络变化 / 回前台 / 每 10 分钟查本机直连出口 IPv4，写进 [akileNodes] 各条规则的
     /// 入口白名单（定时那一轮 IP 没变就不写）。本机偏好，退出登录不清，没登录也报

@@ -20,6 +20,8 @@ import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/connection.dart';
 import 'package:bett_box/meowx/state/akile_reporter.dart';
 import 'package:bett_box/meowx/state/ggy_reporter.dart';
+import 'package:bett_box/meowx/state/po0_reporter.dart';
+import 'package:bett_box/meowx/pages/settings/whitelist_widgets.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/motion.dart';
@@ -698,6 +700,84 @@ void main() {
     expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.map((c) => c.address), ['[2001:db8::1]']);
   });
 
+  testWidgets('po0 服务器页：主控登记的与自己添加的各带上次结果；备注当标题、可改；盾牌钮弹出槽位气泡', (tester) async {
+    // 只用假 token
+    const panelUrl = 'https://203.0.113.9/api/firewall/pgnfw_FAKEpanel0001111/add?slot=2';
+    const custom = Po0CustomServer(address: '198.51.100.7:8443', token: 'pgnfw_FAKEcustom002222', note: '洛杉矶 po0');
+    final customUrl = po0CustomTarget(custom)!.url;
+    final now = DateTime.now();
+    await _pump(
+      tester,
+      const Po0ServersPage(),
+      size: const Size(360, 1400),
+      overrides: [
+        ..._overrides(meow: const MeowSettings(po0Enabled: true, po0Custom: [custom])),
+        po0PanelServersProvider.overrideWith(
+          (ref) => const [Po0Server(serverId: 1, name: 'AgentB-Exit', ip: '203.0.113.9', token: '', url: panelUrl, slot: 2)],
+        ),
+        po0ResultsProvider.overrideWith(
+          (ref) => {
+            panelUrl: Po0Result(
+              kind: Po0ResultKind.success,
+              date: now,
+              enabled: true,
+              limit: 5,
+              currentIp: '1.2.3.4',
+              entries: const [Po0WhitelistEntry(ip: '5.6.7.8'), Po0WhitelistEntry(ip: '1.2.3.0/24', slot: 2)],
+              slot: 2,
+            ),
+            customUrl: Po0Result(kind: Po0ResultKind.slotConflict, message: po0SlotConflictMessage, date: now, slot: null),
+          },
+        ),
+      ],
+    );
+    expect(find.text('主控登记的服务器'), findsOneWidget);
+    expect(find.text('AgentB-Exit'), findsOneWidget);
+    expect(find.text('203.0.113.9 · pgnfw_••••1111@2'), findsOneWidget);
+    expect(find.text('已加白 · 2/5 · 刚刚'), findsOneWidget);
+    expect(find.text('洛杉矶 po0'), findsOneWidget);
+    expect(find.text('198.51.100.7:8443 · pgnfw_••••2222'), findsOneWidget);
+    expect(find.textContaining('槽位冲突：本机 IP 已在这台 po0 的其它槽位'), findsWidgets);
+    expect(find.textContaining('FAKEpanel'), findsNothing);
+    expect(find.textContaining('FAKEcustom'), findsNothing);
+
+    // 气泡：概况、名单、本机、槽位、空位、底部三行
+    await tester.tap(find.byTooltip('查看槽位').first);
+    await tester.pumpAndSettle();
+    expect(find.byType(Po0SlotSheet), findsOneWidget);
+    expect(find.text('防火墙已开启 · 名单 2/5'), findsOneWidget);
+    expect(find.text('1.2.3.0/24'), findsOneWidget);
+    expect(find.text('本机'), findsOneWidget);
+    expect(find.text('槽位 2'), findsOneWidget);
+    expect(find.text('空位'), findsNWidgets(3));
+    expect(find.text('本机出口 1.2.3.4'), findsOneWidget);
+    expect(find.text('本机使用槽位 2'), findsOneWidget);
+    expect(find.text('上次上报 刚刚'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.byType(Po0SlotSheet), findsNothing);
+
+    // 没有 200 结果：气泡里只写那句结果与时间
+    await tester.tap(find.byTooltip('查看槽位').last);
+    await tester.pumpAndSettle();
+    expect(find.text('洛杉矶 po0'), findsWidgets);
+    expect(find.text('空位'), findsNothing);
+    expect(find.text('上次上报 刚刚'), findsOneWidget);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    // 点自己添加的那一行改备注（清空 = 回到地址当标题）
+    await tester.tap(find.text('洛杉矶 po0'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑备注'), findsOneWidget);
+    await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), '   ');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(_container(tester, Po0ServersPage).read(meowSettingProvider).po0Custom.single.note, '');
+    expect(find.text('198.51.100.7:8443'), findsOneWidget);
+    expect(find.text('pgnfw_••••2222'), findsOneWidget);
+  });
+
   testWidgets('GGY 加白：开关在 po0 后面、说明收在 ⓘ 里；token 页只出现脱敏写法与上次结果；添加时解析整条链接、校验、去重；点 × 删除', (tester) async {
     // 只用假 token
     const a = 'ctecsfw_TESTtoken0000000000AAAA';
@@ -726,15 +806,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GgyTokensPage), findsOneWidget);
     expect(find.text('ctecsfw_••••AAAA'), findsOneWidget);
-    expect(find.text('token 无效或已失效'), findsOneWidget);
+    expect(find.textContaining('token 无效或已失效 · '), findsOneWidget);
     expect(find.textContaining('重新生成分享链接'), findsOneWidget);
     expect(find.textContaining('TESTtoken'), findsNothing);
 
     // 添加：不合法 → 提示「token 格式不对」，不保存；输入框是密码样式
     await tester.tap(find.byTooltip('添加'));
     await tester.pumpAndSettle();
-    final field = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    final fields = find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField));
+    final field = fields.first;
     expect(tester.widget<TextField>(field).obscureText, isTrue);
+    // 第二个是「备注（可选）」
+    expect(tester.widget<TextField>(fields.at(1)).decoration!.labelText, '备注（可选）');
     await tester.enterText(field, 'abc');
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     await tester.pump();
@@ -746,19 +829,35 @@ void main() {
     await tester.pump();
     expect(find.text(ggyTokenDuplicateMessage), findsOneWidget);
 
-    // 合法的整条链接：存取出来的 token，列表里脱敏、还没报过
+    // 合法的整条链接 + 备注：存取出来的 token，列表标题是备注、副标题脱敏、还没上报
     await tester.enterText(field, ggyReportUrl(b));
+    await tester.enterText(fields.at(1), '  东京 ECS  ');
     await tester.tap(find.widgetWithText(FilledButton, '添加'));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [a, b]);
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokenNotes, {b: '东京 ECS'});
+    expect(find.text('东京 ECS'), findsOneWidget);
     expect(find.text('ctecsfw_••••BBBB'), findsOneWidget);
-    expect(find.text('还没报过'), findsOneWidget);
+    expect(find.text('还没上报'), findsOneWidget);
     expect(find.textContaining('TESTtoken'), findsNothing);
 
+    // 点一行改备注：只改备注，token 列表不动
+    await tester.tap(find.text('ctecsfw_••••AAAA'));
+    await tester.pumpAndSettle();
+    expect(find.text('编辑备注'), findsOneWidget);
+    await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), '香港');
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pumpAndSettle();
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [a, b]);
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokenNotes, {a: '香港', b: '东京 ECS'});
+    expect(find.text('香港'), findsOneWidget);
+
+    // 删 token 时备注一起删
     await tester.tap(find.byTooltip('删除').first);
     await tester.pump();
     expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokens, [b]);
+    expect(_container(tester, GgyTokensPage).read(meowSettingProvider).ggyTokenNotes, {b: '东京 ECS'});
   });
 
   testWidgets('辅助功能：手机入口点开设置卡片，「加白」组标题旁 ⓘ 弹出三项说明；行里只有开关与入口', (tester) async {

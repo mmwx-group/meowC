@@ -80,7 +80,8 @@ void main() {
     test('status 200（数字 / 字符串）→ 成功，msg 写进日志', () {
       final r = judge(200, {'status': 200, 'msg': '已加入白名单', 'data': []});
       expect(r.kind, GgyResultKind.ok);
-      expect(r.summary, '成功 · 09:05');
+      expect(r.summary, '已加白 · 已加入白名单');
+      expect(judge(200, {'status': 200}).summary, '已加白');
       expect(r.logLine(_token), 'GGY 加白 ctecsfw_••••AAAA：成功（已加入白名单）');
       expect(judge(200, {'status': '200'}).kind, GgyResultKind.ok);
       expect(judge(200, {'status': ' 200 '}).kind, GgyResultKind.ok);
@@ -155,5 +156,53 @@ void main() {
     expect(out[other]!.reason, 'tls: failed to verify certificate: x509: certificate signed by unknown authority');
     expect(parseGgyReport('', const [_token]), isEmpty);
     expect(parseGgyReport('not json', const [_token]), isEmpty);
+  });
+
+  group('结果显示与备注（Design/po0-ggy-results.md §3 / §4）', () {
+    final at = DateTime(2026, 11, 20, 9, 5);
+
+    test('结果那一行：结果 · 上次上报时间；还没报过 =「还没上报」', () {
+      final ok = GgyResult.judge(status: 200, body: '{"status":200}', at: at);
+      expect(ggyResultLine(ok, at.add(const Duration(seconds: 20))), '已加白 · 刚刚');
+      expect(ggyResultLine(ok, at.add(const Duration(minutes: 7))), '已加白 · 7 分钟前');
+      expect(ggyResultLine(ok, at.add(const Duration(hours: 3))), '已加白 · 09:05');
+      expect(ggyResultLine(ok, at.add(const Duration(days: 1))), '已加白 · 11-20 09:05');
+      expect(ggyResultLine(null), '还没上报');
+      final bad = GgyResult.judge(status: 200, body: '{"status":400,"msg":"无效"}', at: at);
+      expect(ggyResultLine(bad, at), 'token 无效或已失效 · 刚刚');
+    });
+
+    test('msg 里混进的 token 换成脱敏写法', () {
+      final raw = json.encode([
+        {'url': ggyReportUrl(_token), 'status': 200, 'body': '{"status":200,"msg":"已加白 $_token"}'},
+      ]);
+      final r = parseGgyReport(raw, const [_token])[_token]!;
+      expect(r.summary, '已加白 · 已加白 ctecsfw_••••AAAA');
+      expect(r.summary, isNot(contains(_token)));
+      // 带 token= 的也换（哪怕没在 tokens 里）
+      final r2 = GgyResult.judge(status: 200, body: '{"status":500,"msg":"bad token=ctecsfw_ZZZZZZZZ9999"}', at: at);
+      expect(r2.summary, '失败：bad token=ctecsfw_••••9999');
+    });
+
+    test('标题 / 副标题：有备注时标题 = 备注、副标题 = 脱敏写法', () {
+      expect(ggyTokenLabels(_token, ''), ('ctecsfw_••••AAAA', null));
+      expect(ggyTokenLabels(_token, '  '), ('ctecsfw_••••AAAA', null));
+      expect(ggyTokenLabels(_token, '香港 ECS'), ('香港 ECS', 'ctecsfw_••••AAAA'));
+    });
+
+    test('设备注：规范化、空串删除、顺手丢掉已删 token 的备注', () {
+      const other = 'ctecsfw_BBBBBBBBBBBB';
+      var notes = setGgyTokenNote(const {}, const [_token, other], _token, '  香港  ');
+      expect(notes, {_token: '香港'});
+      notes = setGgyTokenNote(notes, const [_token, other], other, '东京');
+      expect(notes, {_token: '香港', other: '东京'});
+      notes = setGgyTokenNote(notes, const [_token, other], _token, '');
+      expect(notes, {other: '东京'});
+      // other 已经删掉：它的备注不留
+      expect(setGgyTokenNote(notes, const [_token], _token, 'x'), {_token: 'x'});
+      // 不在列表里的 token 不记
+      expect(setGgyTokenNote(const {}, const [], _token, 'x'), isEmpty);
+      expect(setGgyTokenNote(const {}, const [_token], _token, 'a' * 50)[_token]!.length, 40);
+    });
   });
 }
