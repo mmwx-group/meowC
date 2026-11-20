@@ -315,3 +315,6 @@
 - `lib/models/meow.dart`（MeowX 的设置模型）：`NodeCardSize` 加回 `compact`（生成文件 `meow.g.dart` 的枚举表跟着重新生成）；`HomeCard` 里下载排到上传前面（只影响「首页卡片」设置里的顺序，存的是名字）。
 - 「记录日志」改成只调内核日志等级（开 = debug、关 = warning），内核日志一直订阅：没有改 Bettbox 的订阅逻辑，而是在 `lib/meowx/app/meow_root.dart` 启动时把 `appSetting.openLogs` 置为 true（老用户关着开关时日志等级从缺省的 error 放到 warning）。
 - 其余都在 `lib/meowx/`；拨号失败记录靠解析内核 warning 日志，未改内核。
+
+## 2026-11-20 · 拉订阅换路重试（分支 feat/sub-fetch-retry）
+- `lib/common/request.dart`：拉订阅（`_getResponseForUrl`，导入 / 刷新 / 账户订阅 / 主控推送重拉 / 到期同步与脚本、规则文本都经它）不再自己持有两个 Dio，改调 `lib/meowx/net/subscription_fetch.dart` 的 `SubscriptionFetcher`：连接层失败（握手被掐、连接被重置 / 关闭 / 拒绝、超时）依次换「经本机代理 → 直连 → 加密 DNS 解析后按 IP 直连（SNI 与证书校验按原域名）」，连接阶段合计 25 秒；全部失败抛给人看的一句话（以前是 `DioException [unknown]: null`）。删掉了 `_clashDio` / `_directSubscriptionDio` / `_isNetworkFailure`（以前握手被掐不算网络失败，连「经内核失败 → 直连」那一次都不重试）。经本机代理 / 直连两条路照旧接受任何证书（全局 `BettboxHttpOverrides` 的行为，没改）。起因是 Windows 用户在「直连」档下导入订阅报 `HandshakeException: Connection terminated during handshake`。

@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:intl/intl.dart';
 import 'package:bett_box/common/common.dart';
+import 'package:bett_box/meowx/net/subscription_fetch.dart';
 import 'package:bett_box/meowx/update/update_http.dart';
 import 'package:bett_box/meowx/update/update_manifest.dart';
 import 'package:bett_box/models/models.dart';
@@ -15,7 +16,6 @@ import 'package:flutter/cupertino.dart';
 
 class Request {
   late final Dio _dio;
-  late final Dio _clashDio;
   // 更新通道：证书按系统信任库校验（_dio 走全局 HttpOverrides，证书一律放行，不能用来拿会以管理员执行的东西）
   late final Dio _updateDio = strictUpdateDio();
   String? userAgent;
@@ -29,51 +29,15 @@ class Request {
         return client;
       },
     );
-    // MeowX：拉订阅加超时（原来没有，请求挂住就永远不结束，updateProfile 的防重入标记一直不清，之后点「刷新」全都没反应，
-    // 用户在 Windows 上报的就是这个）。读取超时是两次收到数据之间的间隔，大订阅照样能拉完。
-    _clashDio = Dio(_subscriptionTimeouts);
-    _clashDio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.autoUncompress = false;
-        client.findProxy = (Uri uri) {
-          client.userAgent = globalState.ua;
-          return BettboxHttpOverrides.handleFindProxy(uri);
-        };
-        return client;
-      },
-    );
-    // MeowX：经本机内核拉失败（当前节点连不上 / 超时）时直连再试一次用的客户端
-    _directSubscriptionDio = Dio(_subscriptionTimeouts);
-    _directSubscriptionDio.httpClientAdapter = IOHttpClientAdapter(
-      createHttpClient: () {
-        final client = HttpClient();
-        client.autoUncompress = false;
-        client.findProxy = (Uri uri) {
-          client.userAgent = globalState.ua;
-          return 'DIRECT';
-        };
-        return client;
-      },
-    );
   }
 
-  static final _subscriptionTimeouts = BaseOptions(
-    connectTimeout: const Duration(seconds: 15),
-    sendTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 30),
+  // MeowX：拉订阅连接层失败（握手被掐 / 连接被重置 / 超时…）时换路重试（经本机代理 → 直连 → 加密 DNS 解析后按 IP 连），
+  // 见 lib/meowx/net/subscription_fetch.dart。超时与原来相同（连接 ≤ 15 秒改为按路分配、合计 25 秒，读取间隔 30 秒）。
+  late final _subscriptionHttp = SubscriptionHttp(
+    userAgent: () => globalState.ua,
+    proxyFor: BettboxHttpOverrides.handleFindProxy,
+    acceptBadCertificates: true,
   );
-  late final Dio _directSubscriptionDio;
-
-  /// 网络层的失败（连不上 / 超时），不含服务器回了 4xx / 5xx：只有这类值得换条路再试。
-  static bool _isNetworkFailure(DioException e) => switch (e.type) {
-    DioExceptionType.connectionTimeout ||
-    DioExceptionType.sendTimeout ||
-    DioExceptionType.receiveTimeout ||
-    DioExceptionType.connectionError => true,
-    DioExceptionType.unknown => e.error is SocketException || e.error is HttpException,
-    _ => false,
-  };
 
   Uint8List _decompressIfNeeded(Uint8List bytes, Headers headers) {
     final encodings =
@@ -240,17 +204,15 @@ class Request {
     }
 
     final options = Options(responseType: ResponseType.bytes, headers: headers);
-    Response response;
-    try {
-      response = await _clashDio.get(requestUrl, options: options);
-    } on DioException catch (e) {
-      // MeowX：内核起着时请求先经本机混合端口走规则 / 当前节点；节点连不上（全局模式、或被分到坏节点）就直连再试一次，
-      // 拉不到再把错误报上去。内核没起时本来就是直连，不重试。
-      final viaCore = globalState.appState.runTime != null;
-      if (!viaCore || !_isNetworkFailure(e)) rethrow;
-      commonPrint.log('subscription fetch via core failed (${e.type}), retrying direct');
-      response = await _directSubscriptionDio.get(requestUrl, options: options);
-    }
+    // MeowX：内核起着时先经本机混合端口走规则 / 当前节点，否则直连；连接层失败就换路（见 SubscriptionFetcher），
+    // 全部失败时抛的错是给人看的一句话
+    final target = Uri.parse(requestUrl);
+    final response = await SubscriptionFetcher(
+      attempt: (route, ip, timeout, cancel) => _subscriptionHttp.get(requestUrl, options, route, ip, timeout, cancel),
+      systemLookup: SubscriptionHttp.systemLookup,
+      dohLookup: SubscriptionHttp.doh,
+      log: commonPrint.log,
+    ).fetch(target, coreRunning: target.host != localhost && globalState.appState.runTime != null); // 本机地址不经内核（同 handleFindProxy）
 
     final rawBytes = _bytesFromResponse(response);
     final decompressedBytes = _decompressIfNeeded(rawBytes, response.headers);
