@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/physics.dart';
 
 import '../glass/liquid_glass.dart';
 import '../app/glass_host.dart' show MeowGlassDevice;
@@ -107,12 +106,12 @@ double meowMenuIntrinsicWidth(BuildContext context, List<MeowMenuEntry<Object?>>
   return widest.ceilToDouble().clamp(180.0, math.max(180.0, screen - _margin * 2));
 }
 
-/// 弹出菜单（「按钮变形」）：面板从 [anchor]（全局坐标；不给就取 [context] 这个控件的矩形）连续变形成菜单——
-/// 位置、宽高、圆角从 [fromRadius]（缺省 = 按钮高的一半，胶囊）到 16、底色从 [fromColor]（缺省淡粉）到卡片白，soft 弹簧；
-/// 菜单项在变形后半段错峰淡入。关闭：菜单项 90ms 淡出，面板 260ms 缩回按钮矩形。点选一项：选中块 snap 弹簧滑过去，220ms 后自动关。
-/// [onClosing] 在开始关闭的那一刻调（按钮据此淡回）。返回选中的值，点外面 / 返回键关掉 = null。
-/// 液态玻璃主题下面板是一块玻璃（菜单那一档，比底栏厚：上面是成段的字），变形时从无到有「长」出来（玻璃是弯出来的，不是淡入的），
-/// 底色参数 [fromColor] 不用。
+/// 弹出菜单（「按钮变形」）：iOS 27 的水滴变形（见 [DropletMorph]）——按钮缩成一颗圆，菜单从它长出来、先冲过头再弹回，
+/// 关闭时缩回按钮成一颗倒水滴。[anchor] 是全局坐标，不给就取 [context] 这个控件的矩形。
+/// 点选一项：选中块 snap 弹簧滑过去，220ms 后自动关。
+/// [onClosing] 在开始关闭的那一刻调，参数是按钮中心到菜单中心的位移（按钮据此淡回并被「撞」一下）。
+/// 返回选中的值，点外面 / 返回键关掉 = null。液态玻璃主题下面板是一块薄玻璃（同气泡），否则是实色卡片；
+/// [fromColor] / [fromRadius] 已不用（变形从按钮缩成的圆开始），留着兼容调用方。
 Future<T?> showMeowMenu<T>(
   BuildContext context, {
   required List<MeowMenuEntry<T>> entries,
@@ -121,7 +120,7 @@ Future<T?> showMeowMenu<T>(
   bool alignEnd = false,
   Color? fromColor,
   double? fromRadius,
-  VoidCallback? onClosing,
+  ValueChanged<Offset>? onClosing,
 }) {
   final nav = Navigator.of(context, rootNavigator: true);
   final overlay = nav.overlay?.context.findRenderObject() as RenderBox?;
@@ -142,8 +141,6 @@ Future<T?> showMeowMenu<T>(
       // 宽度跟着内容走（同 iOS 的菜单：按最长那一项定），[width] 只当下限
       width: math.max(width ?? 0, meowMenuIntrinsicWidth(context, entries)),
       alignEnd: alignEnd,
-      fromColor: fromColor ?? context.mm.soft,
-      fromRadius: fromRadius ?? local.shortestSide / 2,
       onClosing: onClosing,
       reduce: MeowMotion.reduced(context),
     ),
@@ -156,8 +153,6 @@ class _MeowMenuRoute<T> extends PopupRoute<T> {
     required this.entries,
     required this.width,
     required this.alignEnd,
-    required this.fromColor,
-    required this.fromRadius,
     required this.onClosing,
     required this.reduce,
   });
@@ -166,9 +161,7 @@ class _MeowMenuRoute<T> extends PopupRoute<T> {
   final List<MeowMenuEntry<T>> entries;
   final double width;
   final bool alignEnd;
-  final Color fromColor;
-  final double fromRadius;
-  final VoidCallback? onClosing;
+  final ValueChanged<Offset>? onClosing;
   final bool reduce;
 
   @override
@@ -200,7 +193,7 @@ class _MeowMenuRoute<T> extends PopupRoute<T> {
   @override
   Duration get transitionDuration => Duration.zero;
   @override
-  Duration get reverseTransitionDuration => reduce ? Duration.zero : MeowMotion.menuCloseTotal;
+  Duration get reverseTransitionDuration => reduce ? Duration.zero : DropletMorph.closeDuration;
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
@@ -219,8 +212,11 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
   _MeowMenuRoute<T> get _route => widget.route;
   List<MeowMenuEntry<T>> get _entries => _route.entries;
 
-  /// 变形进度：0 = 按钮矩形，1 = 菜单矩形
-  late final _morph = AnimationController.unbounded(vsync: this, value: _route.reduce ? 1 : 0);
+  /// 变形的时钟（见 [DropletMorph]）
+  late final _morph = DropletMotion(this, settled: _route.reduce);
+
+  /// 菜单此刻的落点（关闭时算按钮被撞的方向）
+  Rect? _target;
 
   /// 菜单项淡入的时钟（线性 0…1，乘总时长是毫秒）
   late final _clock = AnimationController(
@@ -272,7 +268,7 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
       _clock.value = 1;
       // 菜单的第一帧（p = 0 的水滴）画出来之后再开始计时：第一帧的排版 / 玻璃比较重，算进时间的话一出来就快展开完了
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && !_closing) _morph.animateWith(SpringSimulation(DropletMorph.spring, _morph.value, 1, 0));
+        if (mounted && !_closing) _morph.open();
       });
     }
     _routeAnimation = _route.animation?..addStatusListener(_onRouteStatus);
@@ -283,9 +279,10 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
     if (_closing || !(status == AnimationStatus.reverse || status == AnimationStatus.dismissed)) return;
     _closing = true;
     _autoClose?.cancel();
-    _route.onClosing?.call();
+    final target = _target;
+    _route.onClosing?.call(target == null ? Offset.zero : target.center - _route.anchor.center);
     if (_route.reduce) return;
-    _morph.animateTo(0, duration: DropletMorph.closeDuration, curve: DropletMorph.closeCurve);
+    _morph.close();
   }
 
   void _pick(int index) {
@@ -419,63 +416,51 @@ class _MeowMenuPanelState<T> extends State<_MeowMenuPanel<T>> with TickerProvide
       child: Material(type: MaterialType.transparency, child: content),
     );
 
-    final menuStyle = glass ? MeowGlassStyles.popover(context) : null;   // 同气泡的薄玻璃（2026-11-18 用户要求）
+    _target = target;
+    final screen = MediaQuery.sizeOf(context);
+    final safe = MediaQuery.paddingOf(context);
+    final allowed = Rect.fromLTRB(_margin, safe.top + _margin, screen.width - _margin, screen.height - safe.bottom - _margin);
+    final menuStyle = glass ? MeowGlassStyles.popover(context) : null; // 同气泡的薄玻璃（2026-11-18 用户要求）
     final menuRim = glass ? MeowGlassStyles.menuRim(context) : null;
+    final shadows = glass ? MeowGlassStyles.menuShadows(context) : const <BoxShadow>[];
     return Stack(
       children: [
         AnimatedBuilder(
           animation: _morph,
           builder: (_, child) {
-            final p = _morph.value;
-            final pc = p.clamp(0.0, 1.0);
-            // iOS 27 的水滴变形（见 DropletMorph）：从按钮中心的一颗圆长成菜单，菜单项跟着面板拉伸、先糊后清
-            final r = DropletMorph.rect(route.anchor, target, p);
-            final radius = BorderRadius.circular(DropletMorph.radius(r, _radius, p));
-            Widget clipped() => ClipRRect(
-              borderRadius: radius,
-              child: route.reduce
-                  ? child
-                  : DropletMorph.content(child: child!, r: r, target: target, p: p, blur: !MeowGlassDevice.lowEnd),
-            );
-            final fade = route.reduce ? 1.0 : DropletMorph.panelOpacity(p);
-            if (glass) {
-              return Positioned.fromRect(
-                rect: r,
-                child: Opacity(
-                  opacity: fade,
-                  child: MeowGlassBox(
-                    style: menuStyle!.scale(DropletMorph.glassAmount(p)),
-                    radius: radius,
-                    rim: menuRim!.scale(DropletMorph.glassAmount(p)),
-                    shadows: MeowGlassStyles.menuShadows(context, pc),
-                    child: clipped(),
-                  ),
-                ),
-              );
-            }
-            return Positioned.fromRect(
-              rect: r,
-              child: Opacity(
-                opacity: fade,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Color.lerp(route.fromColor, context.cs.surfaceContainer, pc),
-                    borderRadius: radius,
-                    // 阴影只淡入、半径不变
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.16 * pc),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: clipped(),
-                ),
-              ),
+            final m = _morph;
+            // iOS 27 的水滴变形（见 DropletMorph）：按钮缩成的圆长成菜单，关闭时缩回成倒水滴
+            final frame = route.reduce
+                ? DropletFrame.settled(target, _radius)
+                : m.closing
+                ? DropletMorph.close(
+                    anchor: route.anchor,
+                    target: target,
+                    finalRadius: _radius,
+                    raw: m.raw,
+                    elapsed: m.elapsed,
+                    closeStart: m.closeStart,
+                  )
+                : DropletMorph.open(
+                    anchor: route.anchor,
+                    target: target,
+                    finalRadius: _radius,
+                    raw: m.raw,
+                    elapsed: m.elapsed,
+                    allowed: allowed,
+                  );
+            return DropletSurface(
+              frame: frame,
+              target: target,
+              glassStyle: menuStyle,
+              glassRim: menuRim,
+              shadows: shadows,
+              color: context.cs.surfaceContainer,
+              blur: !MeowGlassDevice.lowEnd,
+              child: child!,
             );
           },
-          // 内容自成一层：变形每帧只改面板的矩形 / 圆角 / 底色和内容的位移，菜单项不跟着重画
+          // 内容自成一层：变形每帧只改面板的形状和内容的位移，菜单项不跟着重画
           child: RepaintBoundary(child: content),
         ),
       ],
@@ -569,13 +554,25 @@ class MeowMenuButton<T> extends StatefulWidget {
   State<MeowMenuButton<T>> createState() => _MeowMenuButtonState<T>();
 }
 
-class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with SingleTickerProviderStateMixin {
+class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with TickerProviderStateMixin {
   late final _fade = AnimationController(vsync: this, value: 1);
+
+  /// 关闭时按钮被「撞」一下的时钟（线性 0…1 = 0…[DropletMorph.recoilDuration]）与方向（按钮中心到菜单中心）
+  late final _kick = AnimationController(vsync: this, duration: DropletMorph.recoilDuration)..addListener(_onKick);
+  Offset _travel = Offset.zero;
   bool _open = false;
+
+  double get _kickSeconds => _kick.value * DropletMorph.recoilDuration.inMicroseconds / 1e6;
+
+  void _onKick() {
+    // 按钮跟着尾巴处那颗圆冒出来（关闭后约 110–230ms）
+    if (widget.fadeTrigger) _fade.value = DropletMorph.triggerReturn(_kickSeconds);
+  }
 
   Future<void> _openMenu() async {
     if (_open) return;
     _open = true;
+    _kick.stop();
     var closing = false;
     final reduce = MeowMotion.reduced(context);
     Rect? anchor;
@@ -603,18 +600,14 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with SingleTicker
       alignEnd: widget.alignEnd,
       fromColor: widget.fromColor,
       fromRadius: widget.fromRadius,
-      onClosing: () {
+      onClosing: (travel) {
         closing = true;
         if (!mounted) return;
         if (reduce) {
           _fade.value = 1;
         } else {
-          const total = MeowMotion.menuTriggerBackDelay + MeowMotion.menuTriggerBack;
-          _fade.animateTo(
-            1,
-            duration: MeowMotion.menuCloseTotal,
-            curve: const Interval(MeowMotion.menuTriggerBackDelay / total, 1),
-          );
+          _travel = travel;
+          _kick.forward(from: 0);
         }
       },
     );
@@ -626,13 +619,29 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with SingleTicker
 
   @override
   void dispose() {
+    _kick.dispose();
     _fade.dispose();
     super.dispose();
   }
 
   // 触发控件是玻璃时用 LiquidGlassFade：普通的半透明会把它变成离屏层，淡出的那一下玻璃读不到背后的画面
   @override
-  Widget build(BuildContext context) => meowGlassOn(context)
-      ? LiquidGlassFade(opacity: _fade, child: widget.builder(context, _openMenu))
-      : FadeTransition(opacity: _fade, child: widget.builder(context, _openMenu));
+  Widget build(BuildContext context) {
+    final body = meowGlassOn(context)
+        ? LiquidGlassFade(opacity: _fade, child: widget.builder(context, _openMenu))
+        : FadeTransition(opacity: _fade, child: widget.builder(context, _openMenu));
+    // 关闭时被撞：往菜单的反方向弹一下、压扁一点（同 iOS 27）
+    return AnimatedBuilder(
+      animation: _kick,
+      builder: (_, child) {
+        // 结构不随动画插拔（插拔 Transform 会让按钮整棵重挂）：没在撞时位移 0、缩放 1
+        final t = _kick.isAnimating ? _kickSeconds : 0.0;
+        return Transform.translate(
+          offset: DropletMorph.triggerRecoil(_travel, t),
+          child: Transform.scale(scale: DropletMorph.triggerImpact(_travel, t), child: child),
+        );
+      },
+      child: body,
+    );
+  }
 }

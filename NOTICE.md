@@ -17,4 +17,8 @@ MeowX（Android / Windows 客户端）以 GNU General Public License v3.0 发布
 
 `liquid_glass_widgets` 1.7.2（MIT，© 2024–2026 Sebastian Degenaar；手机底栏的液态玻璃），其中内含 `liquid_glass_renderer` 0.2.0-dev.4（MIT，© 2025 Tim Lehmann / whynotmake.it）与 `motor` 1.1.0（MIT）的代码，版权与许可声明随包的 LICENSE / THIRD_PARTY_NOTICES 一并分发；`cupertino_icons`（MIT，该库需要）。
 
+`lib/meowx/theme/droplet_morph.dart`（弹出菜单 / 气泡的水滴变形）的曲线常数与公式移植自 `liquid_glass_widgets` 1.18 的 `lib/utils/liquid_morph_physics.dart`（MIT，© 2024–2026 Sebastian Degenaar）：
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 MeowX 的 iOS / macOS 客户端是独立的闭源代码库，与本仓库不共享任何源码；本仓库只复刻其界面与面板协议。

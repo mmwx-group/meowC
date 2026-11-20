@@ -123,6 +123,7 @@ class MeowGlassBox extends SingleChildRenderObjectWidget {
     required this.radius,
     this.rim,
     this.shadows = const [],
+    this.outline,
     super.child,
   });
 
@@ -131,9 +132,12 @@ class MeowGlassBox extends SingleChildRenderObjectWidget {
   final LiquidGlassRim? rim;
   final List<BoxShadow> shadows;
 
+  /// 不是圆角矩形时的外形（以盒子左上角为原点，如水滴变形里面板连着按钮那颗圆）；给了就不画 [rim] 与 [shadows]。
+  final Path? outline;
+
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderMeowGlassBox(style: style, radius: radius, rim: rim, shadows: shadows);
+      _RenderMeowGlassBox(style: style, radius: radius, rim: rim, shadows: shadows, outline: outline);
 
   @override
   void updateRenderObject(BuildContext context, RenderObject renderObject) {
@@ -141,7 +145,8 @@ class MeowGlassBox extends SingleChildRenderObjectWidget {
       ..style = style
       ..radius = radius
       ..rim = rim
-      ..shadows = shadows;
+      ..shadows = shadows
+      ..outline = outline;
   }
 }
 
@@ -151,10 +156,12 @@ class _RenderMeowGlassBox extends RenderProxyBox {
     required BorderRadius radius,
     required LiquidGlassRim? rim,
     required List<BoxShadow> shadows,
+    required Path? outline,
   }) : _style = style,
        _radius = radius,
        _rim = rim,
-       _shadows = shadows;
+       _shadows = shadows,
+       _outline = outline;
 
   late final _pane = LiquidGlassPane(markNeedsPaint);
 
@@ -186,6 +193,13 @@ class _RenderMeowGlassBox extends RenderProxyBox {
     markNeedsPaint();
   }
 
+  Path? _outline;
+  set outline(Path? v) {
+    if (identical(v, _outline)) return;
+    _outline = v;
+    markNeedsPaint();
+  }
+
   @override
   bool get alwaysNeedsCompositing => true;
 
@@ -201,9 +215,14 @@ class _RenderMeowGlassBox extends RenderProxyBox {
       _pane.clear();
     } else {
       final rect = offset & size;
-      _pane.paint(context, rect, shape: LiquidGlassCorners(_radius), style: _style, shadows: _shadows, rim: _rim);
-      // 细边画在玻璃外面（玻璃面板自己画内侧的高光）
-      _rim?.paintLine(context.canvas, rect, _radius.topLeft.x);
+      final outline = _outline;
+      if (outline != null) {
+        _pane.paint(context, rect, shape: LiquidGlassOutline(outline), style: _style);
+      } else {
+        _pane.paint(context, rect, shape: LiquidGlassCorners(_radius), style: _style, shadows: _shadows, rim: _rim);
+        // 细边画在玻璃外面（玻璃面板自己画内侧的高光）
+        _rim?.paintLine(context.canvas, rect, _radius.topLeft.x);
+      }
     }
     super.paint(context, offset);
   }

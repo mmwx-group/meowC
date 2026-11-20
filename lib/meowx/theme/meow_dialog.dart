@@ -144,8 +144,8 @@ ThemeData meowOnGlassTheme(ThemeData t) {
 Color meowDialogRowColor(ColorScheme cs) =>
     cs.brightness == Brightness.dark ? cs.surfaceContainerLow : cs.surfaceContainerLowest;
 
-/// 锚定在按钮上的气泡（iOS 27 的 popover，2026-11-18 对着 iOS 模拟器录屏逐帧照抄，见 [DropletMorph]）：
-/// 从按钮中心冒出一颗水滴、弹簧长成气泡（冲过头一点再回），内容跟着面板拉伸、先糊后清；关时糊掉缩回水滴。弹出时轻震一下。
+/// 锚定在按钮上的气泡（iOS 27 的 popover，水滴变形见 [DropletMorph]）：
+/// 按钮缩成一颗圆、长成气泡（先冲过头再弹回），内容按最终尺寸钉着、先糊后清；关时糊掉缩回按钮成一颗倒水滴。弹出时轻震一下。
 /// 气泡盖住按钮（顶边对齐按钮顶边，同 iOS），背后不压暗。
 /// 有玻璃宿主（手机，底栏的那一套）时面板是液态玻璃（菜单那一档），否则是实色 surfaceContainerHigh。
 /// 放在按钮下方（下面放不下放上方），水平方向贴着按钮那一侧的边。点气泡外面关闭；里面的开关点了不收。
@@ -168,7 +168,6 @@ Future<T?> showMeowPopover<T>(
       title: title,
       builder: builder,
       reduce: MeowMotion.reduced(anchorContext),
-      fromColor: Theme.of(anchorContext).colorScheme.surfaceContainerHighest,
     ),
   );
 }
@@ -180,7 +179,6 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
     required this.title,
     required this.builder,
     required this.reduce,
-    required this.fromColor,
   });
 
   final Rect anchor;
@@ -188,9 +186,6 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   final String title;
   final WidgetBuilder builder;
   final bool reduce;
-
-  /// 按钮的底色：实色面板从它过渡到气泡的颜色
-  final Color fromColor;
 
   @override
   Color? get barrierColor => null;
@@ -217,7 +212,7 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   @override
   String? get barrierLabel => '关闭';
   @override
-  Duration get transitionDuration => reduce ? const Duration(milliseconds: 150) : DropletSpringCurve.duration;
+  Duration get transitionDuration => const Duration(milliseconds: 150); // 只给「移除动画」时的淡入用；变形由面板自己的时钟驱动
   @override
   Duration get reverseTransitionDuration => reduce ? const Duration(milliseconds: 120) : DropletMorph.closeDuration;
 
@@ -244,7 +239,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
 
   /// 变形进度（自己的弹簧，不用路由动画）：量好尺寸、第一帧画出来之后才开始弹——
   /// 以前跟着路由动画走，台下量尺寸那一帧和第一帧的卡顿都算进了时间，画面出来时已经快展开完了（用户：一瞬间就展开）
-  late final _morph = AnimationController.unbounded(vsync: this, value: widget.route.reduce ? 1 : 0);
+  late final _morph = DropletMotion(this, settled: widget.route.reduce);
   bool _started = false;
 
   @override
@@ -270,7 +265,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
       // 气泡的第一帧（p = 0 的水滴）画出来之后再开始计时
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && widget.animation.status != AnimationStatus.reverse) {
-          _morph.animateWith(SpringSimulation(DropletMorph.spring, _morph.value, 1, 0));
+          _morph.open();
         }
       });
     }
@@ -280,7 +275,7 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
   void _onStatus(AnimationStatus status) {
     if (status != AnimationStatus.reverse) return;
     _measure();
-    if (!widget.route.reduce) _morph.animateTo(0, duration: DropletMorph.closeDuration, curve: DropletMorph.closeCurve);
+    if (!widget.route.reduce) _morph.close();
   }
 
   @override
@@ -341,45 +336,55 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
     WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
     final target = Rect.fromLTWH(left, below ? anchor.top + gap : anchor.bottom - gap - size.height, w, size.height);
 
+    final allowed = Rect.fromLTRB(margin, pad.top + margin, screen.width - margin, screen.height - pad.bottom - margin);
+    final glassStyle = glass ? MeowGlassStyles.popover(context) : null;
+    final glassRim = glass ? MeowGlassStyles.menuRim(context) : null;
+    final shadows = glass ? MeowGlassStyles.menuShadows(context) : const <BoxShadow>[];
+
     return Stack(
       children: [
         AnimatedBuilder(
-          animation: _morph,
+          animation: Listenable.merge([_morph, widget.animation]),
           builder: (context, child) {
-            final p = route.reduce ? 1.0 : _morph.value;
-            final pc = p.clamp(0.0, 1.0);
-            final r = DropletMorph.rect(anchor, target, p);
-            final radius = BorderRadius.circular(DropletMorph.radius(r, MeowShape.xl, p));
-            final clipped = ClipRRect(
-              borderRadius: radius,
-              child: route.reduce
-                  ? Opacity(opacity: widget.animation.value, child: child)
-                  : DropletMorph.content(child: child!, r: r, target: target, p: p, blur: !MeowGlassDevice.lowEnd),
-            );
-            final Widget panel = glass
-                ? MeowGlassBox(
-                    style: MeowGlassStyles.popover(context).scale(DropletMorph.glassAmount(p)),
-                    radius: radius,
-                    rim: MeowGlassStyles.menuRim(context).scale(DropletMorph.glassAmount(p)),
-                    shadows: MeowGlassStyles.menuShadows(context, pc),
-                    child: clipped,
+            final m = _morph;
+            final frame = route.reduce
+                ? DropletFrame.settled(target, MeowShape.xl)
+                : m.closing
+                ? DropletMorph.close(
+                    anchor: anchor,
+                    target: target,
+                    finalRadius: MeowShape.xl,
+                    raw: m.raw,
+                    elapsed: m.elapsed,
+                    closeStart: m.closeStart,
+                    menu: false,
                   )
-                : DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: Color.lerp(route.fromColor, cs.surfaceContainerHigh, pc),
-                      borderRadius: radius,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.22 * pc), blurRadius: 24, offset: const Offset(0, 8)),
-                      ],
-                    ),
-                    child: clipped,
+                : DropletMorph.open(
+                    anchor: anchor,
+                    target: target,
+                    finalRadius: MeowShape.xl,
+                    raw: m.raw,
+                    elapsed: m.elapsed,
+                    allowed: allowed,
                   );
-            return Positioned.fromRect(
-              rect: r,
-              child: Opacity(opacity: route.reduce ? widget.animation.value : DropletMorph.panelOpacity(p), child: panel),
+            final surface = DropletSurface(
+              frame: frame,
+              target: target,
+              glassStyle: glassStyle,
+              glassRim: glassRim,
+              shadows: shadows,
+              color: cs.surfaceContainerHigh,
+              shadowColor: const Color(0x38000000),
+              blur: !MeowGlassDevice.lowEnd,
+              child: child!,
+            );
+            // 「移除动画」：直接在终态，跟着路由淡入淡出
+            if (!route.reduce) return surface;
+            return Positioned.fill(
+              child: Opacity(opacity: widget.animation.value, child: Stack(children: [surface])),
             );
           },
-          // 内容自成一层：变形每帧只改面板的矩形 / 圆角和内容的位移，内容不跟着重画
+          // 内容自成一层：变形每帧只改面板的形状和内容的位移，内容不跟着重画
           child: RepaintBoundary(child: content),
         ),
       ],

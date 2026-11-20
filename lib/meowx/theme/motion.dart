@@ -83,9 +83,6 @@ abstract final class MeowMotion {
   static const menuItemsOut = Duration(milliseconds: 90);
   static const menuPanelClose = Duration(milliseconds: 260);
 
-  /// 关闭开始后多久按钮开始淡回、淡回用多久；面板留到按钮完全回来才撤（两者叠着交叉淡化，不闪）
-  static const menuTriggerBackDelay = 200, menuTriggerBack = 120;
-  static const menuCloseTotal = Duration(milliseconds: menuTriggerBackDelay + menuTriggerBack);
   static const menuAutoClose = Duration(milliseconds: 220);
 
   /// 菜单第 [index] 项淡入的进度（0…1，已过 ease-out）；[elapsedMs] 从开始变形算起。前 12 项错峰，之后的与第 12 项同时。
