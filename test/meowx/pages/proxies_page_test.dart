@@ -418,6 +418,20 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('换布局（单组 → 列表）两份页面交叉淡化，不是一帧硬换（以前真机上看着闪一下）', (tester) async {
+    await _pump(tester, size: const Size(390, 844), textScale: 1, overrides: _overrides(profile: _profile()));
+    final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
+    container.read(meowSettingProvider.notifier).updateState((s) => s.copyWith(proxyLayout: ProxyLayout.list));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    // 淡化中途：新旧两份都在
+    expect(find.byKey(const ValueKey(ProxyLayout.tabs)), findsOneWidget);
+    expect(find.byKey(const ValueKey(ProxyLayout.list)), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byKey(const ValueKey(ProxyLayout.tabs)), findsNothing);
+    expect(find.byKey(const ValueKey(ProxyLayout.list)), findsOneWidget);
+  });
+
   testWidgets('手机 · 单组布局：重进节点页停在记下的组；记下的组不在了 → 第一个组', (tester) async {
     await _pump(
       tester,

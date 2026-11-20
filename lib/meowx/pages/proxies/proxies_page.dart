@@ -350,21 +350,30 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
       );
     }
 
+    final Widget body;
     if (layout == ProxyLayout.tabs) {
-      return _SingleGroup(groups: groups, size: size, pad: listPad, title: title);
+      body = _SingleGroup(groups: groups, size: size, pad: listPad, title: title);
+    } else {
+      final expanded = ref.watch(expandedGroupsProvider);
+      body = CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: side.copyWith(top: pad.top, bottom: 12),
+            sliver: SliverToBoxAdapter(child: title),
+          ),
+          for (final g in groups)
+            ..._groupSlivers(g, expanded: expanded.contains(g.name), size: size, pad: pad),
+          SliverPadding(padding: EdgeInsets.only(bottom: listPad.bottom)),
+        ],
+      );
     }
-
-    final expanded = ref.watch(expandedGroupsProvider);
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: side.copyWith(top: pad.top, bottom: 12),
-          sliver: SliverToBoxAdapter(child: title),
-        ),
-        for (final g in groups)
-          ..._groupSlivers(g, expanded: expanded.contains(g.name), size: size, pad: pad),
-        SliverPadding(padding: EdgeInsets.only(bottom: listPad.bottom)),
-      ],
+    // 换布局（列表 ⇄ 单组）时两份页面交叉淡化：以前一帧之内整页（连同标题行的玻璃按钮）硬换掉，
+    // 真机上看着是「闪一下」（2026-11-20 用户实报）。系统「移除动画」时照旧瞬切。
+    return AnimatedSwitcher(
+      duration: MeowMotion.reduced(context) ? Duration.zero : const Duration(milliseconds: 180),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: KeyedSubtree(key: ValueKey(layout), child: body),
     );
   }
 }
