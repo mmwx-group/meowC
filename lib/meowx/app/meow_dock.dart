@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 
 import '../glass/liquid_glass.dart';
+import '../state/ui_prefs.dart';
 import 'glass_host.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
@@ -25,19 +26,7 @@ extension on BuildContext {
   ColorScheme get colorScheme => Theme.of(this).colorScheme;
 }
 
-/// 底栏胶囊的玻璃（2026-11-17 改成 iOS 26 底栏那种「清透 + 边缘折射」：用户反馈以前像一块磨砂板，
-/// 看不出边缘放大、中间正常的液态玻璃）。
-///
-/// 以前是 FlClash 的 pill 玻璃：72% 的背景走 15.6dp 重模糊（haze）。宿主是 standard 档，standard 会把 haze 合成整块
-/// 15.6dp 模糊，再盖 58% 的底色——背后基本糊成一片，着色器边缘那一圈折射（refraction / bevel）也就看不出来。
-/// 现在：不要 haze，只留 2.5dp 轻模糊、底色浅 28% / 深 34%（2026-11-18 用户先说透明度不够、减少模糊，调到 1dp、浅 20% / 深 25%
-/// 后又说太透、加一点模糊，取中间；最早是 3dp、浅 34% / 深 42%），
-/// 边缘折射加大（refraction 72、bevel 24），
-/// 背后的卡片颜色透得出来，滚过去的内容在边上被拉伸放大、中间保持原样。字的可读性由 contrast 管。
-///
-/// 性能：每帧仍是「背后截一次缩小图 + 一个着色器」，和以前一样；模糊小了截图分辨率高一些
-/// （3dp × 3 倍屏 → 缩小 4 倍，以前 8 倍），对一条底栏的面积影响很小。
-/// 低端机（[lowEnd]：系统标为低内存，或物理内存不到 2.5GB）保留以前的重磨砂：截图缩到最小、最省。
+/// 底栏胶囊的玻璃（支持 iOS 27 液态玻璃主题、模糊强度与透明/着色档位动态调节）。
 LiquidGlassStyle meowBarGlass(bool dark, {bool lowEnd = false}) {
   if (lowEnd) {
     return dark
@@ -60,31 +49,38 @@ LiquidGlassStyle meowBarGlass(bool dark, {bool lowEnd = false}) {
             hairline: 0.35,
           );
   }
+  final prefs = MeowUiRuntime.current;
+  final ios27 = prefs.isIos27Glass;
+  final frost = prefs.glassFrost.clamp(0.0, 1.0);
+  final tinted = prefs.glassTinted;
+  final blur = ((ios27 ? 2.2 : 2.5) + (frost - 0.5) * 3.0 + (tinted ? 2.0 : 0)).clamp(1.0, 8.0);
+  final alpha = ((dark ? (ios27 ? 0.30 : 0.34) : (ios27 ? 0.24 : 0.28)) + (tinted ? 0.16 : 0) + (frost - 0.5) * 0.12)
+      .clamp(0.16, 0.65);
   return dark
-      ? const LiquidGlassStyle(
-          tint: Color(0x5726202D),
+      ? LiquidGlassStyle(
+          tint: const Color(0xFF1F222D).withValues(alpha: alpha),
           contrast: -0.5,
-          blur: 2.5,
-          refraction: 72,
-          bevel: 24,
-          saturation: 1.8,
-          rim: 0.42,
-          rimWidth: 1.2,
+          blur: blur,
+          refraction: ios27 ? 84 : 72,
+          bevel: ios27 ? 26 : 24,
+          saturation: ios27 ? 1.95 : 1.8,
+          rim: ios27 ? 0.56 : 0.42,
+          rimWidth: ios27 ? 1.35 : 1.2,
           rimTail: 0.17,
-          rimAdded: 0.38,
+          rimAdded: ios27 ? 0.48 : 0.38,
         )
-      : const LiquidGlassStyle(
-          tint: Color(0x47FFFCFA),
+      : LiquidGlassStyle(
+          tint: const Color(0xFFFFFCFA).withValues(alpha: alpha),
           contrast: 0.5,
-          blur: 2.5,
-          refraction: 72,
-          bevel: 24,
-          saturation: 1.9,
-          rim: 0.5,
-          rimWidth: 1.2,
+          blur: blur,
+          refraction: ios27 ? 84 : 72,
+          bevel: ios27 ? 26 : 24,
+          saturation: ios27 ? 2.0 : 1.9,
+          rim: ios27 ? 0.62 : 0.5,
+          rimWidth: ios27 ? 1.35 : 1.2,
           rimTail: 0.17,
-          rimAdded: 0.38,
-          hairline: 0.3,
+          rimAdded: ios27 ? 0.48 : 0.38,
+          hairline: 0.32,
         );
 }
 

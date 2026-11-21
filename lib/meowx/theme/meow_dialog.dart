@@ -52,61 +52,78 @@ class _MeowDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = context.cs;
     final acts = actions?.call(context) ?? const [];
+    final glass = meowPopupGlassOn(context);
+    final radius = BorderRadius.circular(MeowShape.xl);
+    final body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface),
+                ),
+              ),
+              IconButton(
+                tooltip: '关闭',
+                onPressed: () => Navigator.of(context).pop(),
+                icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        Flexible(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, acts.isEmpty ? 20 : 8),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(fontSize: MeowFont.body, color: cs.onSurface),
+              child: builder(context),
+            ),
+          ),
+        ),
+        if (acts.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                for (final (i, a) in acts.indexed) ...[if (i > 0) const SizedBox(width: 8), a],
+              ],
+            ),
+          ),
+      ],
+    );
+    final surface = glass
+        ? MeowGlassBox(
+            style: MeowGlassStyles.menu(context),
+            radius: radius,
+            rim: MeowGlassStyles.menuRim(context),
+            shadows: MeowGlassStyles.menuShadows(context),
+            child: Material(
+              type: MaterialType.transparency,
+              borderRadius: radius,
+              clipBehavior: Clip.antiAlias,
+              child: Theme(data: meowOnGlassTheme(Theme.of(context)), child: body),
+            ),
+          )
+        : Material(
+            color: cs.surfaceContainerHigh,
+            shape: RoundedRectangleBorder(
+              borderRadius: radius,
+              side: BorderSide(color: cs.cardBorder, width: 0.8),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: body,
+          );
     return SafeArea(
       child: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Material(
-              color: cs.surfaceContainerHigh,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(MeowShape.xl)),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 12, 4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: cs.onSurface),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.of(context).pop(),
-                          icon: Icon(Icons.close_rounded, color: cs.onSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Flexible(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(16, 4, 16, acts.isEmpty ? 20 : 8),
-                      child: DefaultTextStyle.merge(
-                        style: TextStyle(fontSize: MeowFont.body, color: cs.onSurface),
-                        child: builder(context),
-                      ),
-                    ),
-                  ),
-                  if (acts.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          for (final (i, a) in acts.indexed) ...[if (i > 0) const SizedBox(width: 8), a],
-                        ],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          child: ConstrainedBox(constraints: BoxConstraints(maxWidth: maxWidth), child: surface),
         ),
       ),
     );

@@ -189,13 +189,28 @@ class GroupCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = context.cs;
+    final dark = context.isDarkMode;
     final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
     final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
     final delay = current.isEmpty ? null : ref.watch(getDelayProvider(proxyName: current, testUrl: group.testUrl));
+    const darkMonograms = [
+      (Color(0xFF2D1E28), Color(0xFFFF9AB8)),
+      (Color(0xFF1A2A36), Color(0xFF7CC8F8)),
+      (Color(0xFF1A2D24), Color(0xFF6EE7B7)),
+      (Color(0xFF262138), Color(0xFFC4B5FD)),
+    ];
+    const lightMonograms = [
+      (Color(0xFFFCE8F1), Color(0xFFB8326A)),
+      (Color(0xFFE7F3FE), Color(0xFF1D6FA5)),
+      (Color(0xFFE6F7F0), Color(0xFF1D7A58)),
+      (Color(0xFFF0ECFE), Color(0xFF5D46A8)),
+    ];
+    final palette = dark ? darkMonograms : lightMonograms;
+    final (monoBg, monoFg) = palette[group.name.hashCode.abs() % palette.length];
     final tile = M3IconTile(
       shape: selected || expanded == true ? M3TileShape.circle : M3TileShape.rounded,
-      bg: selected || expanded == true ? cs.primary : cs.surfaceContainerHighest,
-      fg: selected || expanded == true ? cs.onPrimary : cs.onSurfaceVariant,
+      bg: selected || expanded == true ? cs.primary : monoBg,
+      fg: selected || expanded == true ? cs.onPrimary : monoFg,
       text: group.icon.isEmpty ? nodeTileLabel(group.name) : null,
       child: group.icon.isEmpty ? null : CommonTargetIcon(src: group.icon, size: 22),
     );
@@ -228,6 +243,7 @@ class GroupCard extends ConsumerWidget {
         decoration: BoxDecoration(
           color: open ? cs.primaryContainer : cs.card,
           borderRadius: BorderRadius.circular(math.max(0, r)),
+          border: Border.all(color: open ? cs.primary.withValues(alpha: 0.35) : cs.cardBorder, width: 0.8),
         ),
         child: Material(
           type: MaterialType.transparency,

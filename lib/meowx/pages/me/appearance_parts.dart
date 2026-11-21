@@ -9,8 +9,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/app_icon.dart';
 import '../../state/meow_settings.dart';
+import '../../state/ui_prefs.dart';
 import '../../theme/color_picker.dart';
+import '../../theme/haptics.dart';
 import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/page_title.dart';
 import '../../theme/tokens.dart';
 import 'me_kit.dart';
@@ -565,6 +568,168 @@ class TextScaleRow extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// 视觉主题预设：5 套内置风格（静谧雾白 / iOS 27 液态玻璃 / 暗夜极客 / 樱雾琉璃 / 莫兰迪柔雾）。
+/// 底层卡片一律保持清透实底 + 极细描边；切到「iOS 27 液态玻璃」时，Dock 与弹出层启用更明显的光学边缘折射与高光。
+class ThemePresetRow extends ConsumerWidget {
+  const ThemePresetRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preset = ref.watch(meowUiPrefsProvider.select((s) => s.preset));
+    final dark = context.isDarkMode;
+    return _StackedRow(
+      label: '视觉主题',
+      value: preset.label,
+      caption: preset.subtitle,
+      child: SizedBox(
+        height: 92,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: MeowVisualPreset.values.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (ctx, i) {
+            final p = MeowVisualPreset.values[i];
+            final selected = p == preset;
+            final cs = ctx.cs;
+            final bg = dark ? p.previewBgDark : p.previewBgLight;
+            final cardColor = dark ? Color.lerp(bg, Colors.white, 0.08)! : Colors.white;
+            return GestureDetector(
+              onTap: () {
+                MeowHaptics.select();
+                ref.read(meowUiPrefsProvider.notifier).update((s) => s.copyWith(preset: p));
+              },
+              child: AnimatedContainer(
+                duration: MeowSprings.effectsDuration,
+                width: 108,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: bg,
+                  borderRadius: BorderRadius.circular(MeowShape.l),
+                  border: Border.all(
+                    color: selected ? cs.primary : cs.outlineVariant.withValues(alpha: 0.6),
+                    width: selected ? 2 : 1,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.35), width: 0.6),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(color: p.previewAccent, shape: BoxShape.circle),
+                                ),
+                                const Spacer(),
+                                if (p == MeowVisualPreset.ios27Glass)
+                                  Icon(Icons.auto_awesome_rounded, size: 12, color: p.previewAccent),
+                              ],
+                            ),
+                            Container(
+                              height: 5,
+                              width: 44,
+                              decoration: BoxDecoration(
+                                color: p.previewAccent.withValues(alpha: 0.45),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      p.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                        color: selected ? cs.primary : (dark ? Colors.white : const Color(0xFF14161B)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Dock 与弹出层（气泡 / 菜单 / 对话框）的液态玻璃调节：不影响底层实色卡片。
+class GlassOverlayRow extends ConsumerWidget {
+  const GlassOverlayRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final frost = ref.watch(meowUiPrefsProvider.select((s) => s.glassFrost));
+    final tinted = ref.watch(meowUiPrefsProvider.select((s) => s.glassTinted));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MeSwitchRow(
+          label: 'Dock 与弹出层高对比玻璃',
+          subtitle: '开启后底栏与弹窗使用更厚实的着色玻璃，底层卡片始终保持清晰实底',
+          value: tinted,
+          onChanged: (v) => ref.read(meowUiPrefsProvider.notifier).update((s) => s.copyWith(glassTinted: v)),
+        ),
+        _StackedRow(
+          label: '玻璃模糊与折射强度',
+          value: '${(frost * 100).round()}%',
+          child: Slider(
+            min: 0.0,
+            max: 1.0,
+            divisions: 10,
+            value: frost,
+            onChanged: (v) => ref.read(meowUiPrefsProvider.notifier).update((s) => s.copyWith(glassFrost: v)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 灵动动效强度：柔和 / 标准 / 灵动，统一调节弹簧回弹与切换速度。
+class MotionLevelRow extends ConsumerWidget {
+  const MotionLevelRow({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final level = ref.watch(meowUiPrefsProvider.select((s) => s.motionLevel));
+    return _StackedRow(
+      label: '灵动动效',
+      value: level.label,
+      caption: '调节电源流体光环、分段滑块、弹出层与卡片自适应重排的弹簧回弹强度。',
+      child: MeowSlideSegment<MeowMotionLevel>(
+        items: const [
+          (MeowMotionLevel.soft, '柔和'),
+          (MeowMotionLevel.standard, '标准'),
+          (MeowMotionLevel.lively, '灵动'),
+        ],
+        selected: level,
+        height: 40,
+        onChanged: (v) => ref.read(meowUiPrefsProvider.notifier).update((s) => s.copyWith(motionLevel: v)),
+      ),
     );
   }
 }

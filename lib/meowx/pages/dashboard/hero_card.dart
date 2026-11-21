@@ -46,10 +46,11 @@ class HomeHeroCard extends ConsumerWidget {
 
     return AnimatedContainer(
       duration: MeowSprings.effectsDuration,
-      padding: dense ? const EdgeInsets.fromLTRB(16, 16, 16, 16) : const EdgeInsets.all(18),
+      padding: dense ? const EdgeInsets.fromLTRB(16, 14, 16, 14) : const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: cs.card,
         borderRadius: BorderRadius.circular(dense ? MeowShape.xlInc : 32),
+        border: Border.all(color: cs.cardBorder, width: 0.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -93,10 +94,10 @@ class HomeHeroCard extends ConsumerWidget {
                         status,
                         maxLines: 1,
                         style: TextStyle(
-                          fontSize: dense ? 30 : 34,
-                          height: dense ? 36 / 30 : 40 / 34,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
+                          fontSize: dense ? 28 : 32,
+                          height: dense ? 34 / 28 : 38 / 32,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.4,
                           // 连上之后大字换成主题色（卡片底色不再随状态变，状态靠它与电源键表达）
                           color: on ? cs.primary : fg,
                         ),
@@ -234,44 +235,48 @@ class _NodeRow extends ConsumerWidget {
                 builder: (_) => NodePickerPanel(initialGroup: node.group),
               )
             : goTab(ref, MeowTab.proxies),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(
-            children: [
-              M3IconTile(
-                icon: icon,
-                text: icon == null ? nodeTileLabel(name) : null,
-                size: tile,
-                bg: cs.tertiaryContainer,
-                fg: cs.onTertiaryContainer,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      // 图标块里已经画了国旗，名字里的那面不再重复
-                      icon == null ? nodeTitleWithoutFlag(name) : name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: cs.onSurface),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      sub,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
-                    ),
-                  ],
+        child: ConstrainedBox(
+          // 固定最小高度与统一行高：切换「规则 / 全局 / 直连」时有无延迟胶囊都不再引起卡片高度跳动
+          constraints: const BoxConstraints(minHeight: 60),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              children: [
+                M3IconTile(
+                  icon: icon,
+                  text: icon == null ? nodeTileLabel(name) : null,
+                  size: tile,
+                  bg: cs.tertiaryContainer,
+                  fg: cs.onTertiaryContainer,
                 ),
-              ),
-              if (badge != null) ...[const SizedBox(width: 8), badge],
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
-            ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        // 图标块里已经画了国旗，名字里的那面不再重复
+                        icon == null ? nodeTitleWithoutFlag(name) : name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 15, height: 1.25, fontWeight: FontWeight.w700, color: cs.onSurface),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        sub,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 12, height: 1.25, color: cs.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+                if (badge != null) ...[const SizedBox(width: 8), badge],
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+              ],
+            ),
           ),
         ),
       ),

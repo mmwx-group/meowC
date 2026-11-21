@@ -3,15 +3,12 @@ import 'package:flutter/rendering.dart';
 
 import '../app/glass_host.dart' show MeowGlassDevice;
 import '../glass/liquid_glass.dart';
+import '../state/ui_prefs.dart';
 import 'motion.dart';
 import 'tokens.dart';
 
-/// 液态玻璃主题的控件层（照 iOS 26 官方 App：玻璃只用在浮在内容上面的控件——右上角圆钮 / 胶囊、弹出菜单、底部卡片、
-/// 电源键、首页模式分段的滑块；内容卡片保持实色）。玻璃本身是 ../glass/liquid_glass.dart（移植自 FlClash 0.9.1），
-/// 背景由最外层的一个 [LiquidGlassHost] 每帧截一次、各块共用（宿主见 ../app/glass_host.dart），这里不给任何一块挂实时模糊。
-///
-/// 画不画玻璃一律问 [meowGlassOn]：液态玻璃主题、外层有玻璃宿主、不是低端机 / 系统没开高对比度（「减弱透明度」的同类）。
-/// 不画时各控件照经典主题的实色画法，所以经典主题下不多出任何合成层。
+/// 液态玻璃层（按用户要求：仅应用于 Dock 与弹出层，如气泡、弹出菜单与对话框；底层内容卡片保持清透实底）。
+/// 背景由最外层的一个 [LiquidGlassHost] 每帧截一次、各块共用（宿主见 ../app/glass_host.dart），不给任何一块挂实时模糊。
 
 /// 玻璃控件的尺寸与参数。
 abstract final class MeowGlassMetrics {
@@ -57,48 +54,117 @@ class MeowGlassControls extends InheritedWidget {
 /// 这里的控件要不要画成玻璃：宿主允许（液态玻璃主题、不是低端机 / 高对比度）且外层确有玻璃宿主在取背景。
 bool meowGlassOn(BuildContext context) => MeowGlassControls.of(context) && LiquidGlassScope.of(context);
 
-/// 弹出菜单 / 锚定气泡画不画成液态玻璃（2026-11-18 起同 iOS 27：从按钮变形出来的玻璃气泡）：
-/// 外层有玻璃宿主（手机，底栏那一套）就画，不看页面控件的开关（[MeowGlassControls] 在 M3 改版后一律关）；低端机退回实色。
+/// 弹出菜单 / 锚定气泡 / 弹出对话框画不画成液态玻璃（同 iOS 27）：
+/// 外层有玻璃宿主（手机，底栏那一套）就画，底层卡片不受影响；低端机退回实色。
 bool meowPopupGlassOn(BuildContext context) => LiquidGlassScope.of(context) && !MeowGlassDevice.lowEnd;
 
-/// 各控件的玻璃参数：FlClash 的几档（regular / menu / tinted / lens）按「透明 / 着色」调厚薄。
-/// 玻璃不跟卡片颜色变：取色用固定的一份配色，不读主题里随卡片色变的 surface。
+/// 各弹出层的玻璃参数：按 iOS 27 主题、透明度滑杆（glassFrost）与透明/着色（glassTinted）动态调校。
 abstract final class MeowGlassStyles {
   static const _light = ColorScheme.light(surfaceContainerHighest: Color(0xFFF3EDE6), surfaceBright: Color(0xFFFFFCFA));
-  static const _dark = ColorScheme.dark(surfaceContainerHighest: Color(0xFF2F2838));
+  static const _dark = ColorScheme.dark(surfaceContainerHighest: Color(0xFF232530));
 
   static ColorScheme scheme(BuildContext context) => context.isDarkMode ? _dark : _light;
 
-  /// 圆钮 / 胶囊
-  static LiquidGlassStyle control(BuildContext context) =>
-      LiquidGlassStyle.regular(scheme(context));
+  /// 圆钮 / 胶囊：与 Dock 相同的清透光学折射 + 边缘高光（支持可选强调色着色，如节点页测速钮）
+  static LiquidGlassStyle control(BuildContext context, {Color? accentTint}) {
+    final prefs = MeowUiRuntime.current;
+    final dark = context.isDarkMode;
+    final frost = prefs.glassFrost.clamp(0.0, 1.0);
+    final tinted = prefs.glassTinted;
+    final blur = (2.2 + (frost - 0.5) * 3.0 + (tinted ? 2.0 : 0)).clamp(1.0, 8.0);
+    final alpha = ((dark ? 0.30 : 0.24) + (tinted ? 0.16 : 0) + (frost - 0.5) * 0.12).clamp(0.16, 0.65);
+    final baseTint = accentTint != null
+        ? accentTint.withValues(alpha: (dark ? 0.38 : 0.32) + (tinted ? 0.14 : 0))
+        : (dark ? const Color(0xFF1F222D) : const Color(0xFFFFFCFA)).withValues(alpha: alpha);
+    return dark
+        ? LiquidGlassStyle(
+            tint: baseTint,
+            contrast: -0.45,
+            blur: blur,
+            refraction: 80,
+            bevel: 24,
+            saturation: 1.9,
+            rim: 0.56,
+            rimWidth: 1.3,
+            rimTail: 0.17,
+            rimAdded: 0.46,
+          )
+        : LiquidGlassStyle(
+            tint: baseTint,
+            contrast: 0.45,
+            blur: blur,
+            refraction: 80,
+            bevel: 24,
+            saturation: 1.95,
+            rim: 0.62,
+            rimWidth: 1.3,
+            rimTail: 0.17,
+            rimAdded: 0.46,
+            hairline: 0.32,
+          );
+  }
 
-  /// 弹出菜单与底部卡片：比圆钮更厚（上面是成段的字）
-  static LiquidGlassStyle menu(BuildContext context) =>
-      LiquidGlassStyle.menu(scheme(context));
+  /// 弹出菜单与对话框：在 iOS 27 液态玻璃主题下增强边缘光学折射与高光，同时保持文字清晰可读
+  static LiquidGlassStyle menu(BuildContext context) {
+    final prefs = MeowUiRuntime.current;
+    final cs = scheme(context);
+    final dark = context.isDarkMode;
+    final frost = prefs.glassFrost.clamp(0.0, 1.0);
+    final ios27 = prefs.isIos27Glass;
+    final tinted = prefs.glassTinted;
+    final alpha = ((dark ? (ios27 ? 0.56 : 0.62) : (ios27 ? 0.52 : 0.60)) + (tinted ? 0.16 : 0) + (frost - 0.5) * 0.14)
+        .clamp(0.32, 0.86);
+    final blur = ((ios27 ? 7.0 : 9.0) + frost * 6.0 + (tinted ? 3.0 : 0)).clamp(3.0, 18.0);
+    return LiquidGlassStyle(
+      tint: (dark ? cs.surfaceContainerHighest : cs.surfaceBright).withValues(alpha: alpha),
+      contrast: dark ? -0.35 : 0.2,
+      blur: blur,
+      refraction: ios27 ? 64 : 46,
+      bevel: ios27 ? 20 : 14,
+      saturation: dark ? 1.65 : 1.8,
+      brightness: dark ? 1.25 : 1.05,
+      rim: ios27 ? (dark ? 0.52 : 0.58) : 0.35,
+      rimWidth: ios27 ? 1.2 : 1.0,
+      rimAdded: ios27 ? 0.42 : 0.25,
+    );
+  }
 
   static LiquidGlassRim menuRim(BuildContext context) => LiquidGlassRim.menu(scheme(context));
 
-  /// 锚在按钮上的气泡（首页卡片设置、节点视图…）与下拉菜单：比菜单薄得多、透得出背后的画面，同 iOS 27 的 popover
-  /// （2026-11-18 用户：透明度不够、不像 iOS 27 的液态玻璃）。着色从 55% / 63% 降到 26% / 36%，模糊 12 → 4.5，
-  /// 边缘折射照旧（看得出是一块玻璃）；里面的行再按 [meowOnGlassTheme] 半透明。
+  /// 锚在按钮上的气泡（首页卡片设置、节点视图…）与下拉菜单：更通透、带明显光学边缘折射（iOS 27 Popover）
   static LiquidGlassStyle popover(BuildContext context) {
+    final prefs = MeowUiRuntime.current;
     final cs = scheme(context);
-    return context.isDarkMode
+    final dark = context.isDarkMode;
+    final frost = prefs.glassFrost.clamp(0.0, 1.0);
+    final ios27 = prefs.isIos27Glass;
+    final tinted = prefs.glassTinted;
+    final alpha = ((dark ? (ios27 ? 0.32 : 0.38) : (ios27 ? 0.24 : 0.30)) + (tinted ? 0.18 : 0) + (frost - 0.5) * 0.14)
+        .clamp(0.18, 0.72);
+    final blur = ((ios27 ? 3.8 : 4.5) + frost * 4.5 + (tinted ? 2.5 : 0)).clamp(2.0, 14.0);
+    return dark
         ? LiquidGlassStyle(
-            tint: cs.surfaceContainerHighest.withValues(alpha: 0.36),
+            tint: cs.surfaceContainerHighest.withValues(alpha: alpha),
             contrast: -0.35,
-            blur: 4.5,
-            saturation: 1.7,
+            blur: blur,
+            refraction: ios27 ? 72 : 52,
+            bevel: ios27 ? 22 : 16,
+            saturation: 1.75,
             brightness: 1.45,
-            rim: 0,
+            rim: ios27 ? 0.45 : 0,
+            rimWidth: 1.1,
+            rimAdded: ios27 ? 0.38 : 0,
           )
         : LiquidGlassStyle(
-            tint: cs.surfaceBright.withValues(alpha: 0.26),
-            blur: 4.5,
+            tint: cs.surfaceBright.withValues(alpha: alpha),
+            blur: blur,
+            refraction: ios27 ? 72 : 52,
+            bevel: ios27 ? 22 : 16,
             saturation: 1.9,
             brightness: 1.06,
-            rim: 0,
+            rim: ios27 ? 0.5 : 0,
+            rimWidth: 1.1,
+            rimAdded: ios27 ? 0.38 : 0,
           );
   }
 
@@ -232,11 +298,22 @@ class _RenderMeowGlassBox extends RenderProxyBox {
 /// 形状随尺寸：正方形是圆，长条是胶囊。[child] 自己定尺寸；[onTap] 为 null = 不可用（只把内容调淡，不给整块玻璃加透明度——
 /// 半透明会把它变成离屏层，玻璃就读不到背后的画面了）。
 class MeowGlassButton extends StatefulWidget {
-  const MeowGlassButton({super.key, required this.child, required this.onTap, this.tooltip});
+  const MeowGlassButton({
+    super.key,
+    required this.child,
+    required this.onTap,
+    this.tooltip,
+    this.style,
+    this.shadows = defaultShadows,
+  });
+
+  static const defaultShadows = [BoxShadow(color: Color(0x18000000), blurRadius: 16, offset: Offset(0, 4))];
 
   final Widget child;
   final VoidCallback? onTap;
   final String? tooltip;
+  final LiquidGlassStyle? style;
+  final List<BoxShadow> shadows;
 
   @override
   State<MeowGlassButton> createState() => _MeowGlassButtonState();
@@ -253,7 +330,8 @@ class _MeowGlassButtonState extends State<MeowGlassButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onTap != null;
     Widget body = LiquidGlass(
-      style: MeowGlassStyles.control(context),
+      style: widget.style ?? MeowGlassStyles.control(context),
+      shadows: widget.shadows,
       pressed: _down,
       child: Opacity(opacity: enabled ? 1 : 0.4, child: widget.child),
     );

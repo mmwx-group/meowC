@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:material_color_utilities/material_color_utilities.dart';
 
+import '../state/ui_prefs.dart';
+
 /// Material 3 Expressive 的底子：色板、语义色、形状与弹簧（2026-11，见 design/m3-expressive/PLAN.md）。
 ///
 /// 颜色一律从 [ColorScheme] 取（`context.cs`），色板以外的语义色（通 / 慢 / 超时这类状态）从 [MeowM3] 取（`context.m3`），
@@ -23,12 +25,146 @@ abstract final class MeowColors {
 
   static String? nameOf(int color) => presets.where((p) => p.$2 == color).firstOrNull?.$1;
 
-  /// 按种子色生成一份色板（tonal spot：系统「跟随桌布」也是这一种）
-  static ColorScheme scheme(Color seed, Brightness brightness) => ColorScheme.fromSeed(
-    seedColor: seed,
-    brightness: brightness,
-    dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
-  );
+  /// 按种子色与主题预设生成一份精修色板：去掉深色下默认 tonalSpot 发闷发褐的底色，
+  /// 统一柔化错误容器（超时胶囊不再刺眼纯红），让底面、卡片与次级槽层次分明。
+  static ColorScheme scheme(
+    Color seed,
+    Brightness brightness, {
+    MeowVisualPreset preset = MeowVisualPreset.crispMist,
+  }) {
+    final effectiveSeed = switch (preset) {
+      MeowVisualPreset.obsidian => const Color(0xFF10B981),
+      MeowVisualPreset.morandiMist => const Color(0xFF5D8A78),
+      _ => seed,
+    };
+    final base = ColorScheme.fromSeed(
+      seedColor: effectiveSeed,
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.tonalSpot,
+    );
+    final dark = brightness == Brightness.dark;
+    // 柔化 errorContainer：超时胶囊用低饱和柔红底 + 清晰亮红字，不再出现刺眼纯红块
+    final errorContainer = dark ? const Color(0xFF3A1A22) : const Color(0xFFFCE8EC);
+    final onErrorContainer = dark ? const Color(0xFFFF8FA3) : const Color(0xFFB4233C);
+
+    return switch (preset) {
+      MeowVisualPreset.crispMist || MeowVisualPreset.ios27Glass => dark
+          ? base.copyWith(
+              surface: preset == MeowVisualPreset.ios27Glass ? const Color(0xFF0E1015) : const Color(0xFF101114),
+              surfaceContainerLowest: const Color(0xFF14161A),
+              surfaceContainerLow: const Color(0xFF17191E),
+              surfaceContainer: const Color(0xFF1A1C22),
+              surfaceContainerHigh: const Color(0xFF1C1E24),
+              surfaceContainerHighest: const Color(0xFF252831),
+              outlineVariant: const Color(0xFF2E313C),
+              outline: const Color(0xFF5A5F70),
+              onSurface: const Color(0xFFF3F4F7),
+              onSurfaceVariant: const Color(0xFF9EA4B2),
+              inverseSurface: const Color(0xFF2E323D),
+              onInverseSurface: const Color(0xFFF5F6FA),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            )
+          : base.copyWith(
+              surface: preset == MeowVisualPreset.ios27Glass ? const Color(0xFFF2F5FA) : const Color(0xFFF4F5F8),
+              surfaceContainerLowest: const Color(0xFFFFFFFF),
+              surfaceContainerLow: const Color(0xFFFAFBFD),
+              surfaceContainer: const Color(0xFFFFFFFF),
+              surfaceContainerHigh: const Color(0xFFF0F2F6),
+              surfaceContainerHighest: const Color(0xFFE7EAF0),
+              outlineVariant: const Color(0xFFE2E6EE),
+              outline: const Color(0xFFB8BFCC),
+              onSurface: const Color(0xFF14161B),
+              onSurfaceVariant: const Color(0xFF616876),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            ),
+      MeowVisualPreset.obsidian => dark
+          ? base.copyWith(
+              surface: const Color(0xFF07080A),
+              surfaceContainerLowest: const Color(0xFF0C0E12),
+              surfaceContainerLow: const Color(0xFF111318),
+              surfaceContainer: const Color(0xFF14171D),
+              surfaceContainerHigh: const Color(0xFF15181F),
+              surfaceContainerHighest: const Color(0xFF1F242E),
+              primary: const Color(0xFF34D399),
+              onPrimary: const Color(0xFF052E20),
+              primaryContainer: const Color(0xFF0F2D24),
+              onPrimaryContainer: const Color(0xFFA7F3D0),
+              secondaryContainer: const Color(0xFF18242B),
+              onSecondaryContainer: const Color(0xFFBAE6FD),
+              tertiary: const Color(0xFF38BDF8),
+              tertiaryContainer: const Color(0xFF132635),
+              onTertiaryContainer: const Color(0xFFBAE6FD),
+              outlineVariant: const Color(0xFF242A36),
+              onSurface: const Color(0xFFF1F5F9),
+              onSurfaceVariant: const Color(0xFF94A3B8),
+              inverseSurface: const Color(0xFF252D3B),
+              onInverseSurface: const Color(0xFFF1F5F9),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            )
+          : base.copyWith(
+              surface: const Color(0xFFF1F4F7),
+              surfaceContainer: const Color(0xFFFFFFFF),
+              surfaceContainerHigh: const Color(0xFFE9EEF4),
+              surfaceContainerHighest: const Color(0xFFDEE5EE),
+              outlineVariant: const Color(0xFFD9E1EB),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            ),
+      MeowVisualPreset.sakuraAura => dark
+          ? base.copyWith(
+              surface: const Color(0xFF131019),
+              surfaceContainerLowest: const Color(0xFF181420),
+              surfaceContainerLow: const Color(0xFF1C1726),
+              surfaceContainer: const Color(0xFF1F1A2A),
+              surfaceContainerHigh: const Color(0xFF221C2E),
+              surfaceContainerHighest: const Color(0xFF2D253B),
+              outlineVariant: const Color(0xFF382F4A),
+              onSurface: const Color(0xFFF6F1F8),
+              onSurfaceVariant: const Color(0xFFB0A4BC),
+              inverseSurface: const Color(0xFF382D47),
+              onInverseSurface: const Color(0xFFFBF7FC),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            )
+          : base.copyWith(
+              surface: const Color(0xFFFAF3F7),
+              surfaceContainer: const Color(0xFFFFFFFF),
+              surfaceContainerHigh: const Color(0xFFF4EAF0),
+              surfaceContainerHighest: const Color(0xFFECE0E8),
+              outlineVariant: const Color(0xFFEADCE4),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            ),
+      MeowVisualPreset.morandiMist => dark
+          ? base.copyWith(
+              surface: const Color(0xFF111413),
+              surfaceContainerLowest: const Color(0xFF161918),
+              surfaceContainerLow: const Color(0xFF191D1B),
+              surfaceContainer: const Color(0xFF1C201E),
+              surfaceContainerHigh: const Color(0xFF1E2321),
+              surfaceContainerHighest: const Color(0xFF272D2A),
+              outlineVariant: const Color(0xFF323936),
+              onSurface: const Color(0xFFEDF1EE),
+              onSurfaceVariant: const Color(0xFF9BA6A0),
+              inverseSurface: const Color(0xFF2D3532),
+              onInverseSurface: const Color(0xFFF1F5F2),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            )
+          : base.copyWith(
+              surface: const Color(0xFFF2F3F0),
+              surfaceContainer: const Color(0xFFFFFFFF),
+              surfaceContainerHigh: const Color(0xFFE9ECE8),
+              surfaceContainerHighest: const Color(0xFFDFE3DE),
+              outlineVariant: const Color(0xFFDDE1DC),
+              errorContainer: errorContainer,
+              onErrorContainer: onErrorContainer,
+            ),
+    };
+  }
 }
 
 /// 色板以外的语义色：通（绿）/ 慢（琥珀）/ 第三种状态色（青），各带 container 与上面的字色。
@@ -146,12 +282,12 @@ abstract final class MeowSprings {
   static const effectsDuration = Duration(milliseconds: 200);
 }
 
-/// 卡片底色：M3 默认的 surfaceContainerLow 和页面底（surface）太接近，深色下几乎分不出（用户反馈「卡片和背景色糊在一起」），
-/// 统一加深一级：浅色 surfaceContainer、深色 surfaceContainerHigh；卡片里的次级块（[cardInner]）再深一级。
+/// 卡片底色与极细描边：深浅色都保持清透实底 + 0.8px 细描边，层次分明。
 extension MeowCardColors on ColorScheme {
   bool get _dark => brightness == Brightness.dark;
   Color get card => _dark ? surfaceContainerHigh : surfaceContainer;
   Color get cardInner => _dark ? surfaceContainerHighest : surfaceContainerHigh;
+  Color get cardBorder => outlineVariant.withValues(alpha: _dark ? 0.55 : 0.7);
 }
 
 extension MeowM3Context on BuildContext {

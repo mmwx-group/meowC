@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
+import 'glass.dart';
 import 'haptics.dart';
 import 'm3.dart';
 import 'motion.dart';
@@ -32,11 +33,15 @@ class M3Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = context.cs;
     final r = borderRadius ?? BorderRadius.circular(radius);
     final body = Padding(padding: padding, child: child);
     return Material(
-      color: color ?? context.cs.card,
-      borderRadius: r,
+      color: color ?? cs.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: r,
+        side: BorderSide(color: cs.cardBorder, width: 0.8),
+      ),
       clipBehavior: onTap == null ? Clip.none : Clip.antiAlias,
       child: onTap == null ? body : InkWell(onTap: onTap, child: body),
     );
@@ -119,6 +124,18 @@ class M3IconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
+    if (meowGlassOn(context)) {
+      final fg = tertiary ? cs.tertiary : cs.onSurface;
+      return MeowGlassButton(
+        tooltip: tooltip,
+        onTap: onPressed,
+        style: MeowGlassStyles.control(context, accentTint: tertiary ? cs.tertiary : null),
+        child: SizedBox.square(
+          dimension: size,
+          child: Icon(icon, size: size * 0.5, color: fg),
+        ),
+      );
+    }
     final (bg, fg) = tertiary
         ? (cs.tertiaryContainer, cs.onTertiaryContainer)
         : tonal
@@ -260,8 +277,22 @@ class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTi
                     ),
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: cs.inverseSurface,
+                        // 在液态玻璃弹出层内（surfaceContainer 为半透明）使用主色高对比滑块，确保选中态在浅/深玻璃上都一眼清晰
+                        color: cs.surfaceContainer.a < 0.95
+                            ? cs.primary
+                            : (cs.brightness == Brightness.dark ? cs.inverseSurface : cs.card),
                         borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
+                        border: Border.all(
+                          color: cs.surfaceContainer.a < 0.95 ? Colors.transparent : cs.cardBorder,
+                          width: 0.8,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: cs.brightness == Brightness.dark ? 0.24 : 0.08),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -305,7 +336,9 @@ class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTi
                 fontSize: widget.fontSize,
                 fontWeight: on ? FontWeight.w700 : FontWeight.w500,
                 color: on
-                    ? cs.onInverseSurface
+                    ? (cs.surfaceContainer.a < 0.95
+                        ? cs.onPrimary
+                        : (cs.brightness == Brightness.dark ? cs.onInverseSurface : cs.onSurface))
                     : (widget.dimmed.contains(value) ? cs.outline : cs.onSurfaceVariant),
                 fontFamilyFallback: linuxTextFallback,
               ),
@@ -570,7 +603,11 @@ class M3ListRow extends StatelessWidget {
           final rr = _nonNegative(r!);
           return AnimatedContainer(
             duration: MeowSprings.effectsDuration,
-            decoration: BoxDecoration(color: selected ? cs.secondaryContainer : (color ?? cs.card), borderRadius: rr),
+            decoration: BoxDecoration(
+              color: selected ? cs.secondaryContainer : (color ?? cs.card),
+              borderRadius: rr,
+              border: Border.all(color: selected ? cs.primary.withValues(alpha: 0.35) : cs.cardBorder, width: 0.8),
+            ),
             child: Material(
               type: MaterialType.transparency,
               borderRadius: rr,

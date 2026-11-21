@@ -2,18 +2,20 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../state/ui_prefs.dart';
 import 'm3.dart';
 import 'tokens.dart';
 
-/// MeowX 主题：Material 3 Expressive。色板由种子色生成（[MeowColors.scheme]：缺省品牌玫瑰，可换主题色或跟随系统取色，
-/// 种子怎么定见 seed.dart），各组件按 M3E 的形状与字重调过；旧页面用的 `context.mm` 由同一份色板推出（[MeowTokens.fromScheme]）。
+/// MeowX 主题：Material 3 Expressive。色板由种子色 + 视觉预设生成（[MeowColors.scheme]），
+/// 各组件按 M3E 的形状与字重调过；旧页面用的 `context.mm` 由同一份色板推出（[MeowTokens.fromScheme]）。
 ThemeData meowThemeData({
   required Brightness brightness,
   String? fontFamily,
   PageTransitionsTheme? pageTransitionsTheme,
   Color seed = MeowColors.brandSeed,
+  MeowVisualPreset preset = MeowVisualPreset.crispMist,
 }) {
-  final cs = MeowColors.scheme(seed, brightness);
+  final cs = MeowColors.scheme(seed, brightness, preset: preset);
   final x = MeowM3.from(cs);
   const stadium = StadiumBorder();
   RoundedRectangleBorder rounded(double r) => RoundedRectangleBorder(borderRadius: BorderRadius.circular(r));
@@ -167,28 +169,37 @@ class MeowThemes {
   String? _fontFamily;
   PageTransitionsTheme? _transitions;
   Color _seed = MeowColors.brandSeed;
+  MeowVisualPreset _preset = MeowVisualPreset.crispMist;
   ThemeData? _light, _dark;
 
   ({ThemeData light, ThemeData dark}) of({
     String? fontFamily,
     PageTransitionsTheme? pageTransitionsTheme,
     Color seed = MeowColors.brandSeed,
+    MeowVisualPreset preset = MeowVisualPreset.crispMist,
   }) {
-    if (_light == null || _fontFamily != fontFamily || _transitions != pageTransitionsTheme || _seed != seed) {
+    if (_light == null ||
+        _fontFamily != fontFamily ||
+        _transitions != pageTransitionsTheme ||
+        _seed != seed ||
+        _preset != preset) {
       _fontFamily = fontFamily;
       _transitions = pageTransitionsTheme;
       _seed = seed;
+      _preset = preset;
       _light = meowThemeData(
         brightness: Brightness.light,
         fontFamily: fontFamily,
         pageTransitionsTheme: pageTransitionsTheme,
         seed: seed,
+        preset: preset,
       );
       _dark = meowThemeData(
         brightness: Brightness.dark,
         fontFamily: fontFamily,
         pageTransitionsTheme: pageTransitionsTheme,
         seed: seed,
+        preset: preset,
       );
     }
     return (light: _light!, dark: _dark!);

@@ -308,7 +308,7 @@ class _CurrentTile extends StatelessWidget {
     // subscription-userinfo 缺失时 Bettbox 也会给一个全 0 的 SubscriptionInfo，按「无用量信息」处理
     final hasUsage = info != null && (total > 0 || used > 0 || expire > 0);
     final direct = isDirectProfile(profile.id);
-    final meta = [
+    final primaryMeta = [
       if (direct)
         '内置 · 流量全部直连'
       else if (!hasUsage)
@@ -322,13 +322,17 @@ class _CurrentTile extends StatelessWidget {
         else
           '到期 ${fmtDate(DateTime.fromMillisecondsSinceEpoch(expire * 1000))}',
       ],
-      if (!direct && profile.lastUpdateDate != null) '${fmtRelative(profile.lastUpdateDate!)}更新',
     ].join(' · ');
+    final updatedMeta = !direct && profile.lastUpdateDate != null ? '${fmtRelative(profile.lastUpdateDate!)}更新' : null;
     final fg = cs.onSecondaryContainer;
     return Semantics(
       label: '当前订阅',
       child: Container(
-        decoration: BoxDecoration(color: cs.secondaryContainer, borderRadius: BorderRadius.circular(MeowShape.xl)),
+        decoration: BoxDecoration(
+          color: cs.secondaryContainer,
+          borderRadius: BorderRadius.circular(MeowShape.xl),
+          border: Border.all(color: cs.primary.withValues(alpha: 0.28), width: 0.8),
+        ),
         padding: const EdgeInsets.fromLTRB(14, 12, 4, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -347,13 +351,20 @@ class _CurrentTile extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: MeowFont.body, fontWeight: FontWeight.w700, color: fg),
                       ),
-                      const SizedBox(height: 1),
+                      const SizedBox(height: 2),
                       Text(
-                        meta,
-                        maxLines: 2,
+                        primaryMeta,
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: MeowFont.caption, color: fg.withValues(alpha: 0.85)),
+                        style: TextStyle(fontSize: MeowFont.caption, color: fg.withValues(alpha: 0.88)),
                       ),
+                      if (updatedMeta != null)
+                        Text(
+                          updatedMeta,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: MeowFont.caption2, color: fg.withValues(alpha: 0.68)),
+                        ),
                     ],
                   ),
                 ),
@@ -363,7 +374,12 @@ class _CurrentTile extends StatelessWidget {
             if (hasUsage && total > 0)
               Padding(
                 padding: const EdgeInsets.fromLTRB(54, 8, 14, 0),
-                child: M3WavyProgress(value: frac, color: frac > 0.9 ? cs.error : null, height: 10),
+                child: M3WavyProgress(
+                  value: frac,
+                  color: frac > 0.9 ? cs.error : cs.primary,
+                  trackColor: fg.withValues(alpha: 0.24),
+                  height: 10,
+                ),
               ),
           ],
         ),

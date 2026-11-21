@@ -16,6 +16,7 @@ import 'package:bett_box/meowx/app/glass_host.dart';
 import 'package:bett_box/meowx/app/meow_root.dart';
 import 'package:bett_box/meowx/app/window_controls.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
+import 'package:bett_box/meowx/state/ui_prefs.dart';
 import 'package:bett_box/meowx/theme/meow_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
@@ -214,10 +215,12 @@ class ApplicationState extends ConsumerState<Application>
             // 切语言、改无关的主题设置都会让 MaterialApp 做一次 200ms 的主题插值，期间全树逐帧重建。
             // 上面仍然整体 watch themeSettingProvider：ThemeManager 的文字缩放是在 build 里 ref.read 的，靠这里重建带动。
             // MeowX：「我的 › 外观」的主题色 / 跟随系统取色定种子色，两份主题跟着它换（只这两项变才重建）
+            final uiPreset = ref.watch(meowUiPrefsProvider.select((s) => s.preset));
             final themes = _themes.of(
               fontFamily: fontFamily,
               pageTransitionsTheme: _pageTransitionsTheme,
               seed: meowSeedOf(ref.watch(meowLookProvider)),
+              preset: uiPreset,
             );
 
             return MaterialApp(

@@ -47,9 +47,11 @@ class AccountCard extends ConsumerWidget {
       width: avatarSize,
       height: avatarSize,
     );
+    final dark = context.isDarkMode;
+    final cardBg = dark ? Color.alphaBlend(cs.primary.withValues(alpha: 0.10), cs.card) : cs.primaryContainer;
     return M3Card(
       radius: compact ? MeowShape.xl : MeowShape.xlInc,
-      color: cs.primaryContainer,
+      color: cardBg,
       padding: EdgeInsets.all(compact ? 14 : 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -36,8 +36,9 @@ import 'memory_report.dart';
 /// 菜单：本机订阅（当前那份打勾）→ 已登录时账户下还没下载的（去重见 [notDownloadedSubscriptions]，点了先下载再切）→「导入订阅…」去「我的」。
 /// 没有当前档时是去「我的」导入的引导。[dense] = 宽屏 / Windows 首页的紧凑版：同样的内容与交互，尺寸小一档。
 class HomeSubscriptionCard extends ConsumerStatefulWidget {
-  const HomeSubscriptionCard({super.key, this.dense = false});
+  const HomeSubscriptionCard({super.key, this.dense = false, this.compact = false});
   final bool dense;
+  final bool compact;
 
   @override
   ConsumerState<HomeSubscriptionCard> createState() => _HomeSubscriptionCardState();
@@ -293,8 +294,29 @@ class _HomeSubscriptionCardState extends ConsumerState<HomeSubscriptionCard> {
             );
     }
 
-    // 照 iOS 首页订阅卡（2026-11-18 用户：安卓首页卡片太高）：名字 + 切换订阅一行，用量条，「已用 · 到期」与更新时间并排一行
-    final lineText = Text(line, maxLines: 1, overflow: TextOverflow.ellipsis, style: caption);
+    final compact = widget.compact;
+    final lineText = Text(line, maxLines: compact ? 2 : 1, overflow: TextOverflow.ellipsis, style: caption);
+    if (compact) {
+      return M3Card(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Expanded(child: Align(alignment: Alignment.centerLeft, child: name)),
+              ],
+            ),
+            if (progress != null) ...[const SizedBox(height: 10), progress],
+            const SizedBox(height: 8),
+            lineText,
+            const SizedBox(height: 8),
+            Align(alignment: Alignment.centerLeft, child: chip),
+          ],
+        ),
+      );
+    }
     return M3Card(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
@@ -371,7 +393,10 @@ class HomeFeatureTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: bg,
-    borderRadius: borderRadius,
+    shape: RoundedRectangleBorder(
+      borderRadius: borderRadius,
+      side: BorderSide(color: context.cs.cardBorder, width: 0.8),
+    ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(onTap: onTap, child: single ? _row() : _tile()),
   );
@@ -456,6 +481,7 @@ class HomeProxyAppsRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = context.cs;
+    final dark = context.isDarkMode;
     final access = ref.watch(vpnSettingProvider.select((s) => s.accessControl));
     final count = access.currentList.length;
     final summary = !access.enable
@@ -463,12 +489,14 @@ class HomeProxyAppsRow extends ConsumerWidget {
         : access.mode == AccessControlMode.acceptSelected
         ? '白名单 · 只代理选中的 $count 个应用'
         : '黑名单 · $count 个应用不走代理';
+    final badgeBg = dark ? Color.alphaBlend(cs.primary.withValues(alpha: 0.2), cs.cardInner) : cs.primaryContainer;
+    final badgeFg = dark ? cs.primary : cs.onPrimaryContainer;
     return HomeFeatureTile(
-      icon: const Icon(Icons.apps_rounded),
+      icon: M3IconTile(icon: Icons.apps_rounded, bg: badgeBg, fg: badgeFg, size: 38),
       title: '代理应用',
       subtitle: summary,
-      bg: cs.secondaryContainer,
-      fg: cs.onSecondaryContainer,
+      bg: cs.card,
+      fg: cs.onSurface,
       borderRadius: borderRadius,
       single: single,
       onTap: () => BaseNavigator.push(context, const ProxyAppsPage()),
@@ -531,7 +559,10 @@ Widget _tileRow(BuildContext context, List<Widget> tiles) {
   final cs = context.cs;
   return Material(
     color: cs.card,
-    borderRadius: BorderRadius.circular(MeowShape.lInc),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(MeowShape.lInc),
+      side: BorderSide(color: cs.cardBorder, width: 0.8),
+    ),
     clipBehavior: Clip.antiAlias,
     child: IntrinsicHeight(
       child: Row(
@@ -547,43 +578,62 @@ Widget _tileRow(BuildContext context, List<Widget> tiles) {
   );
 }
 
-/// 指标行：代理连接 / 直连连接（点了去「动态」）/ 内存 / DNS 模式。[cards] = 开着的那几格，按这个顺序排，等分一行。
+/// 指标行：代理连接 / 直连连接（点了去「动态」）/ 内存 / DNS 模式。[cards] = 开着的那几格，按这个顺序排，等分一行；[compact] 时自适应 2×2 网格。
 class HomeMetricsRow extends ConsumerWidget {
-  const HomeMetricsRow({super.key, required this.cards, this.dense = false});
+  const HomeMetricsRow({super.key, required this.cards, this.dense = false, this.compact = false});
   final List<HomeCard> cards;
   final bool dense;
+  final bool compact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
     final running = ref.watch(isRunningProvider);
-    // 计数 / 内存每一两秒变一次：不在首页时不跟
     final stats = ref.watchOnTab(MeowTab.home, connStatsProvider);
     void toActivity() => goTab(ref, MeowTab.connections);
-    return _tileRow(context, [
+    final built = [
       for (final c in cards)
         switch (c) {
           HomeCard.proxied => _Tile(
             label: S.proxyConnections,
             value: '${running ? stats.proxied : 0}',
-            dense: dense,
+            dense: dense || compact,
             onTap: toActivity,
           ),
           HomeCard.direct => _Tile(
             label: S.directConnections,
             value: '${running ? stats.direct : 0}',
-            dense: dense,
+            dense: dense || compact,
             onTap: toActivity,
           ),
           HomeCard.memory => _Tile(
-            label: dense ? S.coreMemory : S.memory,
+            label: dense || compact ? S.coreMemory : S.memory,
             value: running && stats.memory > 0 ? fmtSize(stats.memory) : '—',
-            dense: dense,
-            // 点开看核心的内存构成（同 iOS）
+            dense: dense || compact,
             onTap: running ? () => unawaited(showMemoryReport(context)) : null,
           ),
-          _ => _DnsTile(dense: dense),
+          _ => _DnsTile(dense: dense || compact),
         },
-    ]);
+    ];
+    if (!compact || built.length <= 2) return _tileRow(context, built);
+    final top = built.take(2).toList();
+    final bottom = built.skip(2).toList();
+    return Material(
+      color: cs.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(MeowShape.lInc),
+        side: BorderSide(color: cs.cardBorder, width: 0.8),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(children: [for (final (i, t) in top.indexed) ...[if (i > 0) Container(width: 1, height: 36, color: cs.outlineVariant), Expanded(child: t)]]),
+          Divider(height: 1, thickness: 1, indent: 12, endIndent: 12, color: cs.outlineVariant),
+          Row(children: [for (final (i, t) in bottom.indexed) ...[if (i > 0) Container(width: 1, height: 36, color: cs.outlineVariant), Expanded(child: t)]]),
+        ],
+      ),
+    );
   }
 }
 
@@ -624,8 +674,9 @@ class _DnsTile extends ConsumerWidget {
 /// 连接状态或节点变化（checkIpNum）后延迟 1.5s 重查；国内格不需要连接。手动重查在页面标题行的圆钮上。
 /// 这个 widget 不在树上（「首页卡片」里关掉了出口 IP）就不查。
 class HomeExitIp extends ConsumerStatefulWidget {
-  const HomeExitIp({super.key, this.dense = false});
+  const HomeExitIp({super.key, this.dense = false, this.compact = false});
   final bool dense;
+  final bool compact;
 
   @override
   ConsumerState<HomeExitIp> createState() => _HomeExitIpState();
@@ -709,14 +760,31 @@ class _HomeExitIpState extends ConsumerState<HomeExitIp> {
     // 标题开头是 IP 所属地区的中文名（同 iOS #1775：「香港 · 经 X」「中国大陆 · 直连出口」）；还没查到时照旧写「国内 / 国际」
     final domestic = (st.domestic != null ? regionNameZh(st.domestic!.countryCode) : null) ?? '国内';
     final international = (st.global != null ? regionNameZh(st.global!.countryCode) : null) ?? '国际';
-    return _tileRow(context, [
-      tile('$domestic · ${S.directExit}', st.domestic, loading: st.loadingDomestic, placeholder: '—'),
-      tile(
-        running && via != null ? '$international · 经 $via' : '$international · ${S.proxyExit}',
-        st.global,
-        loading: st.loadingGlobal,
-        placeholder: running ? '—' : S.disconnected,
-      ),
-    ]);
+    final directTile = tile('$domestic · ${S.directExit}', st.domestic, loading: st.loadingDomestic, placeholder: '—');
+    final proxyTile = tile(
+      running && via != null ? '$international · 经 $via' : '$international · ${S.proxyExit}',
+      st.global,
+      loading: st.loadingGlobal,
+      placeholder: running ? '—' : S.disconnected,
+    );
+    if (widget.compact) {
+      return Material(
+        color: cs.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(MeowShape.lInc),
+          side: BorderSide(color: cs.cardBorder, width: 0.8),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            directTile,
+            Divider(height: 1, thickness: 1, indent: 12, endIndent: 12, color: cs.outlineVariant),
+            proxyTile,
+          ],
+        ),
+      );
+    }
+    return _tileRow(context, [directTile, proxyTile]);
   }
 }

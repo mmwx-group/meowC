@@ -18,6 +18,7 @@ import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/haptics.dart';
+import '../../theme/m3.dart';
 import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'entry_badge.dart';
@@ -291,15 +292,19 @@ class _NodeCell extends ConsumerWidget {
     final unlocks = ref.watch(nodeUnlocksProvider.select((m) => m[proxy.name]));
     final testable = _testable(proxy);
 
+    final cs = context.cs;
     final radius = BorderRadius.circular(s.radius);
-    final cell = Container(
-        // 描边的 2 算在内边距里：选中 / 未选中内容不位移
-        padding: EdgeInsets.symmetric(horizontal: s.padH - 2, vertical: s.padV - 2),
-        // 深色主题的 soft 是半透明的，先叠到卡片底上，不然透出的是页面底、比没选中的格子还暗
+    final cell = AnimatedContainer(
+        duration: MeowSprings.effectsDuration,
+        // 描边算在内边距里：选中 / 未选中内容不位移
+        padding: EdgeInsets.symmetric(horizontal: s.padH - 1.5, vertical: s.padV - 1.5),
         decoration: BoxDecoration(
-          color: selected ? mm.selectedCard : mm.elev,
+          color: selected ? mm.selectedCard : cs.card,
           borderRadius: radius,
-          border: Border.all(color: selected ? mm.accent : Colors.transparent, width: 2),
+          border: Border.all(
+            color: selected ? cs.primary.withValues(alpha: 0.65) : cs.cardBorder,
+            width: selected ? 1.4 : 0.8,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

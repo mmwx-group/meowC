@@ -9,7 +9,6 @@ import 'package:bett_box/meowx/panel/account.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
 import 'package:bett_box/meowx/state/status.dart';
 import 'package:bett_box/meowx/theme/badges.dart';
-import 'package:bett_box/meowx/theme/m3_kit.dart';
 import 'package:bett_box/meowx/theme/unlock_badge.dart';
 import 'package:bett_box/meowx/theme/widgets.dart';
 import 'package:bett_box/models/models.dart';
@@ -224,12 +223,11 @@ void main() {
 
     expect(find.text('节点'), findsOneWidget);
     expect(find.text('4 个代理组 · 13 个节点'), findsOneWidget);   // 12 个节点 + DIRECT，嵌套的组不算
-    // 一排代理组 chip（不左右滑动换组），选中的是订阅记下的组
+    // 顶部一张代理组选择卡片（2026-11-21 起代替一排组 chip，点了弹气泡选组），写的是订阅记下的组
     expect(find.byType(PageView), findsNothing);
-    expect(find.byType(GroupChipBar), findsOneWidget);
-    final chip = tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '自动选择'));
-    expect(chip.selected, isTrue);
-    // 没有组摘要卡、没有「自动选择」开关（2026-11-17，同 iOS）；chip 行尾的测速钮带组延迟（没测过才是闪电）
+    expect(find.byType(GroupChipBar), findsNothing);
+    _expectSelectedGroup('自动选择');
+    // 没有组摘要卡、没有「自动选择」开关（2026-11-17，同 iOS）；选择卡片右侧的测速钮带组延迟（没测过才是闪电）
     expect(find.byType(GroupSummary), findsNothing);
     expect(find.byType(Switch), findsNothing);
     expect(find.descendant(of: find.byType(GroupTestButton), matching: find.text('38')), findsOneWidget);
@@ -300,7 +298,7 @@ void main() {
     );
 
     // 没记过停在哪个组 → 第一个组
-    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '节点选择')).selected, isTrue);
+    _expectSelectedGroup('节点选择');
     expect(find.text('代理组 · 延迟最低'), findsOneWidget);   // 中文系统写中文类型名
     expect(find.text('直连'), findsOneWidget);
     expect(find.byIcon(Icons.layers_rounded), findsOneWidget);
@@ -393,7 +391,7 @@ void main() {
     expect(identical(tester.element(lower), before), isTrue);
   });
 
-  testWidgets('手机 · 单组布局：点组 chip 换组，节点换成该组并记下（窄屏 1.4 倍字号）', (tester) async {
+  testWidgets('手机 · 单组布局：点选择卡片弹出气泡选组，节点换成该组并记下（窄屏 1.4 倍字号）', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 800),
@@ -404,15 +402,19 @@ void main() {
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '自动选择');
 
     const target = 'AI 服务（名字也很长的一个代理组）';
-    await tester.ensureVisible(find.widgetWithText(M3FilterChip, target));
+    await tester.tap(_groupSelector());
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(M3FilterChip, target));
+    expect(find.text('选择代理组'), findsOneWidget);
+    await tester.ensureVisible(find.text(target).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(target).last);
     await tester.pump();
     // 换组当帧旧清单就撤走，只有新的一份在淡入
     expect(find.byType(NodeSliverGrid), findsOneWidget);
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, target);
     await tester.pumpAndSettle();
-    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, target)).selected, isTrue);
+    expect(find.text('选择代理组'), findsNothing, reason: '选了就关气泡');
+    _expectSelectedGroup(target);
     // 记在订阅上（重进节点页、重启后照它停）
     expect(container.read(currentProfileProvider)?.currentGroupName, target);
     expect(tester.takeException(), isNull);
@@ -440,7 +442,7 @@ void main() {
       textScale: 1,
     );
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '负载均衡');
-    expect(tester.widget<M3FilterChip>(find.widgetWithText(M3FilterChip, '负载均衡')).selected, isTrue);
+    _expectSelectedGroup('负载均衡');
 
     await _pump(
       tester,
@@ -451,7 +453,7 @@ void main() {
     expect(tester.widget<NodeSliverGrid>(find.byType(NodeSliverGrid)).group.name, '节点选择');
   });
 
-  testWidgets('手机 · 单组布局：点节点（selectedMap 变）只更新节点，组 chip 不重建', (tester) async {
+  testWidgets('手机 · 单组布局：点节点（selectedMap 变）只更新节点，组选择卡片不重建', (tester) async {
     await _pump(
       tester,
       size: const Size(360, 1600),
@@ -459,15 +461,15 @@ void main() {
       textScale: 1,
     );
     final container = ProviderScope.containerOf(tester.element(find.byType(ProxiesPage)));
-    final button = tester.widget<GroupChipBar>(find.byType(GroupChipBar));
+    final card = tester.widget(_groupSelectorCard);
     expect(find.byIcon(Icons.push_pin_rounded), findsNothing);
 
     container.read(_liveProfile.notifier).state = _profile(selected: const {'节点选择': '自动选择', '自动选择': '东京 01 · IIJ'});
     await tester.pump();
 
-    // 节点跟着变了（固定的节点画上图钉），组 chip 还是原来那个 widget
+    // 节点跟着变了（固定的节点画上图钉），组选择卡片还是原来那个 widget
     expect(find.byIcon(Icons.push_pin_rounded), findsOneWidget);
-    expect(identical(tester.widget<GroupChipBar>(find.byType(GroupChipBar)), button), isTrue);
+    expect(identical(tester.widget(_groupSelectorCard), card), isTrue);
   });
 
   testWidgets('节点网格的列数在布局阶段跟着宽度走：窗口变宽 / 只变高都不重建网格', (tester) async {
@@ -528,7 +530,7 @@ void main() {
       overrides: _overrides(profile: _profile(), wide: true),
     );
 
-    expect(find.byType(GroupChipBar), findsOneWidget);
+    expect(_groupSelectorCard, findsOneWidget);
     expect(find.byTooltip('全部测速'), findsOneWidget);
     expect(_gridColumns(tester), 3);
   });
@@ -578,3 +580,20 @@ void main() {
 
 /// 按组名找组卡（组卡第二行写当前节点，别的组选中「自动选择」时 widgetWithText 会多匹配）
 Finder _groupCard(String name) => find.byWidgetPredicate((w) => w is GroupCard && w.group.name == name);
+
+/// 单组布局顶部的代理组选择卡片（私有类，按类名找）
+final _groupSelectorCard = find.byWidgetPredicate((w) => w.runtimeType.toString() == '_GroupSelectorCard');
+
+/// 选择卡片上可点的那张卡
+Finder _groupSelector() => find.descendant(of: _groupSelectorCard, matching: find.byIcon(Icons.unfold_more_rounded));
+
+/// 选择卡片写的是这个组
+void _expectSelectedGroup(String name) {
+  expect(_groupSelectorCard, findsOneWidget);
+  // 组名是卡片上那行粗体大字（类型标签里可能也写着同样的字，如「负载均衡」）
+  final title = find.descendant(
+    of: _groupSelectorCard,
+    matching: find.byWidgetPredicate((w) => w is Text && w.data == name && w.style?.fontWeight == FontWeight.w800),
+  );
+  expect(title, findsOneWidget);
+}

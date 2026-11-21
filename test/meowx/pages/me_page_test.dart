@@ -557,8 +557,10 @@ void main() {
     expect(bottoms.length, 3, reason: '三列都有内容：$bottoms');
     final tallest = bottoms.values.reduce((a, b) => a > b ? a : b);
     final shortest = bottoms.values.reduce((a, b) => a < b ? a : b);
-    final smallestSection = rects.map((r) => r.height).reduce((a, b) => a < b ? a : b);
-    expect(tallest - shortest, lessThan(smallestSection), reason: '$bottoms');
+    // 分组按原顺序连续切三段：三列底边相差不到最高的那个分组（2026-11-21 起「外观」有主题预设，比别的分组高出很多，
+    // 怎么切都差不到「最矮的分组」那么少；以前的 #1772 是第 3 列比另外两列高出一千多像素）
+    final largestSection = rects.map((r) => r.height).reduce((a, b) => a > b ? a : b);
+    expect(tallest - shortest, lessThan(largestSection), reason: '$bottoms');
 
     // 读的顺序不变：同一列里从上往下、换列往右
     for (var i = 1; i < rects.length; i++) {

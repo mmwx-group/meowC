@@ -220,19 +220,30 @@ class _EntryList extends ConsumerWidget {
     final bypassCount = meow.bypassDomains.length + meow.bypassCidrs.length;
     final availableUpdate = ref.watch(availableUpdateProvider);
 
-    // 图标块（画布稿 Me）：按入口轮换四种色调容器与四种形状，平台专属的几行用第三色容器
-    final cs = context.cs;
-    final tones = [
-      (cs.primaryContainer, cs.onPrimaryContainer),
-      (cs.tertiaryContainer, cs.onTertiaryContainer),
-      (cs.secondaryContainer, cs.onSecondaryContainer),
-      (cs.surfaceContainerHighest, cs.onSurfaceVariant),
-    ];
+    // 图标块：清透和谐的柔和粉彩色板（去掉深色下发脏发闷的暗土黄色块）
+    final dark = context.isDarkMode;
+    final tones = dark
+        ? const [
+            (Color(0xFF331D28), Color(0xFFFF8FB1)), // 樱粉
+            (Color(0xFF192B38), Color(0xFF7CC8F8)), // 天青
+            (Color(0xFF172E26), Color(0xFF6EE7B7)), // 薄荷
+            (Color(0xFF28223A), Color(0xFFC4B5FD)), // 薰衣草
+            (Color(0xFF32281A), Color(0xFFFCD34D)), // 琥珀
+          ]
+        : const [
+            (Color(0xFFFCE7F0), Color(0xFFB8326A)),
+            (Color(0xFFE6F4FE), Color(0xFF1D6FA5)),
+            (Color(0xFFE6F7F0), Color(0xFF1D7A58)),
+            (Color(0xFFF0ECFE), Color(0xFF5D46A8)),
+            (Color(0xFFFEF3DC), Color(0xFFA66B14)),
+          ];
     const shapes = [M3TileShape.circle, M3TileShape.rounded, M3TileShape.leafA, M3TileShape.leafB];
     var n = 0;
     Widget icon(_Glyph glyph, {bool platform = false}) {
       final i = n++;
-      final (bg, fg) = platform ? (cs.tertiaryContainer, cs.onTertiaryContainer) : tones[i % tones.length];
+      final (bg, fg) = platform
+          ? (dark ? const Color(0xFF1B2B3A) : const Color(0xFFE7F2FD), dark ? const Color(0xFF8CC8FF) : const Color(0xFF2465A8))
+          : tones[i % tones.length];
       return M3IconTile(
         shape: shapes[i % shapes.length],
         bg: bg,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../app/window_controls.dart';
+import 'glass.dart';
 import 'm3.dart';
 import 'tokens.dart';
 import 'widgets.dart';
@@ -51,7 +52,7 @@ class PageTitle extends StatelessWidget {
   }
 }
 
-/// 标题右侧的圆形按钮（48，M3 的 surfaceContainerHighest 底；[filled] = 主色实底，用于该页的主操作）。
+/// 标题右侧的圆形按钮（48）：液态玻璃主题下使用与 Dock 同款的光学折射玻璃圆钮，其余主题用 M3 实色圆钮。
 class RoundGlassButton extends StatelessWidget {
   const RoundGlassButton({
     super.key,
@@ -76,24 +77,31 @@ class RoundGlassButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    final fg = color ?? (filled ? cs.onPrimary : cs.onSurface);
+    final glass = meowGlassOn(context);
+    final fg = color ?? (filled ? (glass ? cs.onSurface : cs.onPrimary) : cs.onSurface);
+    final inner = SizedBox.square(
+      dimension: 48,
+      child: Center(
+        child: busy
+            ? SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: fg))
+            : glyph != null
+            ? MeowIcon(glyph!, size: 22, color: fg)
+            : Icon(icon, size: 24, color: fg),
+      ),
+    );
+    if (glass) {
+      return MeowGlassButton(
+        tooltip: tooltip,
+        onTap: busy ? null : onTap,
+        style: MeowGlassStyles.control(context, accentTint: filled ? cs.primary : null),
+        child: inner,
+      );
+    }
     final btn = Material(
       color: filled ? cs.primary : cs.surfaceContainerHighest,
       shape: const CircleBorder(),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: busy ? null : onTap,
-        child: SizedBox.square(
-          dimension: 48,
-          child: Center(
-            child: busy
-                ? SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: fg))
-                : glyph != null
-                ? MeowIcon(glyph!, size: 22, color: fg)
-                : Icon(icon, size: 24, color: fg),
-          ),
-        ),
-      ),
+      child: InkWell(onTap: busy ? null : onTap, child: inner),
     );
     return tooltip == null ? btn : Tooltip(message: tooltip!, child: btn);
   }

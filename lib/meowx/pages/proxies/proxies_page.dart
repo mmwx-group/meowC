@@ -9,15 +9,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/meow_tab.dart';
 import '../../app/strings.dart';
 import '../../panel/account.dart';
+import '../../state/format.dart';
 import '../../state/log_source.dart';
 import '../../state/meow_settings.dart';
 import '../../state/proxy_providers.dart';
 import '../../state/status.dart';
 import '../../theme/badges.dart';
 import '../../theme/haptics.dart';
+import '../../theme/latency_badge.dart';
 import '../../theme/m3.dart';
 import '../../theme/m3_kit.dart';
 import '../../theme/meow_dialog.dart';
+import '../../theme/target_icon.dart';
 import '../../theme/motion.dart';
 import '../../theme/page_title.dart';
 import '../../theme/sliver_reveal.dart';
@@ -27,6 +30,7 @@ import '../../theme/widgets.dart';
 import 'group_reveal.dart';
 import 'group_widgets.dart';
 import 'node_grid.dart';
+import 'node_parts.dart' show NestedGroupIcon;
 
 /// 展开的组（手机列表布局；默认全部收起，不落盘）。
 final expandedGroupsProvider = StateProvider<Set<String>>((ref) => {});
@@ -271,7 +275,6 @@ class _ProxiesPageState extends ConsumerState<ProxiesPage> with TickerProviderSt
           const SizedBox(width: 8),
           RoundGlassButton(
             icon: Icons.bolt_rounded,
-            filled: true,
             busy: _testingAll,
             tooltip: S.testAll,
             onTap: groups.isEmpty ? null : () => _testAll(groups),
@@ -467,29 +470,14 @@ class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerPro
           padding: side.copyWith(top: pad.top, bottom: 14),
           sliver: SliverToBoxAdapter(child: widget.title),
         ),
-        // 代理组 chip + 行尾「测速本组」（带组延迟）；组摘要卡去掉了（2026-11-17，同 iOS）：策略写在组卡 / chip 上，
-        // 当前节点在下面的清单里是选中的那一行
+        // 单组顶部代理组选择卡片：去掉横向滑动条，点卡片弹出液态玻璃气泡上下滚动选组；本组延迟与测速按钮直接放在卡片右侧
         SliverPadding(
-          padding: EdgeInsets.only(bottom: 14, right: pad.right),
+          padding: side.copyWith(bottom: 12),
           sliver: SliverToBoxAdapter(
-            child: Row(
-              children: [
-                Expanded(
-                  child: GroupChipBar(
-                    groups: groups,
-                    selected: group.name,
-                    onSelected: _pick,
-                    padding: EdgeInsets.only(left: pad.left, right: 8),
-                  ),
-                ),
-                GroupTestButton(
-                  key: ValueKey('test:${group.name}'),
-                  group: group,
-                  delay: ref.watch(_groupDelayProvider(group)),
-                  compact: true,
-                  height: 40,
-                ),
-              ],
+            child: _GroupSelectorCard(
+              groups: groups,
+              group: group,
+              onSelected: _pick,
             ),
           ),
         ),
@@ -502,6 +490,178 @@ class _SingleGroupState extends ConsumerState<_SingleGroup> with SingleTickerPro
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 单组模式顶部的代理组选择卡片：左侧组图标 + 组名/策略/当前节点，右侧内置本组延迟与测速胶囊；
+/// 点击卡片从当前位置弹出液态玻璃气泡，上下顺滑滚动切换全部代理组。
+class _GroupSelectorCard extends ConsumerWidget {
+  const _GroupSelectorCard({
+    required this.groups,
+    required this.group,
+    required this.onSelected,
+  });
+
+  final List<Group> groups;
+  final Group group;
+  final ValueChanged<String> onSelected;
+
+  static (Color bg, Color fg) _monogramTone(String name, bool dark) {
+    const darkPalette = [
+      (Color(0xFF2D1E28), Color(0xFFFF9AB8)),
+      (Color(0xFF1A2A36), Color(0xFF7CC8F8)),
+      (Color(0xFF1A2D24), Color(0xFF6EE7B7)),
+      (Color(0xFF262138), Color(0xFFC4B5FD)),
+    ];
+    const lightPalette = [
+      (Color(0xFFFCE8F1), Color(0xFFB8326A)),
+      (Color(0xFFE7F3FE), Color(0xFF1D6FA5)),
+      (Color(0xFFE6F7F0), Color(0xFF1D7A58)),
+      (Color(0xFFF0ECFE), Color(0xFF5D46A8)),
+    ];
+    final palette = dark ? darkPalette : lightPalette;
+    return palette[name.hashCode.abs() % palette.length];
+  }
+
+  void _openPicker(BuildContext anchor) {
+    showMeowPopover<void>(
+      anchor,
+      title: '选择代理组',
+      width: 320,
+      builder: (ctx) => Consumer(
+        builder: (ctx, ref, _) {
+          final cs = ctx.cs;
+          final dark = ctx.isDarkMode;
+          final mode = ref.watch(meowSettingProvider.select((s) => s.latencyMode));
+          return M3SegmentedList(
+            children: [
+              for (final g in groups)
+                Builder(
+                  builder: (_) {
+                    final selected = g.name == group.name;
+                    final current = ref.watch(getSelectedProxyNameProvider(g.name)) ?? '';
+                    final delay = current.isEmpty
+                        ? null
+                        : ref.watch(getDelayProvider(proxyName: current, testUrl: g.testUrl));
+                    final (monoBg, monoFg) = _monogramTone(g.name, dark);
+                    return M3ListRow(
+                      title: g.icon.isEmpty ? nodeTitleWithoutFlag(g.name) : g.name,
+                      titleSize: 15,
+                      titleTrailing: GroupTypeTag(group: g, onSelected: selected),
+                      subtitle: current.isEmpty ? '${g.all.length} 个节点' : '$current · ${g.all.length} 个节点',
+                      subtitleMaxLines: 1,
+                      selected: selected,
+                      color: meowDialogRowColor(cs),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      leading: M3IconTile(
+                        shape: selected ? M3TileShape.circle : M3TileShape.rounded,
+                        bg: selected ? cs.primary : monoBg,
+                        fg: selected ? cs.onPrimary : monoFg,
+                        size: 36,
+                        text: g.icon.isEmpty ? nodeTileLabel(g.name) : null,
+                        child: g.icon.isEmpty ? null : CommonTargetIcon(src: g.icon, size: 20),
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (current.isNotEmpty) LatencyBadge(ms: delay, mode: mode, unit: false, fontSize: 11),
+                          if (selected) ...[
+                            const SizedBox(width: 6),
+                            Icon(Icons.check_rounded, size: 18, color: cs.primary),
+                          ],
+                        ],
+                      ),
+                      onTap: () {
+                        if (!selected) {
+                          MeowHaptics.select();
+                          onSelected(g.name);
+                        }
+                        Navigator.of(ctx).pop();
+                      },
+                    );
+                  },
+                ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
+    final dark = context.isDarkMode;
+    final current = ref.watch(getSelectedProxyNameProvider(group.name)) ?? '';
+    final delay = ref.watch(_groupDelayProvider(group));
+    final (monoBg, monoFg) = _monogramTone(group.name, dark);
+
+    return Builder(
+      builder: (anchor) => M3Card(
+        radius: 22,
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        onTap: () => _openPicker(anchor),
+        child: Row(
+          children: [
+            M3IconTile(
+              shape: M3TileShape.rounded,
+              bg: monoBg,
+              fg: monoFg,
+              size: 40,
+              text: group.icon.isEmpty ? nodeTileLabel(group.name) : null,
+              child: group.icon.isEmpty ? null : CommonTargetIcon(src: group.icon, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          group.icon.isEmpty ? nodeTitleWithoutFlag(group.name) : group.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: cs.onSurface),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      GroupTypeTag(group: group),
+                      const SizedBox(width: 2),
+                      Icon(Icons.unfold_more_rounded, size: 16, color: cs.onSurfaceVariant),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (current.isNotEmpty) NestedGroupIcon(current, size: 13, gap: 4),
+                      Flexible(
+                        child: Text(
+                          current.isEmpty ? '${group.all.length} 个节点' : '$current · ${group.all.length} 个节点',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: MeowFont.caption, color: cs.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            GroupTestButton(
+              key: ValueKey('test:${group.name}'),
+              group: group,
+              delay: delay,
+              compact: true,
+              height: 34,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

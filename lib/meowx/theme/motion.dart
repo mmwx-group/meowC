@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
+import '../state/ui_prefs.dart';
+
 /// MeowX 的动效参数：三档弹簧 + 几条曲线 + 各处的时序。各处都从这里取，不在页面里散写常数。
-/// 只动位移 / 缩放 / 透明度 / 颜色 / 尺寸，不动模糊和阴影半径；系统「移除动画」（[reduced]）时直接跳到终态。
+/// 支持「柔和 / 标准 / 灵动」三档动效强度；系统「移除动画」（[reduced]）时直接跳到终态。
 abstract final class MeowMotion {
   /// 柔和（展开容器、菜单变形）：微回弹
   static const soft = SpringDescription(mass: 1, stiffness: 170, damping: 22);
@@ -24,8 +26,21 @@ abstract final class MeowMotion {
   /// 系统设置了「移除动画」。
   static bool reduced(BuildContext context) => MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
-  /// 隐式动画的时长：「移除动画」时为零。
-  static Duration of(BuildContext context, Duration d) => reduced(context) ? Duration.zero : d;
+  /// 隐式动画的时长：「移除动画」时为零，否则按动效强度档位缩放。
+  static Duration of(BuildContext context, Duration d) {
+    if (reduced(context)) return Duration.zero;
+    final scale = MeowUiRuntime.current.motionLevel.durationScale;
+    return Duration(microseconds: (d.inMicroseconds * scale).round());
+  }
+
+  /// 按当前动效强度调校弹簧刚度与阻尼（柔和 = 更克制稳重，灵动 = 更有弹性）。
+  static SpringDescription tuned(SpringDescription base) {
+    final level = MeowUiRuntime.current.motionLevel;
+    if (level == MeowMotionLevel.standard) return base;
+    final stiffness = base.stiffness * (level == MeowMotionLevel.lively ? 1.18 : 0.85);
+    final damping = base.damping * (level == MeowMotionLevel.lively ? 0.84 : 1.18);
+    return SpringDescription(mass: base.mass, stiffness: stiffness, damping: damping);
+  }
 
   /// 用弹簧把 [c] 带到 [target]（接着当前速度走，打断也连贯）；[reduce] 时直接跳过去。
   /// [c] 要是 `AnimationController.unbounded`：弹簧会越过终点，有界的控制器会把回弹截掉。
@@ -35,7 +50,7 @@ abstract final class MeowMotion {
       c.value = target;
       return TickerFuture.complete();
     }
-    return c.animateWith(SpringSimulation(spring, c.value, target, c.velocity));
+    return c.animateWith(SpringSimulation(tuned(spring), c.value, target, c.velocity));
   }
 
   // ── 切 Tab 的内容平推（同 iOS：新页整宽推入、旧页反向退 30% 并淡出，背景不动）──

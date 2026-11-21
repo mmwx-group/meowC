@@ -310,10 +310,11 @@ void main() {
       expect(SpeedTestShareImage.iconAsset(Brightness.light), 'assets/images/icon_light_256.png');
     });
 
-    testWidgets('换主题色：卡片与上传那张卡的圆点都换成这个主题色生成的那份', (tester) async {
+    testWidgets('换主题色：上传那张卡的圆点换成这个主题色生成的那份，卡片保持中性实底', (tester) async {
       const seed = Color(0xFF2D6FB0);
       final t = SpeedTestShareImage.tokensFor(Brightness.light, seed);
-      expect(t.elevSolid, isNot(MeowTokens.light.elev));
+      // 卡片底色不随主题色（2026-11-21 起卡片一律清透实底，见 m3.dart）
+      expect(t.elevSolid, MeowTokens.light.elev);
       expect(t.accent, isNot(MeowTokens.light.accent));
       // 上传卡（中间那栏）的图例圆点中心在版式 x = 321.5 + 20.8 + 7.2（放大后约 839），沿这一列扫整个三栏区
       final column = await sample(tester, seed, Brightness.light, [card, for (var y = 192; y < 771; y++) (839, y)]);
@@ -645,7 +646,8 @@ void main() {
         final want = SpeedTestShareImage.tokensFor(brightness, Color(look.seed));
         expect(out!.$4, want.bg);
         expect(card.single, want.elevSolid);
-        expect(card.single, isNot(SpeedTestShareImage.tokensFor(brightness, MeowColors.brandSeed).elevSolid));
+        // 卡片底色不随主题色（2026-11-21 起卡片一律清透实底）：与品牌色那份相同
+        expect(card.single, SpeedTestShareImage.tokensFor(brightness, MeowColors.brandSeed).elevSolid);
         await tester.pumpAndSettle();
       });
     }
