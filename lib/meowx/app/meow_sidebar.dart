@@ -1,4 +1,3 @@
-import '../theme/card_surface.dart';
 import 'dart:async';
 
 import 'package:bett_box/enum/enum.dart';
@@ -9,8 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../state/connection.dart';
 import '../state/format.dart';
 import '../state/node_count.dart';
-import '../theme/button_fill.dart';
 import '../theme/m3.dart';
+import '../theme/motion.dart';
 import '../theme/tokens.dart';
 import '../theme/widgets.dart';
 import 'meow_tab.dart';
@@ -18,9 +17,9 @@ import 'meow_tab.dart';
 /// 侧栏放不放得下完整形态：窗口 / 屏幕宽 ≥ 1000 用 220 宽的完整侧栏，700–999 用 84 宽的图标栏。
 const sidebarFullMinWidth = 1000.0;
 
-/// 宽屏左侧栏（Windows 窗口、Android 平板）：品牌 → 四个目的地 → 常驻连接控制。
-/// 完整形态 220 宽：导航带名称和计数，底部是连接卡（状态、电源键、当前节点、Windows 上的 TUN / 系统代理）；
-/// 紧凑形态 84 宽：只有图标，底部只留电源键。
+/// 宽屏左侧栏（Windows / Linux 窗口、Android 平板）：品牌 → 四个目的地 → 常驻连接微控制台。
+/// 完整形态 220 宽：柔和通透选中态 + 桌面 hover 反馈 + 计数徽章 + 底部连接控制卡（电源键、当前节点、TUN / 系统代理）；
+/// 紧凑形态 84 宽：居中图标栏 + 底部电源键。
 class MeowSidebar extends StatelessWidget {
   const MeowSidebar({super.key, required this.selected, required this.onSelect, required this.compact});
 
@@ -33,7 +32,7 @@ class MeowSidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mm = context.mm;
+    final cs = context.cs;
     final nav = [
       for (final t in MeowTab.values)
         Padding(
@@ -42,11 +41,15 @@ class MeowSidebar extends StatelessWidget {
         ),
     ];
 
-    return MeowCard(
+    return Container(
       width: compact ? compactWidth - 12 : fullWidth - 12,
+      decoration: BoxDecoration(
+        color: cs.card,
+        borderRadius: BorderRadius.circular(MeowShape.xl),
+        border: Border.all(color: cs.cardBorder, width: 0.8),
+      ),
       padding: EdgeInsets.all(compact ? 10 : 12),
-      radius: BorderRadius.circular(MeowShape.xl),
-      // 矮窗口（手机横屏、缩到最小的窗口）放不下时栏内滚动，保证电源键不画到栏外
+      // 矮窗口放不下时栏内滚动，保证电源键不画到栏外
       child: LayoutBuilder(
         builder: (context, c) => SingleChildScrollView(
           child: ConstrainedBox(
@@ -56,31 +59,34 @@ class MeowSidebar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    height: 48,
-                    child: Row(
-                      mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
-                      children: [
-                        const BrandHead(size: 36),
-                        if (!compact) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            'MeowX',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3,
-                              color: mm.t1,
-                              fontFamilyFallback: meowRounded,
+                    height: 46,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 4),
+                      child: Row(
+                        mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
+                        children: [
+                          const BrandHead(size: 34),
+                          if (!compact) ...[
+                            const SizedBox(width: 9),
+                            Text(
+                              'MeowX',
+                              style: TextStyle(
+                                fontSize: 21,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                                color: cs.onSurface,
+                                fontFamilyFallback: meowRounded,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   ...nav,
                   const Spacer(),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   if (compact) const Center(child: _CompactPower()) else _ConnectionCard(onOpenNodes: () => onSelect(MeowTab.proxies)),
                 ],
               ),
@@ -92,74 +98,139 @@ class MeowSidebar extends StatelessWidget {
   }
 }
 
-class _NavItem extends StatelessWidget {
+class _NavItem extends StatefulWidget {
   const _NavItem({required this.tab, required this.on, required this.compact, required this.onTap});
   final MeowTab tab;
   final bool on, compact;
   final VoidCallback onTap;
 
   @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    // M3 导航抽屉：选中项 = 次色容器的整颗胶囊
     final cs = context.cs;
-    final ink = on ? cs.onSecondaryContainer : cs.onSurfaceVariant;
-    Widget body = Material(
-      color: on ? cs.secondaryContainer : Colors.transparent,
-      shape: const StadiumBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 52),
-          padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 16),
-          child: Row(
-            mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
-            children: [
-              MeowIcon(tab.glyph, size: 22, color: ink),
-              if (!compact) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    tab.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 15, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: ink),
-                  ),
-                ),
-                if (tab == MeowTab.proxies || tab == MeowTab.connections) _NavBadge(tab),
-              ],
-            ],
+    final dark = context.isDarkMode;
+    final on = widget.on;
+    final compact = widget.compact;
+    final ink = on ? (dark ? Colors.white : cs.primary) : cs.onSurfaceVariant;
+    final dur = MeowMotion.of(context, const Duration(milliseconds: 180));
+    final radius = BorderRadius.circular(16);
+
+    Widget body = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: dur,
+        curve: Curves.easeOutCubic,
+        decoration: BoxDecoration(
+          gradient: on
+              ? LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: dark
+                      ? [Colors.white.withValues(alpha: 0.14), cs.primary.withValues(alpha: 0.20)]
+                      : [cs.primary.withValues(alpha: 0.11), cs.primary.withValues(alpha: 0.05)],
+                )
+              : null,
+          color: on
+              ? null
+              : _hovered
+              ? cs.onSurface.withValues(alpha: dark ? 0.06 : 0.04)
+              : Colors.transparent,
+          borderRadius: radius,
+          border: Border.all(
+            color: on
+                ? (dark ? Colors.white.withValues(alpha: 0.22) : cs.primary.withValues(alpha: 0.24))
+                : Colors.transparent,
+            width: 0.9,
+          ),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: radius,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: widget.onTap,
+            splashColor: cs.primary.withValues(alpha: 0.08),
+            highlightColor: Colors.transparent,
+            hoverColor: Colors.transparent,
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 46),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 12),
+              child: Row(
+                mainAxisAlignment: compact ? MainAxisAlignment.center : MainAxisAlignment.start,
+                children: [
+                  if (!compact) ...[
+                    AnimatedContainer(
+                      duration: dur,
+                      curve: Curves.easeOutCubic,
+                      width: 3,
+                      height: on ? 16 : 0,
+                      margin: const EdgeInsets.only(right: 9),
+                      decoration: BoxDecoration(
+                        color: on ? cs.primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ],
+                  MeowIcon(widget.tab.glyph, size: 20, color: ink),
+                  if (!compact) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.tab.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 14, fontWeight: on ? FontWeight.w700 : FontWeight.w500, color: ink),
+                      ),
+                    ),
+                    if (widget.tab == MeowTab.proxies || widget.tab == MeowTab.connections) _NavBadge(widget.tab, active: on),
+                  ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
     );
-    if (compact) body = Tooltip(message: tab.label, child: body);
+    if (compact) body = Tooltip(message: widget.tab.label, child: body);
     return Semantics(selected: on, child: body);
   }
 }
 
-/// 导航项右侧的计数角标：「节点」= 叶子节点数，「动态」= 连接数；0 不显示。只有完整形态才在树上。
-/// 自己订阅计数：连接数几乎每秒都变，只重建这一小块，不带着整条侧栏（四个导航项 + 连接卡）重建重排。
+/// 导航项右侧的计数角标：「节点」= 叶子节点数，「动态」= 连接数；0 不显示。
 class _NavBadge extends ConsumerWidget {
-  const _NavBadge(this.tab);
+  const _NavBadge(this.tab, {required this.active});
   final MeowTab tab;
+  final bool active;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = switch (tab) {
-      // 和节点页标题「N 个节点」同一口径：只数当前模式下可见组里的叶子节点
       MeowTab.proxies => ref.watch(leafNodeCountProvider),
       _ => ref.watch(connStatsProvider.select((s) => s.total)),
     };
     if (count <= 0) return const SizedBox.shrink();
-    final mm = context.mm;
+    final cs = context.cs;
+    final dark = context.isDarkMode;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-      decoration: BoxDecoration(color: mm.card2, borderRadius: BorderRadius.circular(8)),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: active
+            ? cs.primary.withValues(alpha: dark ? 0.24 : 0.14)
+            : cs.surfaceContainerHighest.withValues(alpha: dark ? 0.7 : 0.9),
+        borderRadius: BorderRadius.circular(99),
+      ),
       child: Text(
         count > 999 ? '999+' : '$count',
         textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.2),
-        style: MeowFont.mono(size: 11, weight: FontWeight.w700, color: mm.t2),
+        style: MeowFont.mono(size: 10.5, weight: FontWeight.w700, color: active ? cs.primary : cs.onSurfaceVariant),
       ),
     );
   }
@@ -184,28 +255,27 @@ class _CompactPower extends ConsumerWidget {
   }
 }
 
-/// 侧栏底部的常驻连接控制：任何页面都能开关，并看得到当前节点和接管方式。
-/// 已连接 = 樱粉底；液态玻璃主题下不换底色（同 iOS：全部卡片一致），连没连上都是侧栏玻璃卡片里的次级块，状态看圆点与电源键。
+/// 侧栏底部的常驻连接微控制台：统一实底 + 极细描边，已连接时以柔和绿点与淡色细边提示，不整块突兀变色。
 class _ConnectionCard extends ConsumerWidget {
   const _ConnectionCard({required this.onOpenNodes});
   final VoidCallback onOpenNodes;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
     final mm = context.mm;
+    final dark = context.isDarkMode;
     final phase = ref.watch(connPhaseProvider);
     final on = phase == ConnPhase.on;
     final mode = ref.watch(patchClashConfigProvider.select((s) => s.mode));
-    // 只订阅到秒：运行时长有两路在写（每秒节拍 + 任务循环），按毫秒订阅的话每秒要重建两次
     final seconds = ref.watch(runTimeProvider.select((t) => t == null ? null : t ~/ 1000));
     final node = ref.watch(currentNodeProvider);
     final (label, dot) = switch (phase) {
       ConnPhase.on => ('已连接', mm.good),
       ConnPhase.connecting => ('连接中', mm.mid),
-      ConnPhase.off => ('未连接', mm.t2),
+      ConnPhase.off => ('未连接', cs.onSurfaceVariant),
     };
     final sub = on && seconds != null
-        // 已连接时不写「模式」二字：220 宽的侧栏里「规则模式 · 00:00:31」放不下，时长会被截成「00:00:…」
         ? '${modeLabel(mode)} · ${fmtUptime(Duration(seconds: seconds))}'
         : (ref.watch(hasProfileProvider) ? '${modeLabel(mode)}模式 · 已就绪' : '还没有订阅');
     final nodeName = switch (mode) {
@@ -216,9 +286,18 @@ class _ConnectionCard extends ConsumerWidget {
     };
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: on ? mm.hero : mm.card2, borderRadius: BorderRadius.circular(18)),
+      duration: MeowMotion.of(context, const Duration(milliseconds: 220)),
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: on
+            ? (dark ? Color.alphaBlend(mm.good.withValues(alpha: 0.08), cs.cardInner) : Color.alphaBlend(mm.good.withValues(alpha: 0.06), cs.cardInner))
+            : cs.cardInner,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: on ? mm.good.withValues(alpha: dark ? 0.32 : 0.28) : cs.cardBorder,
+          width: 0.85,
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -231,25 +310,25 @@ class _ConnectionCard extends ConsumerWidget {
                     Row(
                       children: [
                         StatusDot(color: dot),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: mm.t1),
+                            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: cs.onSurface),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 1),
-                    Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: mm.t2)),
+                    const SizedBox(height: 2),
+                    Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                   ],
                 ),
               ),
               const SizedBox(width: 8),
               MeowPowerButton(
-                size: 44,
+                size: 42,
                 on: on,
                 busy: phase == ConnPhase.connecting,
                 enabled: ref.watch(powerEnabledProvider),
@@ -257,16 +336,19 @@ class _ConnectionCard extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 9),
           Material(
-            color: mm.elev,
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
+            color: cs.card,
+            shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: cs.cardBorder, width: 0.7),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
               onTap: onOpenNodes,
               child: Container(
-                constraints: const BoxConstraints(minHeight: 36),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                constraints: const BoxConstraints(minHeight: 34),
+                padding: const EdgeInsets.symmetric(horizontal: 9),
                 child: Row(
                   children: [
                     Expanded(
@@ -274,10 +356,10 @@ class _ConnectionCard extends ConsumerWidget {
                         nodeName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t1),
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface),
                       ),
                     ),
-                    MeowIcon(MeowGlyph.chevron, size: 13, color: mm.t2),
+                    MeowIcon(MeowGlyph.chevron, size: 12, color: cs.onSurfaceVariant),
                   ],
                 ),
               ),
@@ -293,13 +375,15 @@ class _ConnectionCard extends ConsumerWidget {
   }
 }
 
-/// TUN / 系统代理：两个可以同时打开的开关钮（不是二选一）。
+/// TUN / 系统代理：桌面端常驻双胶囊开关（柔和通透选中态 + 细边）。
 class _TakeoverToggles extends ConsumerWidget {
   const _TakeoverToggles();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
     final mm = context.mm;
+    final dark = context.isDarkMode;
     final tun = ref.watch(tunEnabledProvider);
     final sys = ref.watch(systemProxyEnabledProvider);
     final (tunHint, tunWarn) = ref.watch(tunHintProvider);
@@ -314,29 +398,58 @@ class _TakeoverToggles extends ConsumerWidget {
           toggled: value,
           label: label,
           excludeSemantics: true,
-          child: Material(
-            color: mm.buttonFill(value ? MeowButtonFill.selected : MeowButtonFill.plain),
-            shape: StadiumBorder(side: mm.buttonSide),
-            child: InkWell(
-              customBorder: const StadiumBorder(),
-              onTap: onTap,
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 32),
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (warn) ...[Icon(Icons.error_outline_rounded, size: 13, color: value ? mm.onSelected : mm.mid), const SizedBox(width: 3)],
-                    Flexible(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: value ? mm.onSelected : mm.t2),
+          child: AnimatedContainer(
+            duration: MeowMotion.of(context, const Duration(milliseconds: 180)),
+            decoration: BoxDecoration(
+              gradient: value
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: dark
+                          ? [Colors.white.withValues(alpha: 0.16), cs.primary.withValues(alpha: 0.24)]
+                          : [cs.primary.withValues(alpha: 0.14), cs.primary.withValues(alpha: 0.08)],
+                    )
+                  : null,
+              color: value ? null : cs.card,
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(
+                color: value
+                    ? (dark ? Colors.white.withValues(alpha: 0.28) : cs.primary.withValues(alpha: 0.34))
+                    : cs.cardBorder,
+                width: value ? 0.95 : 0.7,
+              ),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              shape: const StadiumBorder(),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: onTap,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 30),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (warn) ...[
+                        Icon(Icons.error_outline_rounded, size: 12.5, color: value ? cs.primary : mm.mid),
+                        const SizedBox(width: 3),
+                      ],
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: value ? FontWeight.w700 : FontWeight.w600,
+                            color: value ? (dark ? Colors.white : cs.primary) : cs.onSurfaceVariant,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

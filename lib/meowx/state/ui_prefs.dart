@@ -164,6 +164,7 @@ class MeowUiPrefs {
     this.blockOrder = defaultBlockOrder,
     this.halfWidthBlocks = const {},
     this.hiddenBlocks = const {},
+    this.showDesktopTakeover = false,
   });
 
   static const defaultBlockOrder = <HomeBlockId>[
@@ -189,6 +190,9 @@ class MeowUiPrefs {
   final List<HomeBlockId> blockOrder;
   final Set<HomeBlockId> halfWidthBlocks;
   final Set<HomeBlockId> hiddenBlocks;
+
+  /// 桌面端首页是否额外显示独立的「接管方式」卡片（默认关闭，侧栏底部已常驻 TUN / 系统代理开关）
+  final bool showDesktopTakeover;
 
   bool get isIos27Glass => preset == MeowVisualPreset.ios27Glass;
 
@@ -227,6 +231,7 @@ class MeowUiPrefs {
     List<HomeBlockId>? blockOrder,
     Set<HomeBlockId>? halfWidthBlocks,
     Set<HomeBlockId>? hiddenBlocks,
+    bool? showDesktopTakeover,
   }) => MeowUiPrefs(
     preset: preset ?? this.preset,
     motionLevel: motionLevel ?? this.motionLevel,
@@ -237,6 +242,7 @@ class MeowUiPrefs {
     blockOrder: blockOrder ?? this.blockOrder,
     halfWidthBlocks: halfWidthBlocks ?? this.halfWidthBlocks,
     hiddenBlocks: hiddenBlocks ?? this.hiddenBlocks,
+    showDesktopTakeover: showDesktopTakeover ?? this.showDesktopTakeover,
   );
 
   MeowUiPrefs withLayoutPreset(HomeLayoutPreset p) => switch (p) {
@@ -278,6 +284,7 @@ class MeowUiPrefs {
     'blockOrder': [for (final b in blockOrder) b.name],
     'halfWidthBlocks': [for (final b in halfWidthBlocks) b.name],
     'hiddenBlocks': [for (final b in hiddenBlocks) b.name],
+    'showDesktopTakeover': showDesktopTakeover,
   };
 
   factory MeowUiPrefs.fromJson(Map<String, Object?> json) {
@@ -331,6 +338,7 @@ class MeowUiPrefs {
       blockOrder: parseOrder(json['blockOrder']),
       halfWidthBlocks: parseSet(json['halfWidthBlocks']),
       hiddenBlocks: parseSet(json['hiddenBlocks']),
+      showDesktopTakeover: json['showDesktopTakeover'] == true,
     );
   }
 
@@ -355,7 +363,8 @@ class MeowUiPrefs {
       other.halfWidthBlocks.length == halfWidthBlocks.length &&
       other.halfWidthBlocks.containsAll(halfWidthBlocks) &&
       other.hiddenBlocks.length == hiddenBlocks.length &&
-      other.hiddenBlocks.containsAll(hiddenBlocks);
+      other.hiddenBlocks.containsAll(hiddenBlocks) &&
+      other.showDesktopTakeover == showDesktopTakeover;
 
   @override
   int get hashCode => Object.hash(
@@ -368,6 +377,7 @@ class MeowUiPrefs {
     Object.hashAll(blockOrder),
     Object.hashAllUnordered(halfWidthBlocks),
     Object.hashAllUnordered(hiddenBlocks),
+    showDesktopTakeover,
   );
 }
 

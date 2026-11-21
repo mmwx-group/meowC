@@ -35,13 +35,13 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());   // 收掉 3 秒一次的定时器
   });
 
-  testWidgets('首页「网络测速」卡：没测过时是空状态 + 开始测速 / 测速记录', (tester) async {
+  testWidgets('首页「网络测速」卡：没测过时是空状态 + 开始测速 / 记录', (tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: SingleChildScrollView(child: HomeSpeedTestCard()))));
     await tester.pump();
     expect(find.text('网络测速'), findsOneWidget);
     expect(find.textContaining('还没有测过'), findsOneWidget);
     expect(find.text('开始测速'), findsOneWidget);
-    expect(find.text('测速记录'), findsOneWidget);
+    expect(find.text('记录'), findsOneWidget);   // 标题行右侧的轻量按钮（2026-11-22 起从「测速记录」改短）
   });
 }

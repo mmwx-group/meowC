@@ -27,14 +27,14 @@ const _previewDesktop = bool.fromEnvironment('MEOWX_PREVIEW_DESKTOP');
 /// 标题行要给窗口按钮让位置（真的 Windows / Linux，或模拟器上的桌面预览）
 bool get windowControlsShown => windowControlsMerged || _previewDesktop;
 
-/// 窗口按钮：四个 40×40 的图标按钮
-const windowControlsWidth = 4 * 40.0;
+/// 窗口按钮：左侧 1px 分隔线 + 四个 36×32 桌面悬停按钮
+const windowControlsWidth = 4 * 38.0 + 10.0;
 
-/// 窗口按钮离窗口顶边：40 高的按钮中线落在标题行中线上（6 + 44 / 2 = 28）
-const windowControlsTop = 8.0;
+/// 窗口按钮离窗口顶边：32 高的按钮中线落在标题行中线上（6 + 44 / 2 = 28）
+const windowControlsTop = 12.0;
 
 /// 标题行右侧让出的宽度（按钮 + 间距）
-const windowControlsReserve = windowControlsWidth + 8;
+const windowControlsReserve = windowControlsWidth + 10;
 
 /// 按住拖动窗口（Windows / Linux）；别的平台原样返回。只接拖动、不接双击：祖先上挂双击会让里面按钮的单击要等双击超时才触发。
 class WindowDragArea extends StatelessWidget {

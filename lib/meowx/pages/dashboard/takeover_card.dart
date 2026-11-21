@@ -5,17 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../state/connection.dart';
-import '../../theme/glass_card.dart';
 import '../../theme/haptics.dart';
+import '../../theme/m3.dart';
+import '../../theme/m3_kit.dart';
 import '../../theme/tokens.dart';
 
-/// Windows 专属：接管方式。电源键只拉起核心，流量怎么进来由这两个开关决定——
-/// 虚拟网卡（TUN，接管全部流量，需 MeowX 服务）与系统代理，可以同时打开。开关逻辑在 state/connection.dart，侧栏那两个钮共用。
+/// 桌面端可选卡片：接管方式。电源键拉起核心后，由虚拟网卡（TUN）与系统代理决定流量接管方式，两者可同时开启。
+/// 开关逻辑在 state/connection.dart，与左侧栏底部微控制台共用状态。
 class HomeTakeoverCard extends ConsumerWidget {
   const HomeTakeoverCard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final cs = context.cs;
     final mm = context.mm;
     final tun = ref.watch(tunEnabledProvider);
     final sys = ref.watch(systemProxyEnabledProvider);
@@ -24,8 +26,8 @@ class HomeTakeoverCard extends ConsumerWidget {
     final port = ref.watch(patchClashConfigProvider.select((s) => s.mixedPort));
 
     Widget row(String title, Widget hint, bool value, ValueChanged<bool>? onChanged) => Container(
-      constraints: const BoxConstraints(minHeight: 52),
-      decoration: BoxDecoration(border: Border(top: BorderSide(color: mm.line))),
+      constraints: const BoxConstraints(minHeight: 50),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)))),
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
@@ -38,7 +40,7 @@ class HomeTakeoverCard extends ConsumerWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: mm.t1),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: cs.onSurface),
                 ),
                 const SizedBox(height: 1),
                 hint,
@@ -46,31 +48,37 @@ class HomeTakeoverCard extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Switch(value: value, onChanged: MeowHaptics.onSwitch(onChanged), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+          Transform.scale(
+            scale: 0.88,
+            child: Switch(
+              value: value,
+              onChanged: MeowHaptics.onSwitch(onChanged),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
         ],
       ),
     );
 
-    return GlassCard(
-      radius: 22,
-      padding: const EdgeInsets.fromLTRB(16, 6, 14, 6),
+    return M3Card(
+      padding: const EdgeInsets.fromLTRB(16, 10, 14, 6),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 30),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
             child: Row(
               children: [
-                Text('接管方式', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: mm.t2)),
-                const SizedBox(width: 12),
+                Text('接管方式', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: cs.onSurface)),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '两个都关 = 只有手动设代理的程序走 MeowX',
+                    '关闭两项时仅手动配置代理的程序走 MeowX',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.end,
-                    style: TextStyle(fontSize: 11, color: mm.t2),
+                    style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                   ),
                 ),
               ],
@@ -82,7 +90,7 @@ class HomeTakeoverCard extends ConsumerWidget {
               tunHint,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 11, color: tunWarn ? mm.mid : (tun ? mm.good : mm.t2)),
+              style: TextStyle(fontSize: 11, color: tunWarn ? mm.mid : (tun ? mm.good : cs.onSurfaceVariant)),
             ),
             tun,
             installing ? null : (v) => unawaited(ref.read(takeoverProvider.notifier).setTun(context, v)),
@@ -93,7 +101,7 @@ class HomeTakeoverCard extends ConsumerWidget {
               '127.0.0.1:$port',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: MeowFont.mono(size: 11, color: mm.t2),
+              style: MeowFont.mono(size: 11, color: cs.onSurfaceVariant),
             ),
             sys,
             (v) => ref.read(takeoverProvider.notifier).setSystemProxy(v),

@@ -341,44 +341,55 @@ class _WindowHeaderState extends ConsumerState<WindowHeader> {
             child: IgnorePointer(
               ignoring: !showButtons,
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (widget.merged)
+                    Container(
+                      width: 1,
+                      height: 18,
+                      margin: const EdgeInsets.only(right: 8),
+                      color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.7),
+                    ),
                   ValueListenableBuilder(
                     valueListenable: isPinNotifier,
                     builder: (_, value, _) {
-                      return IconButton(
+                      return _DesktopWindowButton(
+                        tooltip: value ? '取消置顶' : '置顶窗口',
+                        icon: value ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                        active: value,
                         onPressed: _updatePin,
-                        icon: value
-                            ? const Icon(Icons.push_pin)
-                            : const Icon(Icons.push_pin_outlined),
                       );
                     },
                   ),
-                  IconButton(
+                  _DesktopWindowButton(
+                    tooltip: '最小化',
+                    icon: Icons.remove_rounded,
                     onPressed: () {
                       windowManager.minimize();
                     },
-                    icon: const Icon(Icons.remove),
                   ),
                   ValueListenableBuilder(
                     valueListenable: isMaximizedNotifier,
                     builder: (_, value, _) {
-                      return IconButton(
+                      return _DesktopWindowButton(
+                        tooltip: value ? '还原' : '最大化',
+                        icon: value ? Icons.filter_none_rounded : Icons.crop_square_rounded,
+                        iconSize: value ? 15 : 17,
                         onPressed: () async {
                           _updateMaximized();
                         },
-                        icon: value
-                            ? const Icon(Icons.filter_none, size: 20)
-                            : const Icon(Icons.crop_square),
                       );
                     },
                   ),
-                  IconButton(
+                  _DesktopWindowButton(
+                    tooltip: '关闭',
+                    icon: Icons.close_rounded,
+                    isClose: true,
                     onPressed: () {
                       FocusManager.instance.primaryFocus?.unfocus();
                       globalState.appController.unBackBlock();
                       globalState.appController.handleBackOrExit();
                     },
-                    icon: const Icon(Icons.close),
                   ),
                 ],
               ),
@@ -507,5 +518,75 @@ class AppIcon extends ConsumerWidget {
       onLongPress: () => _handlePickImage(context, ref),
       child: SizedBox(width: 40, height: 40, child: icon),
     );
+  }
+}
+
+/// Windows / Linux 现代无边框窗口控制按钮：带柔和悬停底色（关闭键 hover 柔和红）、置顶高亮与轻量图标。
+class _DesktopWindowButton extends StatefulWidget {
+  const _DesktopWindowButton({
+    required this.icon,
+    required this.onPressed,
+    this.tooltip,
+    this.isClose = false,
+    this.active = false,
+    this.iconSize = 17,
+  });
+
+  final IconData icon;
+  final VoidCallback onPressed;
+  final String? tooltip;
+  final bool isClose;
+  final bool active;
+  final double iconSize;
+
+  @override
+  State<_DesktopWindowButton> createState() => _DesktopWindowButtonState();
+}
+
+class _DesktopWindowButtonState extends State<_DesktopWindowButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final bg = _hovered
+        ? (widget.isClose
+            ? const Color(0xFFE81123)
+            : cs.onSurface.withValues(alpha: dark ? 0.11 : 0.07))
+        : (widget.active ? cs.primary.withValues(alpha: dark ? 0.20 : 0.12) : Colors.transparent);
+    final fg = _hovered && widget.isClose
+        ? Colors.white
+        : widget.active
+        ? cs.primary
+        : cs.onSurface.withValues(alpha: _hovered ? 1.0 : 0.82);
+
+    Widget btn = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 36,
+            height: 32,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(widget.icon, size: widget.iconSize, color: fg),
+          ),
+        ),
+      ),
+    );
+    if (widget.tooltip != null) {
+      btn = Tooltip(message: widget.tooltip!, child: btn);
+    }
+    return btn;
   }
 }

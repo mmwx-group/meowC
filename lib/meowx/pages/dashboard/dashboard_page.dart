@@ -67,7 +67,7 @@ class DashboardPage extends ConsumerWidget {
     );
     final up = shows(HomeCard.upload), down = shows(HomeCard.download), chart = shows(HomeCard.chart);
     final showApps = _hasAppsCard && shows(HomeCard.apps);
-    final takeover = isDesktopUi ? const HomeTakeoverCard() : null;
+    final takeover = (isDesktopUi && ui.showDesktopTakeover) ? const HomeTakeoverCard() : null;
     final tiles = [
       for (final c in const [HomeCard.proxied, HomeCard.direct, HomeCard.memory, HomeCard.dns])
         if (shows(c)) c,
@@ -205,12 +205,13 @@ class DashboardPage extends ConsumerWidget {
       );
     }
 
-    final hero = buildBlock(HomeBlockId.hero, compact: false)!;
-    final speed = buildBlock(HomeBlockId.speed, compact: false);
-    final subscription = buildBlock(HomeBlockId.subscription, compact: false)!;
-    final features = buildFeatures(compact: false);
-    final metrics = buildBlock(HomeBlockId.metrics, compact: false);
-    final exitIp = buildBlock(HomeBlockId.exitIp, compact: false);
+    Widget? desktopBlock(HomeBlockId id) => (id != HomeBlockId.hero && ui.hiddenBlocks.contains(id)) ? null : buildBlock(id, compact: false);
+    final hero = desktopBlock(HomeBlockId.hero)!;
+    final speed = desktopBlock(HomeBlockId.speed);
+    final subscription = desktopBlock(HomeBlockId.subscription);
+    final features = ui.hiddenBlocks.contains(HomeBlockId.features) ? null : buildFeatures(compact: false);
+    final metrics = desktopBlock(HomeBlockId.metrics);
+    final exitIp = desktopBlock(HomeBlockId.exitIp);
 
     final title = PageTitle(S.home, trailing: actions);
     final pad = widePagePadding();
@@ -421,6 +422,21 @@ class _HomeCustomizePanel extends ConsumerWidget {
         const SizedBox(height: 6),
         M3SegmentedList(
           children: [
+            if (isDesktopUi)
+              M3ListRow(
+                title: '首页独立接管方式卡',
+                titleSize: 14,
+                color: meowDialogRowColor(cs),
+                padding: const EdgeInsets.fromLTRB(14, 2, 8, 2),
+                onTap: () => updateUi((s) => s.copyWith(showDesktopTakeover: !s.showDesktopTakeover)),
+                trailing: Transform.scale(
+                  scale: 0.86,
+                  child: Switch(
+                    value: ui.showDesktopTakeover,
+                    onChanged: MeowHaptics.onSwitch((on) => updateUi((s) => s.copyWith(showDesktopTakeover: on))),
+                  ),
+                ),
+              ),
             for (final c in subCards)
               M3ListRow(
                 title: c.label,
