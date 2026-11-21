@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bett_box/meowx/state/core_error_notice.dart';
 import 'package:bett_box/clash/clash.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/enum/enum.dart';
@@ -135,7 +136,7 @@ class _ClashContainerState extends ConsumerState<ClashManager>
   void onLog(Log log) {
     ref.read(logsProvider.notifier).addLog(log);
     if (log.logLevel == LogLevel.error) {
-      globalState.showNotifier(log.payload);
+      coreErrorNotice.onError(log.payload);   // 合并 provider 报错、去重后再提示（lib/meowx/state/core_error_notice.dart）
     }
     super.onLog(log);
   }
