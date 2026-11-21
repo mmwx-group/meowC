@@ -276,24 +276,46 @@ class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTi
                       child: child!,
                     ),
                     child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        // 在液态玻璃弹出层内（surfaceContainer 为半透明）使用主色高对比滑块，确保选中态在浅/深玻璃上都一眼清晰
-                        color: cs.surfaceContainer.a < 0.95
-                            ? cs.primary
-                            : (cs.brightness == Brightness.dark ? cs.inverseSurface : cs.card),
-                        borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
-                        border: Border.all(
-                          color: cs.surfaceContainer.a < 0.95 ? Colors.transparent : cs.cardBorder,
-                          width: 0.8,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: cs.brightness == Brightness.dark ? 0.24 : 0.08),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
+                      decoration: () {
+                        final onGlass = cs.surfaceContainer.a < 0.95;
+                        final dark = cs.brightness == Brightness.dark;
+                        if (onGlass) {
+                          // 玻璃弹出层内选中滑块：通透磨砂折射胶囊 + 顶部高光渐变 + 柔和主色光边，不用厚重实色
+                          return BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: dark
+                                  ? [Colors.white.withValues(alpha: 0.22), cs.primary.withValues(alpha: 0.24)]
+                                  : [Colors.white.withValues(alpha: 0.88), cs.primary.withValues(alpha: 0.16)],
+                            ),
+                            borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
+                            border: Border.all(
+                              color: dark ? Colors.white.withValues(alpha: 0.34) : cs.primary.withValues(alpha: 0.38),
+                              width: 1.0,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: cs.primary.withValues(alpha: dark ? 0.22 : 0.14),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          );
+                        }
+                        return BoxDecoration(
+                          color: dark ? cs.inverseSurface : cs.card,
+                          borderRadius: BorderRadius.circular(MeowSlideSegment.thumbRadius),
+                          border: Border.all(color: cs.cardBorder, width: 0.8),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: dark ? 0.22 : 0.06),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        );
+                      }(),
                     ),
                   ),
                 Row(
@@ -337,7 +359,7 @@ class _MeowSlideSegmentState<T> extends State<MeowSlideSegment<T>> with SingleTi
                 fontWeight: on ? FontWeight.w700 : FontWeight.w500,
                 color: on
                     ? (cs.surfaceContainer.a < 0.95
-                        ? cs.onPrimary
+                        ? (cs.brightness == Brightness.dark ? Colors.white : cs.primary)
                         : (cs.brightness == Brightness.dark ? cs.onInverseSurface : cs.onSurface))
                     : (widget.dimmed.contains(value) ? cs.outline : cs.onSurfaceVariant),
                 fontFamilyFallback: linuxTextFallback,
@@ -601,13 +623,30 @@ class M3ListRow extends StatelessWidget {
         curve: MeowSprings.shapeCurve,
         builder: (_, r, child) {
           final rr = _nonNegative(r!);
+          final onGlass = cs.surfaceContainer.a < 0.95;
+          final dark = cs.brightness == Brightness.dark;
           return AnimatedContainer(
             duration: MeowSprings.effectsDuration,
-            decoration: BoxDecoration(
-              color: selected ? cs.secondaryContainer : (color ?? cs.card),
-              borderRadius: rr,
-              border: Border.all(color: selected ? cs.primary.withValues(alpha: 0.35) : cs.cardBorder, width: 0.8),
-            ),
+            decoration: onGlass && selected
+                ? BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: dark
+                          ? [Colors.white.withValues(alpha: 0.16), cs.primary.withValues(alpha: 0.22)]
+                          : [Colors.white.withValues(alpha: 0.85), cs.primary.withValues(alpha: 0.14)],
+                    ),
+                    borderRadius: rr,
+                    border: Border.all(
+                      color: dark ? Colors.white.withValues(alpha: 0.28) : cs.primary.withValues(alpha: 0.36),
+                      width: 1.0,
+                    ),
+                  )
+                : BoxDecoration(
+                    color: selected ? cs.secondaryContainer : (color ?? cs.card),
+                    borderRadius: rr,
+                    border: Border.all(color: selected ? cs.primary.withValues(alpha: 0.35) : cs.cardBorder, width: 0.8),
+                  ),
             child: Material(
               type: MaterialType.transparency,
               borderRadius: rr,

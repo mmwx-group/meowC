@@ -69,17 +69,22 @@ void main() {
       expect(lead(0.40).abs(), lessThan(0.5));
     });
 
-    test('圆角：前约 140ms 是正圆，约 300ms 收成面板的圆角', () {
-      final early = open(0.9, 0.12);
+    test('圆角：前 70ms 是正圆（胶囊），之后由圆角弹簧松成面板的圆角（约 0.5 秒到位）', () {
+      final early = open(0.6, 0.06);
       expect(early.radius, closeTo(early.platter.shortestSide / 2, 1e-9));
-      expect(open(1, 0.31).radius, closeTo(radius, 0.01));
+      final mid = open(1, 0.15);
+      expect(mid.radius, lessThan(mid.platter.shortestSide / 2));
+      expect(mid.radius, greaterThan(radius));
+      expect(open(1, 0.5).radius, closeTo(radius, 0.5));
     });
 
-    test('内容：120ms 还看不见，约 240ms 清楚出现', () {
-      expect(open(0.7, 0.12).contentOpacity, 0);
-      expect(open(0.7, 0.12).contentBlur, 8);
-      expect(open(1, 0.25).contentOpacity, 1);
-      expect(open(1, 0.25).contentBlur, 0);
+    test('内容：90ms 还看不见，约 180ms 完全出现；模糊轻（σ ≤ 4.5），250ms 已经清楚；先略小再放到原大', () {
+      expect(open(0.5, 0.08).contentOpacity, 0);
+      expect(open(0.5, 0.08).contentBlur, inInclusiveRange(3, 4.5));
+      expect(open(0.5, 0.08).contentScale, lessThan(1));
+      expect(open(1, 0.19).contentOpacity, 1);
+      expect(open(1, 0.25).contentBlur, lessThan(0.3), reason: '低于 0.3 时模糊层关掉');
+      expect(open(1, 0.4).contentScale, closeTo(1, 1e-9));
     });
 
     test('安全区：冲出去时不越出给定范围', () {

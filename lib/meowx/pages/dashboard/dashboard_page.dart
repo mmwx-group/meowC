@@ -460,23 +460,49 @@ class _PresetChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    return Material(
-      color: selected ? cs.primary : cs.surfaceContainerHighest,
-      shape: const StadiumBorder(),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: selected ? cs.onPrimary : cs.onSurface,
+    final dark = context.isDarkMode;
+    return AnimatedContainer(
+      duration: MeowSprings.effectsDuration,
+      decoration: BoxDecoration(
+        gradient: selected
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: dark
+                    ? [Colors.white.withValues(alpha: 0.22), cs.primary.withValues(alpha: 0.26)]
+                    : [Colors.white.withValues(alpha: 0.88), cs.primary.withValues(alpha: 0.18)],
+              )
+            : null,
+        color: selected ? null : cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(MeowShape.full),
+        border: Border.all(
+          color: selected
+              ? (dark ? Colors.white.withValues(alpha: 0.34) : cs.primary.withValues(alpha: 0.40))
+              : cs.outlineVariant,
+          width: selected ? 1.0 : 0.7,
+        ),
+        boxShadow: selected
+            ? [BoxShadow(color: cs.primary.withValues(alpha: dark ? 0.20 : 0.12), blurRadius: 10, offset: const Offset(0, 2))]
+            : const [],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: selected ? (dark ? Colors.white : cs.primary) : cs.onSurface,
+              ),
             ),
           ),
         ),

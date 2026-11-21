@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter, lerpDouble;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 
@@ -21,20 +23,43 @@ Future<T?> showMeowDialog<T>(
   double maxWidth = 420,
 }) {
   final reduce = MeowMotion.reduced(context);
+  final springCurve = _AlertSpring.tuned();
   return showGeneralDialog<T>(
     context: context,
     barrierDismissible: true,
     barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
-    barrierColor: Colors.black.withValues(alpha: 0.4),
-    transitionDuration: reduce ? const Duration(milliseconds: 150) : MeowSprings.shapeDuration + const Duration(milliseconds: 50),
+    barrierColor: Colors.black.withValues(alpha: 0.34),
+    transitionDuration: reduce ? const Duration(milliseconds: 150) : MeowMotion.of(context, _AlertSpring.duration),
     pageBuilder: (ctx, _, _) => _MeowDialog(title: title, builder: builder, actions: actions, maxWidth: maxWidth),
     transitionBuilder: (ctx, animation, _, child) {
-      final fade = CurvedAnimation(parent: animation, curve: const Interval(0, 0.6, curve: Curves.easeOut));
-      if (reduce) return FadeTransition(opacity: fade, child: child);
-      final scale = CurvedAnimation(parent: animation, curve: const _PopoverSpring(), reverseCurve: Curves.easeInCubic);
-      return FadeTransition(
-        opacity: fade,
-        child: ScaleTransition(scale: Tween(begin: 0.85, end: 1.0).animate(scale), child: child),
+      if (reduce) {
+        final fade = CurvedAnimation(parent: animation, curve: Curves.easeOut);
+        return FadeTransition(opacity: fade, child: child);
+      }
+      final t = animation.value;
+      final reversing = animation.status == AnimationStatus.reverse;
+      // 对齐 iOS 27 原生 UIAlertController / prism_ui：打开从 1.2× 临界阻尼缩小落位到 1.0×，关闭时原地纯淡出不缩放
+      final springT = reversing ? springCurve.flipped.transform(t) : springCurve.transform(t);
+      final scale = reversing ? 1.0 : lerpDouble(1.2, 1.0, springT)!;
+      final opacity = springT.clamp(0.0, 1.0);
+      final bgSigma = MeowGlassDevice.lowEnd ? 0.0 : 4.0 * opacity;
+
+      final modal = Opacity(
+        opacity: opacity,
+        child: Transform.scale(scale: scale, child: child),
+      );
+      if (bgSigma <= 0.2) return modal;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: bgSigma, sigmaY: bgSigma),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          modal,
+        ],
       );
     },
   );
@@ -142,17 +167,16 @@ class MeowDialogLabel extends StatelessWidget {
   );
 }
 
-/// 玻璃气泡里的内容：把清单行、分段底、开关轨道用的几档 surfaceContainer 换成半透明，透得出背后的玻璃
-/// （2026-11-18 用户：首页卡片 / 节点视图气泡里是纯色底，没有透明效果）。
+/// 玻璃气泡里的内容：把清单行、分段槽与边框换成干净通透的浅层半透明材质，在柔雾玻璃上层次分明不发灰。
 ThemeData meowOnGlassTheme(ThemeData t) {
   final dark = t.brightness == Brightness.dark;
-  final ink = dark ? Colors.white : Colors.black;
   final cs = t.colorScheme.copyWith(
-    surfaceContainerLowest: Colors.white.withValues(alpha: dark ? 0.05 : 0.32),
-    surfaceContainerLow: Colors.white.withValues(alpha: dark ? 0.06 : 0.26),
-    surfaceContainer: ink.withValues(alpha: dark ? 0.08 : 0.04),
-    surfaceContainerHigh: ink.withValues(alpha: dark ? 0.10 : 0.055),
-    surfaceContainerHighest: ink.withValues(alpha: dark ? 0.13 : 0.07),
+    surfaceContainerLowest: dark ? Colors.white.withValues(alpha: 0.08) : Colors.white.withValues(alpha: 0.72),
+    surfaceContainerLow: dark ? Colors.white.withValues(alpha: 0.07) : Colors.white.withValues(alpha: 0.65),
+    surfaceContainer: dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.04),
+    surfaceContainerHigh: dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.055),
+    surfaceContainerHighest: dark ? Colors.white.withValues(alpha: 0.11) : Colors.black.withValues(alpha: 0.065),
+    outlineVariant: dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
   );
   return t.copyWith(colorScheme: cs);
 }
@@ -409,15 +433,19 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
   }
 }
 
-/// 对话框弹出用的欠阻尼弹簧（质量 1、刚度 400、阻尼比 0.55）：约 0.17 秒到位、冲过头约 12%、再小幅回摆一下停住，
-/// 是 iOS 弹出菜单那种明显的「啵」一下。按 [duration] 归一成曲线交给路由动画，末尾钉在 1（那时余振已不到 0.5%）。
-class _PopoverSpring extends Curve {
-  const _PopoverSpring();
+/// iOS 27 原生弹窗临界阻尼弹簧（对齐 prism_ui：275ms 周期临界阻尼，404ms 收稳，补齐残余量确保精确落到 1）。
+class _AlertSpring extends Curve {
+  _AlertSpring(SpringDescription spring) : _sim = SpringSimulation(spring, 0, 1, 0);
 
-  static const duration = Duration(milliseconds: 600);
-  static final _spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 400, ratio: 0.55);
-  static final _sim = SpringSimulation(_spring, 0, 1, 0);
+  factory _AlertSpring.tuned() => _AlertSpring(
+    MeowMotion.tuned(SpringDescription.withDampingRatio(mass: 1, stiffness: 522, ratio: 1.0)),
+  );
+
+  static const duration = Duration(milliseconds: 404);
+  static const _seconds = 0.404;
+  final SpringSimulation _sim;
+  late final double _residual = 1 - _sim.x(_seconds);
 
   @override
-  double transformInternal(double t) => _sim.x(t * duration.inMicroseconds / 1e6);
+  double transformInternal(double t) => _sim.x(t * _seconds) + _residual * t;
 }

@@ -557,9 +557,8 @@ class MeowMenuButton<T> extends StatefulWidget {
 class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with TickerProviderStateMixin {
   late final _fade = AnimationController(vsync: this, value: 1);
 
-  /// 关闭时按钮被「撞」一下的时钟（线性 0…1 = 0…[DropletMorph.recoilDuration]）与方向（按钮中心到菜单中心）
+  /// 关闭时按钮淡回的时钟（线性 0…1 = 0…[DropletMorph.recoilDuration]；按钮原地淡回，不再被「撞」）
   late final _kick = AnimationController(vsync: this, duration: DropletMorph.recoilDuration)..addListener(_onKick);
-  Offset _travel = Offset.zero;
   bool _open = false;
 
   double get _kickSeconds => _kick.value * DropletMorph.recoilDuration.inMicroseconds / 1e6;
@@ -600,13 +599,12 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with TickerProvid
       alignEnd: widget.alignEnd,
       fromColor: widget.fromColor,
       fromRadius: widget.fromRadius,
-      onClosing: (travel) {
+      onClosing: (_) {
         closing = true;
         if (!mounted) return;
         if (reduce) {
           _fade.value = 1;
         } else {
-          _travel = travel;
           _kick.forward(from: 0);
         }
       },
@@ -624,24 +622,12 @@ class _MeowMenuButtonState<T> extends State<MeowMenuButton<T>> with TickerProvid
     super.dispose();
   }
 
-  // 触发控件是玻璃时用 LiquidGlassFade：普通的半透明会把它变成离屏层，淡出的那一下玻璃读不到背后的画面
+  // 触发控件是玻璃时用 LiquidGlassFade：普通的半透明会把它变成离屏层，淡出的那一下玻璃读不到背后的画面。
+  // 按钮位置保持固定，关闭弹出层时原地平滑淡回，不做位移撞击。
   @override
   Widget build(BuildContext context) {
-    final body = meowGlassOn(context)
+    return meowGlassOn(context)
         ? LiquidGlassFade(opacity: _fade, child: widget.builder(context, _openMenu))
         : FadeTransition(opacity: _fade, child: widget.builder(context, _openMenu));
-    // 关闭时被撞：往菜单的反方向弹一下、压扁一点（同 iOS 27）
-    return AnimatedBuilder(
-      animation: _kick,
-      builder: (_, child) {
-        // 结构不随动画插拔（插拔 Transform 会让按钮整棵重挂）：没在撞时位移 0、缩放 1
-        final t = _kick.isAnimating ? _kickSeconds : 0.0;
-        return Transform.translate(
-          offset: DropletMorph.triggerRecoil(_travel, t),
-          child: Transform.scale(scale: DropletMorph.triggerImpact(_travel, t), child: child),
-        );
-      },
-      child: body,
-    );
   }
 }

@@ -9,6 +9,7 @@ import 'package:flutter/scheduler.dart' show Ticker, TickerProvider;
 
 import '../glass/liquid_glass.dart';
 import 'glass.dart';
+import 'motion.dart';
 
 // iOS 27 弹出菜单 / popover 的「水滴」变形（第三版，2026-11-19）。
 //
@@ -36,6 +37,7 @@ class DropletFrame {
     this.neck = 0,
     required this.contentOpacity,
     required this.contentBlur,
+    this.contentScale = 1,
     required this.glass,
     required this.depth,
   });
@@ -55,9 +57,10 @@ class DropletFrame {
   /// 面板和按钮那颗圆之间水滴颈能伸多远（px）；0 = 不连
   final double neck;
 
-  /// 内容的不透明度与模糊（σ，px）
+  /// 内容的不透明度、模糊（σ，px）与光学聚焦缩放
   final double contentOpacity;
   final double contentBlur;
+  final double contentScale;
 
   /// 玻璃的浓度（0…1，关闭最后那一段化掉）
   final double glass;
@@ -73,11 +76,20 @@ class DropletFrame {
 }
 
 abstract final class DropletMorph {
-  /// 打开：ω₀ = 17 rad/s、ζ ≈ 0.76（约 0.37 秒）
-  static const openSpring = SpringDescription(mass: 1, stiffness: 289, damping: 25.8);
+  /// 打开主弹簧（对齐 prism_ui / iOS 27：stiffness 400、阻尼比 0.754，利落弹出微回弹）
+  static final openSpring = SpringDescription.withDampingRatio(mass: 1, stiffness: 400, ratio: 0.754);
 
-  /// 关闭：ω₀ = 18 rad/s、ζ ≈ 0.86（约 0.28 秒面板就没了）
-  static const closeSpring = SpringDescription(mass: 1, stiffness: 324, damping: 31);
+  /// 打开独立圆角弹簧（延迟 70ms 启动，stiffness 324、阻尼比 0.75，将胶囊平滑「方」成面板圆角）
+  static final _cornersSim = SpringSimulation(
+    SpringDescription.withDampingRatio(mass: 1, stiffness: 324, ratio: 0.75),
+    1,
+    0,
+    0,
+  );
+  static const _cornersDelay = 0.07;
+
+  /// 关闭：利落收束回按钮（stiffness 360、阻尼比 0.84，约 0.28 秒面板化完）
+  static const closeSpring = SpringDescription(mass: 1, stiffness: 360, damping: 32);
 
   /// 关闭动画多久后路由可以拆掉（面板约 280ms 化完）
   static const closeDuration = Duration(milliseconds: 300);
@@ -98,12 +110,15 @@ abstract final class DropletMorph {
     Rect? allowed,
   }) {
     final u = raw.clamp(0.0, 1.0);
+    final overshoot = math.max(0.0, raw - 1.0);
     final core = _core(anchor);
     final scaleDelta = _scaleDelta(core.size, target.size);
     // 面积放大三倍以上（菜单都是）尺寸长得比弹簧快（实测 33/67/100/133/167ms 时 0.37/0.58/0.77/0.90/0.99）
     final sizeP = scaleDelta > 3 ? math.pow(u, 0.55).toDouble() : Curves.linearToEaseOut.transform(u);
-    final w = lerpDouble(core.width, target.width, sizeP)!;
-    final h = lerpDouble(core.height, target.height, sizeP)!;
+    // 保留弹簧越界后的液态微胀回弹（iOS 27 玻璃弹出时的有机表面张力感）
+    final swell = 1.0 + overshoot * 0.42;
+    final w = lerpDouble(core.width, target.width, sizeP)! * swell;
+    final h = lerpDouble(core.height, target.height, sizeP)! * swell;
     final travel = target.center - core.center;
     // 位置走一条比尺寸超前的 J 形曲线：两者之差就是面板领先于「跟着尺寸走」的那一点（横向夹在 ±14）
     final pathT = _BackOut(_backOutAmplitude(travel)).transform(u);
@@ -118,14 +133,20 @@ abstract final class DropletMorph {
 
     final blend = ((pathT - sizeP).abs() * 150 * _blendAttenuation(scaleDelta)).clamp(0.0, 28.0);
     final t = elapsed - 0.02; // 原生从 open() 到第一帧看得出长大约 20ms
+    final settled = _smoothstep((t - 0.06) / 0.13);
+    // 对齐 prism_ui：轻克制内容模糊（σ = 4.0）叠加 69ms 瞬时 1.9 脉冲，文字更快清晰不发糊
+    final baseBlur = 4.0 * (1 - settled);
+    final blurBump = 1.9 * _riseAndFall(elapsed, 0.069, 2.1);
+    final contentBlur = math.sqrt(baseBlur * baseBlur + blurBump * blurBump);
     return DropletFrame(
       platter: platter,
-      radius: _openRadius(platter.size, target.size, finalRadius, elapsed),
+      radius: _openRadius(platter.size, finalRadius, elapsed),
       blobCenter: core.center,
       blobRadius: core.shortestSide / 2 * anchorScale,
       neck: blend,
-      contentOpacity: _smoothstep((t - 0.12) / 0.10),
-      contentBlur: 8 * (1 - _smoothstep((t - 0.13) / 0.10)),
+      contentOpacity: _smoothstep((t - 0.07) / 0.09),
+      contentBlur: contentBlur,
+      contentScale: (lerpDouble(0.95, 1.0, settled)! + overshoot * 0.12).clamp(0.94, 1.02),
       glass: 1,
       depth: sizeP,
     );
@@ -208,6 +229,7 @@ abstract final class DropletMorph {
       neck: neck,
       contentOpacity: cu,
       contentBlur: (28 * (1 - cu)).clamp(0.0, 8.0),
+      contentScale: lerpDouble(0.90, 1.0, cu)!,
       glass: (u / 0.25).clamp(0.0, 1.0),
       depth: sizeP,
     );
@@ -362,14 +384,19 @@ abstract final class DropletMorph {
     return peak * unit / 0.2047;
   }
 
-  /// 打开时的圆角：前约 140ms 是正圆（短边一半），之后约 145ms 松成面板的圆角（高的面板松得早一点、慢一点）
-  static double _openRadius(Size current, Size resting, double finalRadius, double elapsed) {
+  /// 打开时的圆角（对齐 prism_ui 双弹簧）：前 70ms 保持胶囊正圆，随后由独立圆角弹簧平滑松弛到目标圆角
+  static double _openRadius(Size current, double finalRadius, double elapsed) {
     final half = math.min(current.width, current.height) / 2;
-    final rho0 = (finalRadius / (math.min(resting.width, resting.height) / 2)).clamp(0.0, 1.0);
-    final hf = ((resting.height - 250) / 270).clamp(0.0, 1.0);
-    final hold = 0.14 * (1 - 0.5 * hf), relax = 0.145 * (1 + 0.24 * hf);
-    final k = ((elapsed - 0.02 - hold) / relax).clamp(0.0, 1.0);
-    return half * (rho0 + (1 - rho0) * math.pow(1 - k, 1.3)).clamp(0.0, 1.0);
+    final targetR = math.min(finalRadius, half);
+    final cornerP = _cornersSim.x(math.max(0.0, elapsed - _cornersDelay)).clamp(0.0, 1.0);
+    return lerpDouble(targetR, half, cornerP)!;
+  }
+
+  /// 在 [peak] 秒处升至 1 再回落的平滑脉冲（对齐 prism_ui 的 riseAndFall）
+  static double _riseAndFall(double time, double peak, double sharpness) {
+    if (time <= 0) return 0;
+    final x = time / peak;
+    return math.pow(x, sharpness).toDouble() * math.exp(sharpness * (1 - x));
   }
 
   /// 按钮被撞的脉冲：S(ω17, ζ0.7) − S(ω18, ζ1)，归一到峰值 1（约 183ms）
@@ -446,14 +473,14 @@ class DropletMotion extends ChangeNotifier {
 
   void open() {
     closing = false;
-    _start(SpringSimulation(DropletMorph.openSpring, raw, 1, 0));
+    _start(SpringSimulation(MeowMotion.tuned(DropletMorph.openSpring), raw, 1, 0));
   }
 
   void close() {
     if (closing) return;
     closing = true;
     closeStart = raw.clamp(0.0, 1.0);
-    _start(SpringSimulation(DropletMorph.closeSpring, raw, 0, 0));
+    _start(SpringSimulation(MeowMotion.tuned(DropletMorph.closeSpring), raw, 0, 0));
   }
 
   void _start(SpringSimulation sim) {
@@ -532,6 +559,7 @@ class DropletSurface extends StatelessWidget {
       maxHeight: target.height,
       child: Transform.translate(offset: target.topLeft - f.platter.topLeft, child: child),
     );
+    content = Transform.scale(scale: f.contentScale, child: content);
     final sigma = blur ? f.contentBlur : 0.0;
     // 模糊层一直在树上（只开关）：插拔它会让里面的内容整棵重挂、每帧重画
     content = ImageFiltered(

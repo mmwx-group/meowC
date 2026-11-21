@@ -104,67 +104,68 @@ abstract final class MeowGlassStyles {
           );
   }
 
-  /// 弹出菜单与对话框：在 iOS 27 液态玻璃主题下增强边缘光学折射与高光，同时保持文字清晰可读
+  /// 弹出菜单与对话框：丝滑柔雾光学玻璃——较高模糊消除背后杂乱文字斑块，保留精致边缘微折射与 1px 高光描边
   static LiquidGlassStyle menu(BuildContext context) {
     final prefs = MeowUiRuntime.current;
-    final cs = scheme(context);
     final dark = context.isDarkMode;
     final frost = prefs.glassFrost.clamp(0.0, 1.0);
     final ios27 = prefs.isIos27Glass;
     final tinted = prefs.glassTinted;
-    final alpha = ((dark ? (ios27 ? 0.56 : 0.62) : (ios27 ? 0.52 : 0.60)) + (tinted ? 0.16 : 0) + (frost - 0.5) * 0.14)
-        .clamp(0.32, 0.86);
-    final blur = ((ios27 ? 7.0 : 9.0) + frost * 6.0 + (tinted ? 3.0 : 0)).clamp(3.0, 18.0);
+    final alpha = ((dark ? 0.72 : 0.78) + (tinted ? 0.10 : 0) + (frost - 0.5) * 0.10).clamp(0.58, 0.90);
+    final blur = ((ios27 ? 18.0 : 16.0) + (frost - 0.5) * 10.0 + (tinted ? 4.0 : 0)).clamp(10.0, 28.0);
     return LiquidGlassStyle(
-      tint: (dark ? cs.surfaceContainerHighest : cs.surfaceBright).withValues(alpha: alpha),
-      contrast: dark ? -0.35 : 0.2,
+      tint: (dark ? const Color(0xFF1A1D26) : const Color(0xFFFCFDFF)).withValues(alpha: alpha),
+      contrast: 0,
       blur: blur,
-      refraction: ios27 ? 64 : 46,
-      bevel: ios27 ? 20 : 14,
-      saturation: dark ? 1.65 : 1.8,
-      brightness: dark ? 1.25 : 1.05,
-      rim: ios27 ? (dark ? 0.52 : 0.58) : 0.35,
-      rimWidth: ios27 ? 1.2 : 1.0,
-      rimAdded: ios27 ? 0.42 : 0.25,
+      refraction: ios27 ? 24 : 16,
+      bevel: ios27 ? 12 : 10,
+      saturation: dark ? 1.45 : 1.5,
+      brightness: dark ? 1.06 : 1.03,
+      rim: ios27 ? (dark ? 0.44 : 0.52) : 0.30,
+      rimWidth: 1.0,
+      rimAdded: ios27 ? 0.30 : 0.18,
+      hairline: dark ? 0.14 : 0.28,
     );
   }
 
   static LiquidGlassRim menuRim(BuildContext context) => LiquidGlassRim.menu(scheme(context));
 
-  /// 锚在按钮上的气泡（首页卡片设置、节点视图…）与下拉菜单：更通透、带明显光学边缘折射（iOS 27 Popover）
+  /// 锚在按钮上的气泡（自定义主页卡片、节点视图、选择代理组）：
+  /// 奶油般均匀的高斯柔雾 + 温和边缘微折射 + 清晰玻璃高光边，既透出背后色彩氛围又不让底层文字糊成脏块干扰阅读。
   static LiquidGlassStyle popover(BuildContext context) {
     final prefs = MeowUiRuntime.current;
-    final cs = scheme(context);
     final dark = context.isDarkMode;
     final frost = prefs.glassFrost.clamp(0.0, 1.0);
     final ios27 = prefs.isIos27Glass;
     final tinted = prefs.glassTinted;
-    final alpha = ((dark ? (ios27 ? 0.32 : 0.38) : (ios27 ? 0.24 : 0.30)) + (tinted ? 0.18 : 0) + (frost - 0.5) * 0.14)
-        .clamp(0.18, 0.72);
-    final blur = ((ios27 ? 3.8 : 4.5) + frost * 4.5 + (tinted ? 2.5 : 0)).clamp(2.0, 14.0);
+    final alpha = ((dark ? 0.68 : 0.76) + (tinted ? 0.12 : 0) + (frost - 0.5) * 0.12).clamp(0.54, 0.88);
+    final blur = ((ios27 ? 18.0 : 16.0) + (frost - 0.5) * 10.0 + (tinted ? 4.0 : 0)).clamp(12.0, 28.0);
     return dark
         ? LiquidGlassStyle(
-            tint: cs.surfaceContainerHighest.withValues(alpha: alpha),
-            contrast: -0.35,
+            tint: const Color(0xFF1A1D27).withValues(alpha: alpha),
+            contrast: 0,
             blur: blur,
-            refraction: ios27 ? 72 : 52,
-            bevel: ios27 ? 22 : 16,
-            saturation: 1.75,
-            brightness: 1.45,
-            rim: ios27 ? 0.45 : 0,
-            rimWidth: 1.1,
-            rimAdded: ios27 ? 0.38 : 0,
+            refraction: ios27 ? 26 : 18,
+            bevel: ios27 ? 12 : 10,
+            saturation: 1.5,
+            brightness: 1.08,
+            rim: ios27 ? 0.46 : 0.32,
+            rimWidth: 1.0,
+            rimAdded: ios27 ? 0.32 : 0.20,
+            hairline: 0.16,
           )
         : LiquidGlassStyle(
-            tint: cs.surfaceBright.withValues(alpha: alpha),
+            tint: const Color(0xFFFFFFFF).withValues(alpha: alpha),
+            contrast: 0,
             blur: blur,
-            refraction: ios27 ? 72 : 52,
-            bevel: ios27 ? 22 : 16,
-            saturation: 1.9,
-            brightness: 1.06,
-            rim: ios27 ? 0.5 : 0,
-            rimWidth: 1.1,
-            rimAdded: ios27 ? 0.38 : 0,
+            refraction: ios27 ? 26 : 18,
+            bevel: ios27 ? 12 : 10,
+            saturation: 1.45,
+            brightness: 1.04,
+            rim: ios27 ? 0.54 : 0.36,
+            rimWidth: 1.0,
+            rimAdded: ios27 ? 0.32 : 0.20,
+            hairline: 0.30,
           );
   }
 
