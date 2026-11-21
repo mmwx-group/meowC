@@ -1,4 +1,6 @@
 import 'package:bett_box/meowx/state/core_error_notice.dart';
+// fake_async 随 flutter_test 一起来（SDK 钉的版本），不单独写进 pubspec
+// ignore: depend_on_referenced_packages
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
