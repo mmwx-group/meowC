@@ -20,6 +20,7 @@ import '../../state/connection.dart';
 import '../../state/custom_rules.dart';
 import '../../state/dial_failures.dart';
 import '../../state/format.dart';
+import '../../state/log_export.dart';
 import '../../state/log_source.dart';
 import '../../state/status.dart';
 import '../../state/traffic_kind.dart';
@@ -275,6 +276,20 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
     return (items: _viewItems, sum: _viewSum);
   }
 
+  /// 日志页「导出」：内存里的全部日志（MeowX + 内核，不管当前筛选）存成一份 .log（安卓走系统的「保存到」，桌面是保存对话框）
+  Future<void> _exportLogs() async {
+    final now = DateTime.now();
+    final platform = system.isAndroid ? 'Android' : system.isLinux ? 'Linux' : system.isWindows ? 'Windows' : 'macOS';
+    final logs = ref.read(logsProvider).list;
+    final bytes = LogExport.bytes(logs, version: globalState.packageInfo.version, platform: platform, now: now);
+    try {
+      final path = await picker.saveFile(LogExport.fileName(now), bytes);
+      if (path != null) globalState.showNotifier('已导出 ${logs.length} 条日志');
+    } catch (e) {
+      globalState.showNotifier('导出失败：$e');
+    }
+  }
+
   void _clearQuery() {
     _search.clear();
     setState(() => _query = '');
@@ -386,7 +401,18 @@ class _ConnectionsPageState extends ConsumerState<ConnectionsPage> {
             select: () => _conns.isEmpty,
             builder: (context, empty) => _PillButton(label: '全部关闭', color: mm.slow, onTap: empty ? null : _closeAll),
           )
-        : _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs());
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PillButton(
+                label: '导出',
+                color: mm.accent,
+                onTap: ref.watch(logsProvider.select((s) => s.list.isEmpty)) ? null : _exportLogs,
+              ),
+              const SizedBox(width: 8),
+              _PillButton(label: '清空', color: mm.slow, onTap: () => ref.read(logsProvider.notifier).clearLogs()),
+            ],
+          );
     final kindFilter = _KindFilter(value: _kind, compact: twoPane, onChanged: (k) => setState(() => _kind = k));
     final emptyText = _query.isNotEmpty
         ? '无匹配连接'

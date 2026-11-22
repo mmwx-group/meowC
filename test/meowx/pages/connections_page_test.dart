@@ -277,9 +277,17 @@ void main() {
 
     await _typeSearch(tester, '');
     await tester.pump();
+    // 「清空」左边是「导出」（2026-11-22）：有日志时可点，清空后变灰；360 宽也和搜索框放在同一行
+    double opacityOf(String label) =>
+        tester.widget<Opacity>(find.ancestor(of: find.text(label), matching: find.byType(Opacity)).first).opacity;
+    expect(find.text('导出'), findsOneWidget);
+    expect(opacityOf('导出'), 1);
+    expect(tester.getRect(find.text('导出')).right, lessThan(tester.getRect(find.text('清空')).left));
     await tester.tap(find.text('清空'));
     await tester.pump();
     expect(find.text('暂无日志'), findsOneWidget);
+    expect(opacityOf('导出'), 0.4);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('日志来源（同 iOS）：全部 / MeowX / 引擎；MeowX 的日志不带「[APP]」前缀；「记录日志」关着也照样显示', (tester) async {
