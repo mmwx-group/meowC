@@ -9,6 +9,9 @@ class MeshPanelStatus {
     this.controlUrl = '',
     this.magicDns = '',
     this.joinedAdmin = '',
+    this.accessScope = '',
+    this.deviceLimit,
+    this.servers = const [],
   });
 
   final bool available;
@@ -25,6 +28,15 @@ class MeshPanelStatus {
   /// 空 = 独立喵窝（老主控不发这个字段）
   final String joinedAdmin;
 
+  /// 访问范围：servers（仅服务器）/ sites（服务器 + 管理员站点）/ full（完全互通）；旧主控没有这个字段 = 空（不显示）
+  final String accessScope;
+
+  /// 设备上限：0 = 不限；旧主控没有这个字段 = null（不显示）
+  final int? deviceLimit;
+
+  /// （预留）可经喵窝连接的服务器：主控将来在 status 里多给的 `servers`；没有 = 空（不显示）
+  final List<MeshServer> servers;
+
   static MeshPanelStatus parse(Map<String, dynamic> r) {
     final err = r['error']?.toString() ?? '';
     if (err.isNotEmpty && r['available'] == null) throw PanelException(err);
@@ -36,7 +48,40 @@ class MeshPanelStatus {
       controlUrl: r['control_url']?.toString() ?? '',
       magicDns: r['magic_dns']?.toString() ?? '',
       joinedAdmin: (r['joined_admin']?.toString() ?? '').trim(),
+      accessScope: (r['access_scope']?.toString() ?? '').trim().toLowerCase(),
+      deviceLimit: _int(r['device_limit']),
+      servers: [for (final s in (r['servers'] is List ? r['servers'] as List : const [])) ?MeshServer.parse(s)],
     );
+  }
+}
+
+/// 访问范围的一行文字（喵窝页状态行下）；认不出 / 没有时 null（不显示）。
+String? meshAccessScopeText(String scope) => switch (scope) {
+  'servers' => '访问范围：仅服务器',
+  'sites' => '访问范围：服务器 + 管理员站点',
+  'full' => '访问范围：完全互通',
+  _ => null,
+};
+
+/// 设备上限的显示：0 = 不限。
+String meshDeviceLimitText(int limit) => limit <= 0 ? '不限' : '$limit 台';
+
+/// （预留）可经喵窝连接的一台服务器（status 的 `servers[]`）。宽松解析：没有名称或喵窝地址的条目丢掉。
+class MeshServer {
+  const MeshServer({required this.name, required this.meshIp, this.serverId});
+
+  final String name;
+
+  /// 服务器在喵窝里的地址（100.64.x.y）
+  final String meshIp;
+  final int? serverId;
+
+  static MeshServer? parse(Object? o) {
+    if (o is! Map) return null;
+    final name = (o['name']?.toString() ?? '').trim();
+    final ip = (o['mesh_ip']?.toString() ?? '').trim();
+    if (name.isEmpty || ip.isEmpty) return null;
+    return MeshServer(name: name, meshIp: ip, serverId: _int(o['server_id']));
   }
 }
 
@@ -49,6 +94,8 @@ class MeshDevice {
     this.online = false,
     this.lastSeen,
     this.routes = const [],
+    this.pendingRoutes = const [],
+    this.dnsName = '',
     this.username = '',
   });
 
@@ -58,11 +105,20 @@ class MeshDevice {
   final bool online;
   final DateTime? lastSeen;
 
-  /// 这台发布并已批准的网段（OpenWrt）
+  /// 这台发布并已批准的网段（OpenWrt）；主控给 null 时当空
   final List<String> routes;
+
+  /// 发布了、还没批准的网段；主控给 null 时当空
+  final List<String> pendingRoutes;
+
+  /// 设备在喵窝里的 DNS 名（`名字.MagicDNS 后缀`）
+  final String dnsName;
 
   /// 设备主人（只有 shared_devices 带：同网络里别人的设备）
   final String username;
+
+  /// 「站点路由器」：访问范围是 sites 时共享列表里的条目只有已批准的网段，没有地址与 DNS 名（不给复制地址）
+  bool get isSiteRouter => ipv4.isEmpty && dnsName.isEmpty && routes.isNotEmpty;
 
   static MeshDevice? parse(Object? o) {
     if (o is! Map) return null;
@@ -76,7 +132,9 @@ class MeshDevice {
       online: o['online'] == true,
       // Headscale 没见过的设备给的是零值时间（0001-01-01）
       lastSeen: seen == null || seen.year < 2000 ? null : seen,
-      routes: [for (final r in (o['routes'] is List ? o['routes'] as List : const [])) r.toString()],
+      routes: _strings(o['routes']),
+      pendingRoutes: _strings(o['pending_routes']),
+      dnsName: o['dns_name']?.toString() ?? '',
       username: o['username']?.toString() ?? '',
     );
   }
@@ -156,6 +214,11 @@ class MeshEnrollment {
   }
 }
 
+List<String> _strings(Object? v) => [
+  for (final r in (v is List ? v : const []))
+    if (r != null && r.toString().trim().isNotEmpty) r.toString().trim(),
+];
+
 int? _int(Object? v) => switch (v) {
   int i => i,
   num n => n.toInt(),
@@ -163,13 +226,83 @@ int? _int(Object? v) => switch (v) {
   _ => null,
 };
 
-/// 喵窝的主控接口（都经加密通道、只认管理员；出错时主控回 `{"error": …}`，这里抛 [PanelException]）。
+/// 喵窝管理接口的出错（经加密 RPC，主控保留业务 HTTP 状态码）：[status] 是那个状态码，[message] 是主控给的说明。
+class MeshApiException extends PanelException {
+  const MeshApiException(this.status, super.message);
+
+  final int status;
+}
+
+/// 出错之后该怎么办（规格 A4）。
+enum MeshErrorAction {
+  /// 401：走登录续期（会话 token 失效）
+  relogin,
+
+  /// 403：重查 status（多半已被移出名单：not_admin → 隐藏入口、清掉共享设备）
+  recheck,
+
+  /// 409：重查 status，主控关了喵窝或设备数到了上限
+  conflict,
+
+  /// 429 / 503：稍后再试（退避）
+  backoff,
+
+  /// 502：主控暂时连不上组网服务，保留本机设备身份、不清状态
+  unreachable,
+
+  /// 其它（400 / 404 / 连不上主控…）：照主控给的说明
+  other,
+}
+
+MeshErrorAction meshErrorAction(Object e) {
+  final status = e is MeshApiException ? e.status : null;
+  return switch (status) {
+    401 => MeshErrorAction.relogin,
+    403 => MeshErrorAction.recheck,
+    409 => MeshErrorAction.conflict,
+    429 || 503 => MeshErrorAction.backoff,
+    502 => MeshErrorAction.unreachable,
+    _ => MeshErrorAction.other,
+  };
+}
+
+/// 出错时给人看的话。409 要先重查 status：[reason] = 重查后的原因码（disabled = 主控关了喵窝），
+/// [deviceLimit] = 设备上限（拿不到时不写台数）；其它码不看这两项。
+String meshErrorText(Object e, {String? reason, int? deviceLimit}) => switch (meshErrorAction(e)) {
+  MeshErrorAction.relogin => '登录已过期，请重新登录',
+  MeshErrorAction.recheck => reason == 'not_admin' ? '喵窝没有对这个账号开放，请联系管理员' : (e is PanelException ? e.message : e.toString()),
+  MeshErrorAction.conflict => reason == 'disabled'
+      ? '主控已关闭喵窝'
+      : (deviceLimit != null && deviceLimit > 0 ? '设备数已达上限（$deviceLimit 台）' : '设备数已达上限'),
+  MeshErrorAction.backoff => '主控忙，稍后再试',
+  MeshErrorAction.unreachable => '主控暂时连不上组网服务，稍后再试',
+  MeshErrorAction.other => e is PanelException ? e.message : e.toString(),
+};
+
+/// 429 / 503 之后隔多久再试：15 秒起、每次翻倍，最多 5 分钟（[failures] = 连续第几次，从 1 数）。
+Duration meshBackoff(int failures) {
+  final n = failures < 1 ? 1 : (failures > 6 ? 6 : failures);
+  final d = Duration(seconds: 15 * (1 << (n - 1)));
+  return d > const Duration(minutes: 5) ? const Duration(minutes: 5) : d;
+}
+
+/// 喵窝的主控接口（都经加密通道、只认名单里的账号）。HTTP 状态码不是 2xx 时抛 [MeshApiException]
+/// （status 接口不在名单里时也回 200，按 available / reason 判断）；200 但带 `{"error": …}` 时抛 [PanelException]。
 extension MeshPanelApi on PanelClient {
+  Future<Map<String, dynamic>> _meshRpc(String path, {String method = 'POST', Map<String, dynamic> payload = const {}, required String token}) async {
+    final r = await rpcWithStatus(path, method: method, payload: payload, token: token);
+    if (r.status >= 400) {
+      final msg = (r.body['error'] ?? r.body['message'])?.toString() ?? '';
+      throw MeshApiException(r.status, msg.isEmpty ? '主控回 HTTP ${r.status}' : msg);
+    }
+    return r.body;
+  }
+
   Future<MeshPanelStatus> meshStatus(String token) async =>
-      MeshPanelStatus.parse(await rpc('/user/mesh/status', method: 'GET', token: token));
+      MeshPanelStatus.parse(await _meshRpc('/user/mesh/status', method: 'GET', token: token));
 
   Future<MeshDeviceList> meshDevices(String token) async =>
-      MeshDeviceList.parse(await rpc('/user/mesh/devices', method: 'GET', token: token));
+      MeshDeviceList.parse(await _meshRpc('/user/mesh/devices', method: 'GET', token: token));
 
   /// 申请一把一次性入网 key。[previousNodeId]：这台设备上一次在主控里的编号，主控先删掉它再签新 key
   Future<MeshEnrollment> meshEnroll(
@@ -179,7 +312,7 @@ extension MeshPanelApi on PanelClient {
     required String version,
     int? previousNodeId,
   }) async => MeshEnrollment.parse(
-    await rpc(
+    await _meshRpc(
       '/user/mesh/enroll',
       token: token,
       payload: {
@@ -194,7 +327,7 @@ extension MeshPanelApi on PanelClient {
 
   /// 从主控删掉一台设备（退出喵窝用）
   Future<void> meshDeleteDevice(String token, int id) async {
-    final r = await rpc('/user/mesh/devices/$id', method: 'DELETE', token: token);
+    final r = await _meshRpc('/user/mesh/devices/$id', method: 'DELETE', token: token);
     final err = r['error']?.toString() ?? '';
     if (err.isNotEmpty) throw PanelException(err);
   }

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:bett_box/meowx/net/subscription_fetch.dart';
 import 'package:dio/dio.dart';
@@ -331,6 +333,82 @@ void main() {
       );
       expect(logs.join('\n'), contains('换 DNS 解析（evil.test → 127.0.0.1）失败：handshake'));
       expect(logs.join('\n'), isNot(contains('TOKEN3')));
+    });
+  });
+
+  group('直连绕开自己的 VPN（Android：bypassDirect）', () {
+    final options = Options(responseType: ResponseType.bytes, headers: {'User-Agent': 'MeowX/0.6.2 (Android)'});
+    const url = 'https://203.0.113.9/x/TOKEN';
+
+    test('直连那一路交给 bypassDirect；经本机代理那一路不交', () async {
+      final calls = <String>[];
+      final http = SubscriptionHttp(
+        userAgent: () => 'MeowX-test',
+        proxyFor: (_) => 'DIRECT',
+        bypassDirect: (u, o, t) async {
+          calls.add('${o.headers?['User-Agent']} ${t.inSeconds}');
+          return SubscriptionHttp.nativeResponse(u, o, {'status': 200, 'url': u, 'headers': const {}, 'body': Uint8List.fromList([1, 2])});
+        },
+      );
+      final res = await http.get(url, options, SubFetchRoute.direct, null, const Duration(seconds: 7), CancelToken());
+      expect(res.data, [1, 2]);
+      expect(calls, ['MeowX/0.6.2 (Android) 7']);
+    });
+
+    test('bypassDirect 连接层失败：照常记下、换下一条路，最后给人看的话', () async {
+      final http = SubscriptionHttp(
+        userAgent: () => 'MeowX-test',
+        proxyFor: (_) => 'DIRECT',
+        bypassDirect: (_, _, _) async => throw const SocketException('SocketTimeoutException: failed to connect'),
+      );
+      final logs = <String>[];
+      await expectLater(
+        SubscriptionFetcher(
+          attempt: (route, ip, timeout, cancel) => http.get(url, options, route, ip, timeout, cancel),
+          systemLookup: (_) async => const [],
+          dohLookup: (_, _, _) async => const [],
+          log: logs.add,
+        ).fetch(Uri.parse(url), coreRunning: false),
+        throwsA(isA<SubscriptionFetchException>()),
+      );
+      expect(logs.first, contains('直连（203.0.113.9）失败'));
+    });
+
+    test('coreResponse（桌面内核直连）：解出 base64 正文；{error} 抛 SocketException；旧内核认不出返回 null', () {
+      final res = SubscriptionHttp.coreResponse(url, options, jsonEncode({
+        'status': 200,
+        'url': url,
+        'headers': {'subscription-userinfo': ['upload=1']},
+        'body': base64Encode([1, 2, 3]),
+      }))!;
+      expect(res.data, [1, 2, 3]);
+      expect(res.headers.value('subscription-userinfo'), 'upload=1');
+      expect(() => SubscriptionHttp.coreResponse(url, options, jsonEncode({'error': '直连超时'})), throwsA(isA<SocketException>()));
+      expect(SubFetchPolicy.shouldRetry(const SocketException('直连超时')), isTrue);
+      expect(SubscriptionHttp.coreResponse(url, options, 'unknown method'), isNull);
+      expect(SubscriptionHttp.coreResponse(url, options, jsonEncode({'foo': 1})), isNull);
+    });
+
+    test('nativeResponse：响应头键小写、状态码不是 2xx 抛 badResponse（不换路）', () {
+      final res = SubscriptionHttp.nativeResponse(url, options, {
+        'status': 200,
+        'url': 'https://203.0.113.9/x/OTHER',
+        'headers': {
+          'Subscription-Userinfo': ['upload=1; download=2'],
+        },
+        'body': Uint8List.fromList([7]),
+      });
+      expect(res.headers.value('subscription-userinfo'), 'upload=1; download=2');
+      expect(res.isRedirect, isTrue);
+      expect(res.redirects.single.location.path, '/x/OTHER');
+      Object? error;
+      try {
+        SubscriptionHttp.nativeResponse(url, options, {'status': 404, 'url': url, 'headers': const {}, 'body': Uint8List(0)});
+      } catch (e) {
+        error = e;
+      }
+      expect(error, isA<DioException>().having((e) => e.type, 'type', DioExceptionType.badResponse));
+      expect(SubFetchPolicy.shouldRetry(error!), isFalse);
     });
   });
 }

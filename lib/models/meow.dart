@@ -332,6 +332,10 @@ abstract class MeowMesh with _$MeowMesh {
 
     /// 上次主控给的不可用说明（disabled / starting 时显示）
     @Default('') String panelMessage,
+
+    /// 「白名单节点经喵窝连线」（缺省开，老配置没有这个键也算开）：开着且喵窝开着时，拉本主控订阅带 `X-MeowX-Mesh: on`，
+    /// 订阅里的白名单节点（`_mmwx-mesh`）经喵窝拨号。本机偏好，退出登录不清（见 lib/meowx/config/mesh_whitelist.dart）
+    @Default(true) bool whitelistViaMesh,
   }) = _MeowMesh;
 
   factory MeowMesh.fromJson(Map<String, Object?> json) => _$MeowMeshFromJson(json);

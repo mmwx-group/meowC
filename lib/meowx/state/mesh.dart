@@ -5,6 +5,7 @@ import 'package:bett_box/common/common.dart';
 import 'package:bett_box/models/models.dart';
 import 'package:bett_box/providers/providers.dart';
 import 'package:bett_box/state.dart';
+import 'package:collection/collection.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
@@ -13,15 +14,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../config/mesh_config.dart';
+import '../config/mesh_whitelist.dart';
 import '../panel/account.dart';
 import '../panel/client.dart';
 import '../panel/mesh.dart';
+import 'mesh_whitelist.dart';
 import 'meow_settings.dart';
 import 'status.dart';
 import 'tailscale_status.dart';
 
 export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName, meshNarrowBypass, meshTunRoutes;
-export '../panel/mesh.dart' show MeshDevice, MeshSite;
+export '../panel/mesh.dart' show MeshDevice, MeshSite, MeshServer, meshAccessScopeText, meshDeviceLimitText;
 export 'tailscale_status.dart' show TsStatus, TsPeer;
 
 /// 喵窝的运行时数据（不落盘）。生成运行配置的 `patchRawConfig` 在 globalState 里跑、拿不到 Riverpod，经这里取。
@@ -56,6 +59,13 @@ class MeshRuntime {
   /// 每生成一份带喵窝节点的运行配置（当前订阅）加一：内核的 tailscale 出站是懒启动的（第一次有连接才连控制服务器），
   /// MeshController 据此在配置生效后「叫醒」它一次，设备才会上线、别的设备才连得进来
   final epoch = ValueNotifier<int>(0);
+
+  /// 当前订阅里经喵窝拨号的白名单节点名（`_mmwx-mesh`，应用配置时记下的）：节点格据此画「喵窝」小标
+  final whitelistNodes = ValueNotifier<List<String>>(const []);
+
+  /// 当前订阅里有没有白名单节点（不管这次是经喵窝还是被拿掉）：on / off 变了而订阅不是本主控的（拉不到新版本）时，
+  /// 据此决定要不要按新状态重新生成运行配置
+  bool hasWhitelistNodes = false;
 
   MeshInjection? injection(MeowSettings meow) {
     final m = meow.mesh;
@@ -94,15 +104,39 @@ List<dynamic> applyNetworkingToConfig(
 }) {
   final mesh = meshRuntime.injection(meow);
   final patch = applyMeowNetworking(rawConfig, rules, stripTailscale: stripsSubscriptionTailscale(meow), mesh: mesh);
+  // 白名单节点（`_mmwx-mesh`）：喵窝开着（且这份配置里注入了「喵窝」出站）就经它拨号，否则拿掉
+  final whitelist = applyMeshWhitelist(rawConfig, patch.rules, on: mesh != null && meshWhitelistOn(meow));
   if (current) {
     if (!listEquals(meshRuntime.subscriptionNodes.value, patch.subscriptionTailscaleNodes)) {
       meshRuntime.subscriptionNodes.value = patch.subscriptionTailscaleNodes;
     }
+    meshRuntime.hasWhitelistNodes = whitelist.viaMesh.isNotEmpty || whitelist.removed.isNotEmpty;
+    if (!listEquals(meshRuntime.whitelistNodes.value, whitelist.viaMesh)) {
+      meshRuntime.whitelistNodes.value = whitelist.viaMesh;
+    }
     if (mesh != null) meshRuntime.epoch.value++;
   }
   if (patch.removed.isNotEmpty) commonPrint.log('组网：运行配置去掉了节点 ${patch.removed.join(', ')}');
-  return patch.rules;
+  if (whitelist.removed.isNotEmpty) commonPrint.log('喵窝：没开喵窝，运行配置去掉了白名单节点 ${whitelist.removed.join(', ')}');
+  if (whitelist.viaMesh.isNotEmpty) commonPrint.log('喵窝：${whitelist.viaMesh.length} 个白名单节点经喵窝拨号');
+  return whitelist.rules;
 }
+
+/// 当前订阅里经喵窝拨号的白名单节点名（节点格的「喵窝」小标）。
+final meshWhitelistNodesProvider = Provider<Set<String>>((ref) {
+  void changed() => ref.invalidateSelf();
+  meshRuntime.whitelistNodes.addListener(changed);
+  ref.onDispose(() => meshRuntime.whitelistNodes.removeListener(changed));
+  return meshRuntime.whitelistNodes.value.toSet();
+});
+
+/// B2 的 on（拉本主控订阅带 `X-MeowX-Mesh: on`、白名单节点经喵窝拨号）：登录着、在喵窝名单里、喵窝开着、开关开着。
+final meshWhitelistOnProvider = Provider<bool>((ref) => ref.watch(meowSettingProvider.select(meshWhitelistOn)));
+
+/// 「白名单节点经喵窝连线」开关显不显示：只给喵窝名单里的账号（没登录 / not_admin 不显示）。
+final meshWhitelistSwitchVisibleProvider = Provider<bool>(
+  (ref) => ref.watch(meowSettingProvider.select((s) => s.account.token.isNotEmpty && meshListedAccount(s.mesh.panelReason))),
+);
 
 /// 当前订阅里的 Tailscale 组网节点名（应用配置时记下的）。
 final subscriptionTailscaleNodesProvider = Provider<List<String>>((ref) {
@@ -196,6 +230,9 @@ class MeshState {
     this.sites = const [],
     this.joinedAdmin = '',
     this.sharedDevices = const [],
+    this.accessScope = '',
+    this.deviceLimit,
+    this.servers = const [],
     this.devicesComplete = false,
     this.devicesAt,
     this.stateNodeId,
@@ -222,6 +259,15 @@ class MeshState {
 
   /// 同网络里别人的设备（主控 `mesh/devices` 的 shared_devices）：只读显示，不算进「我的设备」与在线台数
   final List<MeshDevice> sharedDevices;
+
+  /// 访问范围（主控 `mesh/status` 的 access_scope：servers / sites / full；旧主控没有 = 空，不显示）
+  final String accessScope;
+
+  /// 设备上限（0 = 不限；旧主控没有 = null，不显示）
+  final int? deviceLimit;
+
+  /// （预留）可经喵窝连接的服务器（status 的 servers；没有 = 空，不显示）
+  final List<MeshServer> servers;
 
   /// 设备列表是主控完整给出的（Headscale 出错时主控只回一部分，不能据此判断「这台设备被删了」）
   final bool devicesComplete;
@@ -289,6 +335,10 @@ class MeshState {
     List<MeshSite>? sites,
     String? joinedAdmin,
     List<MeshDevice>? sharedDevices,
+    String? accessScope,
+    int? deviceLimit,
+    bool clearDeviceLimit = false,
+    List<MeshServer>? servers,
     bool? devicesComplete,
     DateTime? devicesAt,
     int? stateNodeId,
@@ -310,6 +360,9 @@ class MeshState {
     sites: sites ?? this.sites,
     joinedAdmin: joinedAdmin ?? this.joinedAdmin,
     sharedDevices: sharedDevices ?? this.sharedDevices,
+    accessScope: accessScope ?? this.accessScope,
+    deviceLimit: clearDeviceLimit ? null : (deviceLimit ?? this.deviceLimit),
+    servers: servers ?? this.servers,
     devicesComplete: devicesComplete ?? this.devicesComplete,
     devicesAt: devicesAt ?? this.devicesAt,
     stateNodeId: clearStateNodeId ? null : (stateNodeId ?? this.stateNodeId),
@@ -383,7 +436,14 @@ class MeshController extends Notifier<MeshState> {
   DateTime? _fastUntil;
   Timer? _localDebounce;
   Timer? _vpnRestart;
+  Timer? _refetchTimer;
   StreamSubscription<List<ConnectivityResult>>? _connSub;
+
+  /// 主控回 429 / 503 之后到这个时刻之前不自动问主控（[tick] / 自动入网）；连续失败次数决定退避多久（[meshBackoff]）
+  DateTime? _backoffUntil;
+  int _backoffFailures = 0;
+
+  bool get _inBackoff => _backoffUntil != null && DateTime.now().isBefore(_backoffUntil!);
 
   MeowMesh get _mesh => ref.read(meowSettingProvider).mesh;
   bool get _running => ref.read(isRunningProvider);
@@ -419,9 +479,16 @@ class MeshController extends Notifier<MeshState> {
       if (prev == null || listEquals(prev, next) || !Platform.isAndroid) return;
       _restartVpnLater(next);
     });
+    // 白名单节点经喵窝连线（B2）：on / off 变了（开关喵窝、切组网、拨开关、登录态变了）就重拉当前在用的本主控订阅，
+    // 让主控按新状态给喵窝版 / 公网版节点
+    ref.listen<bool>(meshWhitelistOnProvider, (prev, next) {
+      if (prev == null || prev == next) return;
+      _refetchLater(next);
+    });
     meshRuntime.epoch.addListener(_scheduleWake);
     ref.onDispose(() {
       meshRuntime.epoch.removeListener(_scheduleWake);
+      _refetchTimer?.cancel();
       _wakeTimer?.cancel();
       _fastTimer?.cancel();
       _localDebounce?.cancel();
@@ -436,7 +503,15 @@ class MeshController extends Notifier<MeshState> {
   // 主控
 
   /// 问主控能不能用，能用就顺带拉设备与站点（开着时把控制地址 / 站点网段写回设置）。并发调用合成一次。
-  Future<void> refresh() => _refreshing ??= _refresh().whenComplete(() => _refreshing = null);
+  Future<void> refresh() => _demo ? Future.value() : (_refreshing ??= _refresh().whenComplete(() => _refreshing = null));
+
+  /// 截图示例（只 debug，见 mesh_demo.dart）：之后不再问主控
+  bool _demo = false;
+
+  void showDemo(MeshState demo) {
+    _demo = true;
+    state = demo;
+  }
 
   Future<void> _refresh() async {
     _statusTriedAt = DateTime.now();
@@ -451,31 +526,14 @@ class MeshController extends Notifier<MeshState> {
       status = await client.meshStatus(token);
     } catch (e) {
       commonPrint.log('喵窝：问主控失败 $e');
-      state = state.copyWith(panelError: _message(e));
+      if (_token != token) return;
+      final text = await _onApiError(e, client, token, recheck: false);
+      state = state.copyWith(panelError: text);
       return;
     }
     if (_token != token) return;
-    _statusAt = DateTime.now();
-    state = state.copyWith(clearPanelError: true);
-    if (!status.available) {
-      state = state.copyWith(
-        availability: meshAvailabilityOf(status.reason),
-        message: meshReasonText(status.reason, status.message),
-        devices: const [],
-        sites: const [],
-        joinedAdmin: '',
-        sharedDevices: const [],
-        devicesComplete: false,
-      );
-      _updateMesh((m) => m.copyWith(panelReason: status.reason, panelMessage: status.message));
-      return;
-    }
-    state = state.copyWith(
-      availability: MeshAvailability.available,
-      message: '',
-      magicDns: status.magicDns,
-      joinedAdmin: status.joinedAdmin,
-    );
+    _apiOk();
+    if (!_applyStatus(status)) return;
     final before = _mesh;
     _updateMesh(
       (m) => m.copyWith(
@@ -486,8 +544,80 @@ class MeshController extends Notifier<MeshState> {
       ),
     );
     final changed = before.enabled && (_mesh.controlUrl != before.controlUrl || _mesh.magicDns != before.magicDns);
-    _lastStatus = status;
     await _refreshDevices(client, token, reapplyIfChanged: changed);
+  }
+
+  /// 把 status 的回答写进状态。不可用（不在名单 / 主控关了 / 启动中）时清掉设备、站点与共享设备，返回 false。
+  bool _applyStatus(MeshPanelStatus status) {
+    _statusAt = DateTime.now();
+    _lastStatus = status;
+    state = state.copyWith(
+      clearPanelError: true,
+      accessScope: status.accessScope,
+      deviceLimit: status.deviceLimit,
+      clearDeviceLimit: status.deviceLimit == null,
+      servers: status.servers,
+    );
+    if (!status.available) {
+      state = state.copyWith(
+        availability: meshAvailabilityOf(status.reason),
+        message: meshReasonText(status.reason, status.message),
+        devices: const [],
+        sites: const [],
+        joinedAdmin: '',
+        sharedDevices: const [],
+        servers: const [],
+        devicesComplete: false,
+      );
+      _updateMesh((m) => m.copyWith(panelReason: status.reason, panelMessage: status.message));
+      return false;
+    }
+    state = state.copyWith(
+      availability: MeshAvailability.available,
+      message: '',
+      magicDns: status.magicDns,
+      joinedAdmin: status.joinedAdmin,
+    );
+    return true;
+  }
+
+  /// 主控回过一次正常应答：退避清零
+  void _apiOk() {
+    _backoffUntil = null;
+    _backoffFailures = 0;
+  }
+
+  /// 喵窝管理接口出错之后的处理（规格 A4），返回给人看的话：
+  /// 401 走登录续期；403 / 409 重查 status（[recheck] = 出错的不是 status 本身）；429 / 503 退避；
+  /// 502 只提示、保留本机设备身份与现有状态。
+  Future<String> _onApiError(Object e, PanelClient client, String token, {bool recheck = true}) async {
+    switch (meshErrorAction(e)) {
+      case MeshErrorAction.relogin:
+        if (_token == token) ref.read(accountActionsProvider).sessionExpired();
+      case MeshErrorAction.recheck || MeshErrorAction.conflict:
+        if (recheck) await _recheckStatus(client, token);
+      case MeshErrorAction.backoff:
+        _backoffFailures++;
+        final wait = meshBackoff(_backoffFailures);
+        _backoffUntil = DateTime.now().add(wait);
+        commonPrint.log('喵窝：主控忙（${(e as MeshApiException).status}），${wait.inSeconds} 秒后再试');
+      case MeshErrorAction.unreachable || MeshErrorAction.other:
+        break;
+    }
+    return meshErrorText(e, reason: _lastStatus?.reason, deviceLimit: state.deviceLimit);
+  }
+
+  /// 只重查 status（403 / 409 之后：多半已被移出名单或主控关了喵窝），不再拉设备，免得 403 一直重查
+  Future<void> _recheckStatus(PanelClient client, String token) async {
+    try {
+      final status = await client.meshStatus(token);
+      if (_token != token) return;
+      _apiOk();
+      _applyStatus(status);
+      if (status.available) _updateMesh((m) => m.copyWith(panelReason: '', panelMessage: ''));
+    } catch (e) {
+      commonPrint.log('喵窝：重查主控状态失败 $e');
+    }
   }
 
   MeshPanelStatus? _lastStatus;
@@ -499,10 +629,14 @@ class MeshController extends Notifier<MeshState> {
       list = await client.meshDevices(token);
     } catch (e) {
       commonPrint.log('喵窝：拉设备列表失败 $e');
-      state = state.copyWith(panelError: _message(e));
+      if (_token != token) return;
+      final text = await _onApiError(e, client, token);
+      state = state.copyWith(panelError: text);
       return;
     }
     if (_token != token) return;
+    _apiOk();
+    // 共享设备按本次应答整份替换：管理员收紧访问范围后，旧条目要消失
     state = state.copyWith(
       clearPanelError: true,
       devices: list.devices,
@@ -527,11 +661,12 @@ class MeshController extends Notifier<MeshState> {
   /// 页面 / 首页卡片看得见时定期调：读状态文件；离上次问主控超过 [devicesEvery] 就再问一次；该入网就入网。
   /// App 在后台时不问主控。
   Future<void> tick({Duration devicesEvery = const Duration(seconds: 30)}) async {
+    if (_demo) return;
     await _readStateFile();
     await _pollEngine();
     final foreground = WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
-    if (!foreground || _token.isEmpty) return;
+    if (!foreground || _token.isEmpty || _inBackoff) return;
     final now = DateTime.now();
     final at = state.devicesAt;
     final statusStale = _statusAt == null || now.difference(_statusAt!) > const Duration(minutes: 5);
@@ -643,8 +778,10 @@ class MeshController extends Notifier<MeshState> {
         commonPrint.log('喵窝：已从主控删除这台设备（$id）');
       } catch (e) {
         // 设备已经不在了照样往下走；别的错（连不上主控）停在这里，让用户重试
-        if (!_message(e).contains('不存在')) {
-          state = state.copyWith(busy: false, error: _message(e));
+        final gone = (e is MeshApiException && e.status == 404) || _message(e).contains('不存在');
+        if (!gone) {
+          final text = await _onApiError(e, client, _token);
+          state = state.copyWith(busy: false, error: text);
           return;
         }
       }
@@ -696,7 +833,7 @@ class MeshController extends Notifier<MeshState> {
 
   /// 开着、代理在跑、这台设备还没登记（或在主控被删了）、手上也没有 key：要一把，并重新应用配置
   Future<void> _maybeEnroll() async {
-    if (!_mesh.enabled || _mesh.controlUrl.isEmpty || !_running || state.busy) return;
+    if (!_mesh.enabled || _mesh.controlUrl.isEmpty || !_running || state.busy || _inBackoff) return;
     if (meshRuntime.authKey != null) return;
     final int? previous;
     final since = _needsLoginSince;
@@ -783,7 +920,8 @@ class MeshController extends Notifier<MeshState> {
       return true;
     } catch (e) {
       commonPrint.log('喵窝：申请入网失败 $e');
-      state = state.copyWith(error: _message(e));
+      final text = await _onApiError(e, client, token);
+      state = state.copyWith(error: text);
       return false;
     } finally {
       state = state.copyWith(enrolling: false);
@@ -820,6 +958,34 @@ class MeshController extends Notifier<MeshState> {
     if (!ref.read(initProvider)) return;
     commonPrint.log('喵窝：$why，重新应用配置');
     globalState.appController.applyProfileDebounce(silence: true);
+  }
+
+  /// 白名单节点经喵窝连线的 on / off 变了：合并成一次（切组网时几项设置会连着改），重拉当前在用的本主控订阅
+  void _refetchLater(bool on) {
+    _refetchTimer?.cancel();
+    _refetchTimer = Timer(const Duration(seconds: 2), () => unawaited(_refetchPanelSubscription(on)));
+  }
+
+  Future<void> _refetchPanelSubscription(bool on) async {
+    if (!ref.read(initProvider)) return;
+    final id = ref.read(currentProfileIdProvider);
+    final profile = ref.read(profilesProvider).firstWhereOrNull((p) => p.id == id);
+    final own = profile != null &&
+        profile.url.isNotEmpty &&
+        isOwnPanelProfile(profile.id, profile.url, ref.read(meowSettingProvider).account.host);
+    if (!own) {
+      // 不是本主控的订阅（主控不认这个头）：里面有白名单节点时按新状态重新生成运行配置（经喵窝 / 拿掉）
+      if (meshRuntime.hasWhitelistNodes) _reapplyLater('白名单节点经喵窝${on ? '打开' : '关闭'}');
+      return;
+    }
+    commonPrint.log('喵窝：白名单节点经喵窝${on ? '打开' : '关闭'}，重拉当前订阅「${profile.label ?? profile.id}」');
+    try {
+      await globalState.appController.updateProfile(profile);
+    } catch (e) {
+      // 拉不到也按新状态重新生成运行配置（白名单节点的去留跟着变，见 applyMeshWhitelist）
+      commonPrint.log('喵窝：重拉订阅失败 $e');
+      _reapplyLater('重拉订阅失败，按新的喵窝状态重新生成配置');
+    }
   }
 
   void _scheduleWake() {

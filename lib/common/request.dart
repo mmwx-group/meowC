@@ -6,11 +6,14 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:intl/intl.dart';
+import 'package:bett_box/clash/clash.dart';
+import 'package:bett_box/enum/enum.dart';
 import 'package:bett_box/common/common.dart';
 import 'package:bett_box/meowx/net/subscription_fetch.dart';
 import 'package:bett_box/meowx/update/update_http.dart';
 import 'package:bett_box/meowx/update/update_manifest.dart';
 import 'package:bett_box/models/models.dart';
+import 'package:bett_box/plugins/vpn.dart';
 import 'package:bett_box/state.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -37,7 +40,39 @@ class Request {
     userAgent: () => globalState.ua,
     proxyFor: BettboxHttpOverrides.handleFindProxy,
     acceptBadCertificates: true,
+    bypassDirect: _vpnBypassDirect,
   );
+
+  /// 「直连」那一路不进自己的虚拟网卡（否则被内核按规则送进代理节点，节点全连不上时主控也连不上）：
+  /// - Android：VPN 开着时在 VPN 底下的物理网络上发（原生层，见 DirectFetch.kt）；
+  /// - Windows / Linux：内核起着时（虚拟网卡可能开着）交给内核发，套接字绑物理网卡、按 direct-nameserver 解析（见 core/meow_direct_fetch.go）。
+  /// 都不适用时返回 null，照常用 Dart 直连。
+  static Future<Response<dynamic>?> _vpnBypassDirect(String url, Options options, Duration connectTimeout) async {
+    final headers = {for (final e in (options.headers ?? const <String, dynamic>{}).entries) e.key: '${e.value}'};
+    // 没给 UA 时 Dart 直连用的是 HttpClient 上的 globalState.ua，这一路不经 HttpClient，要自己带上；
+    // 不带的话发出去的是系统缺省 UA，主控认不出官方客户端，不给喵窝版等只有官方内核支持的节点
+    if (!headers.keys.any((k) => k.toLowerCase() == 'user-agent')) headers['User-Agent'] = globalState.ua;
+    if (system.isAndroid) {
+      final reply = await Vpn.directFetch(
+        url,
+        headers: headers,
+        connectTimeout: connectTimeout,
+        readTimeout: SubscriptionHttp.receiveTimeout,
+        insecure: true,
+      );
+      return reply == null ? null : SubscriptionHttp.nativeResponse(url, options, reply);
+    }
+    if ((system.isWindows || system.isLinux) && globalState.appState.runTime != null) {
+      final total = connectTimeout + SubscriptionHttp.receiveTimeout;
+      final raw = await clashCore.clashInterface.invoke<String?>(
+        method: ActionMethod.meowDirectFetch,
+        data: jsonEncode({'url': url, 'headers': headers, 'insecure': true, 'timeout_ms': total.inMilliseconds}),
+        timeout: total + const Duration(seconds: 5),
+      );
+      return raw == null ? null : SubscriptionHttp.coreResponse(url, options, raw);
+    }
+    return null;
+  }
 
   Uint8List _decompressIfNeeded(Uint8List bytes, Headers headers) {
     final encodings =

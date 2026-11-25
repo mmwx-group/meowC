@@ -199,6 +199,11 @@ class _NetworkingPageState extends ConsumerState<NetworkingPage> {
             children: const [MeshHostnameRow()],
           ),
         if (mode == NetworkingMode.tailscale) const _TailscaleDetails(),
+        // 白名单节点经喵窝连线：只给喵窝名单里的账号；喵窝没开时也能先设好
+        if (ref.watch(meshWhitelistSwitchVisibleProvider)) ...[
+          const SizedBox(height: 12),
+          const MeshWhitelistSection(),
+        ],
         MeCaption('${meowNestName(context)}与订阅里的 Tailscale 组网节点只能开一个：两边都用 100.64.0.0/10 的地址，同时开会互相抢路由。'),
       ],
     );
@@ -248,7 +253,15 @@ class MeshDetails extends ConsumerWidget {
                 ],
               ),
             ),
+            if (meshAccessScopeText(state.accessScope) case final scope?) MeRow(label: scope),
             if (state.joinedAdmin.isNotEmpty) MeRow(label: '已加入 ${state.joinedAdmin} 的$name'),
+            if (state.deviceLimit case final limit?)
+              MeRow(
+                label: '设备上限',
+                value: limit > 0 && state.devices.isNotEmpty
+                    ? '已用 ${state.devices.length} / ${meshDeviceLimitText(limit)}'
+                    : meshDeviceLimitText(limit),
+              ),
             if (state.selfAddress(mesh.nodeId) case final ip when ip.isNotEmpty)
               MeRow(label: '本机地址', value: ip, mono: true, onTap: () => _copy(ip)),
             const MeshHostnameRow(),
@@ -270,7 +283,8 @@ class MeshDetails extends ConsumerWidget {
           const SizedBox(height: 12),
           MeSection(
             title: '同网络的设备',
-            note: '点按复制地址',
+            // 站点路由器（访问范围是「服务器 + 管理员站点」时）没有地址，全是这种时不写「点按复制」
+            note: state.sharedDevices.any((d) => d.ipv4.isNotEmpty) ? '点按复制地址' : null,
             children: [
               for (final d in state.sharedDevices)
                 _DeviceRow(device: d, isSelf: false, selfOnline: false, path: state.pathOf(d), showOwner: true),
@@ -282,6 +296,17 @@ class MeshDetails extends ConsumerWidget {
           MeSection(
             title: '我的站点',
             children: [for (final s in state.sites) _SiteRow(site: s)],
+          ),
+        ],
+        // （预留）主控在 status 里给了可经喵窝连接的服务器才显示
+        if (state.servers.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          MeSection(
+            title: '可经$name连接的服务器',
+            note: '点按复制地址',
+            children: [
+              for (final s in state.servers) MeRow(label: s.name, value: s.meshIp, mono: true, onTap: () => _copy(s.meshIp)),
+            ],
           ),
         ],
         if (mesh.enabled) ...[
@@ -445,6 +470,15 @@ class _DeviceRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    if (showOwner && device.isSiteRouter) {
+      // 访问范围是「服务器 + 管理员站点」时共享的站点路由器：只有网段，没有地址与 DNS 名，不给复制
+      return MeRow(
+        leading: StatusDot(color: device.online ? mm.good : mm.t3),
+        label: device.username.isEmpty ? '站点' : '站点 · ${device.username}',
+        subtitle: device.routes.join(' · '),
+        subtitleMaxLines: null,
+      );
+    }
     final online = isSelf ? selfOnline : device.online;
     final seen = device.lastSeen;
     final value = isSelf
@@ -615,6 +649,31 @@ class _TailscaleDetailsState extends ConsumerState<_TailscaleDetails> {
           const SizedBox(height: 12),
         ],
         const MeCaption('组网节点由订阅下发（规则把 tailnet 的地址与 MagicDNS 名字交给它）。没有 auth key 的节点要在浏览器里登录一次，之后设备一直保留在 tailnet 里。'),
+      ],
+    );
+  }
+}
+
+/// 「白名单节点经喵窝连线」开关（喵窝白名单直连，规格 B1）：缺省开，本机偏好、退出登录不清。
+/// 拨动后由 MeshController 重拉当前在用的本主控订阅（主控按开关给喵窝版 / 公网版节点）。
+class MeshWhitelistSection extends ConsumerWidget {
+  const MeshWhitelistSection({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = meowNestName(context);
+    final on = ref.watch(meowSettingProvider.select((s) => s.mesh.whitelistViaMesh));
+    return MeSection(
+      children: [
+        MeSwitchRow(
+          label: '白名单节点经$name连线',
+          subtitle: '订阅里的白名单服务器节点改经$name连接，不占服务器的 IP 白名单名额。需要开着$name。',
+          subtitleMaxLines: null,
+          value: on,
+          onChanged: (v) => ref
+              .read(meowSettingProvider.notifier)
+              .updateState((s) => s.copyWith(mesh: s.mesh.copyWith(whitelistViaMesh: v))),
+        ),
       ],
     );
   }

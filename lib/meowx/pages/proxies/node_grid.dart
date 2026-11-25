@@ -23,6 +23,7 @@ import '../../theme/tokens.dart';
 import '../../theme/unlock_badge.dart';
 import 'entry_badge.dart';
 import 'group_reveal.dart';
+import 'mesh_badge.dart';
 import 'node_parts.dart';
 
 const _gridSpacing = 8.0;
@@ -348,6 +349,8 @@ class _NodeCell extends ConsumerWidget {
                 children: [
                   // 徽标自带 2 的点按边距，间距按视觉 6 配；主控指定入口的小标没有覆盖时不占位
                   EntryOverrideBadge(proxy.name, size: dense ? 13 : 14),
+                  // 经喵窝拨号的白名单节点（不是时不占位）
+                  MeshViaBadge(proxy.name, size: dense ? 13 : 14),
                   if (medal != null) ...[const SizedBox(width: 4), MedalBadge(medal, size: dense ? 14 : 15)],
                   if (unlocks != null) ...[const SizedBox(width: 4), UnlockBadge(unlocks, size: dense ? 13 : 14)],
                   if (busy)

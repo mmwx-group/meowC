@@ -278,6 +278,9 @@ enum ActionMethod {
   /// MeowX：主控实时通道（入口即时切换 + 订阅自动更新：配置通道、入口覆盖表、待更新队列），见 core/meow_realtime.go
   meowRealtime,
 
+  /// MeowX：拉订阅「直连」那一路由内核发（套接字不进虚拟网卡），见 core/meow_direct_fetch.go
+  meowDirectFetch,
+
   ///Android,
   setState,
   startTun,

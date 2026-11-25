@@ -229,6 +229,31 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 result.success(GlobalState.currentRunState == RunState.START)
             }
 
+            // MeowX：拉订阅「直连」那一路绕开自己的 VPN（见 DirectFetch）；VPN 没开 / 没有物理网络时回 null，Dart 照常直连
+            "directFetch" -> {
+                val url = call.argument<String>("url")
+                val network = if (bettBoxService is BettboxVpnService && GlobalState.currentRunState == RunState.START) {
+                    directFetchNetwork()
+                } else null
+                if (network == null || url == null) {
+                    result.success(null)
+                    return
+                }
+                val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
+                val connectTimeout = call.argument<Int>("connectTimeoutMs") ?: 10_000
+                val readTimeout = call.argument<Int>("readTimeoutMs") ?: 30_000
+                val insecure = call.argument<Boolean>("insecure") ?: false
+                scope.launch(Dispatchers.IO) {
+                    val reply = runCatching { DirectFetch.get(network, url, headers, connectTimeout, readTimeout, insecure) }
+                    withContext(Dispatchers.Main) {
+                        reply.fold(
+                            onSuccess = { result.success(it) },
+                            onFailure = { result.error("DIRECT_FETCH", it.message ?: "", it.javaClass.simpleName) },
+                        )
+                    }
+                }
+            }
+
             else -> {
                 result.notImplemented()
             }
@@ -252,6 +277,14 @@ data object VpnPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         if (available.isNotEmpty()) return available
 
         return cm.activeNetwork?.takeIf(isPhysical)?.let { setOf(it) } ?: emptySet()
+    }
+
+    // MeowX：directFetch 用的物理网络，已验证能上网的优先
+    private fun directFetchNetwork(): Network? {
+        val cm = connectivity ?: return null
+        return getActivePhysicalNetworks().maxByOrNull { net ->
+            if (cm.getNetworkCapabilities(net)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true) 1 else 0
+        }
     }
 
     fun getLocalIpAddresses(): List<String> = runCatching {
