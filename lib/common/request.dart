@@ -47,6 +47,16 @@ class Request {
   /// - Android：VPN 开着时在 VPN 底下的物理网络上发（原生层，见 DirectFetch.kt）；
   /// - Windows / Linux：内核起着时（虚拟网卡可能开着）交给内核发，套接字绑物理网卡、按 direct-nameserver 解析（见 core/meow_direct_fetch.go）。
   /// 都不适用时返回 null，照常用 Dart 直连。
+  /// 内核是不是起着。`appState` 是 late 字段：启动早期（以及不起整个 App 的单测）还没赋值，读它会抛 LateError——那时当作没起，
+  /// 照常走 Dart 直连，不让一次拉订阅因此失败。
+  static bool get _coreRunning {
+    try {
+      return globalState.appState.runTime != null;
+    } on Error {
+      return false;
+    }
+  }
+
   static Future<Response<dynamic>?> _vpnBypassDirect(String url, Options options, Duration connectTimeout) async {
     final headers = {for (final e in (options.headers ?? const <String, dynamic>{}).entries) e.key: '${e.value}'};
     // 没给 UA 时 Dart 直连用的是 HttpClient 上的 globalState.ua，这一路不经 HttpClient，要自己带上；
@@ -62,7 +72,7 @@ class Request {
       );
       return reply == null ? null : SubscriptionHttp.nativeResponse(url, options, reply);
     }
-    if ((system.isWindows || system.isLinux) && globalState.appState.runTime != null) {
+    if ((system.isWindows || system.isLinux) && _coreRunning) {
       final total = connectTimeout + SubscriptionHttp.receiveTimeout;
       final raw = await clashCore.clashInterface.invoke<String?>(
         method: ActionMethod.meowDirectFetch,
