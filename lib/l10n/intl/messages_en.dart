@@ -35,27 +35,46 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m6(count) => "${count}";
 
-  static String m7(count) =>
+  static String m7(n) => "${n} min ago";
+
+  static String m8(name) => "Via relay server ${name}";
+
+  static String m9(name) => "Via ${name} (relay)";
+
+  static String m10(addr) => "Via device relay ${addr}";
+
+  static String m11(name) => "Via ${name} (someone else\'s relay)";
+
+  static String m12(port) =>
+      "If the device is behind a router, forward UDP ${port} to it on that router";
+
+  static String m13(n) => "${n} more unidentified connections";
+
+  static String m14(v) => "tailscale ${v}";
+
+  static String m15(name) => "reported by ${name}";
+
+  static String m16(count) =>
       "${Intl.plural(count, one: 'minute', other: 'minutes')}";
 
-  static String m8(count) =>
+  static String m17(count) =>
       "${Intl.plural(count, one: 'month', other: 'months')}";
 
-  static String m9(label) => "No ${label}";
+  static String m18(label) => "No ${label}";
 
-  static String m10(label) => "${label} must be a number";
+  static String m19(label) => "${label} must be a number";
 
-  static String m11(label) =>
+  static String m20(label) =>
       "${label} must be between 1024 and 49151, 0 to disable";
 
-  static String m12(statusCode) =>
+  static String m21(statusCode) =>
       "Failed to import profile. Please check your network status or try resetting the subscription link ( HTTP error code: ${statusCode} )";
 
-  static String m13(count) => "${count} items selected";
+  static String m22(count) => "${count} items selected";
 
-  static String m14(label) => "${label} must be a URL";
+  static String m23(label) => "${label} must be a URL";
 
-  static String m15(count) =>
+  static String m24(count) =>
       "${Intl.plural(count, one: 'year', other: 'years')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -710,6 +729,121 @@ class MessageLookup extends MessageLookupByLibrary {
       "The current memory information value displayed is the dynamic stack memory usage of the core during runtime, not the complete APP memory statistics, for reference only.",
     ),
     "meowNest": MessageLookupByLibrary.simpleMessage("MeowNest"),
+    "meshCopyAddress": MessageLookupByLibrary.simpleMessage("Copy address"),
+    "meshDeviceAddress": MessageLookupByLibrary.simpleMessage("Address"),
+    "meshDeviceDetails": MessageLookupByLibrary.simpleMessage("Device details"),
+    "meshDeviceLastHandshake": MessageLookupByLibrary.simpleMessage(
+      "Last handshake",
+    ),
+    "meshDevicePath": MessageLookupByLibrary.simpleMessage("Path"),
+    "meshDevicePeerView": MessageLookupByLibrary.simpleMessage("Panel record"),
+    "meshDevicePeerViewNote": MessageLookupByLibrary.simpleMessage(
+      "Reports from both ends, collected by the panel",
+    ),
+    "meshDeviceTraffic": MessageLookupByLibrary.simpleMessage("Traffic"),
+    "meshJustNow": MessageLookupByLibrary.simpleMessage("just now"),
+    "meshMinutesAgo": m7,
+    "meshNoRecord": MessageLookupByLibrary.simpleMessage("No record"),
+    "meshNone": MessageLookupByLibrary.simpleMessage("None yet"),
+    "meshNotInEngine": MessageLookupByLibrary.simpleMessage(
+      "No connection to it from this device right now",
+    ),
+    "meshOffline": MessageLookupByLibrary.simpleMessage("Offline"),
+    "meshOtherUser": MessageLookupByLibrary.simpleMessage("Another user"),
+    "meshPathDirect": MessageLookupByLibrary.simpleMessage("Direct"),
+    "meshPathIdle": MessageLookupByLibrary.simpleMessage("Idle"),
+    "meshPathViaDerp": m8,
+    "meshPathViaDerpPlain": MessageLookupByLibrary.simpleMessage(
+      "Via relay server",
+    ),
+    "meshPathViaDeviceRelay": MessageLookupByLibrary.simpleMessage(
+      "Via device relay",
+    ),
+    "meshPathViaRelay": m9,
+    "meshPathViaRelayAddr": m10,
+    "meshPathViaRelayOther": m11,
+    "meshRelayAddEndpoint": MessageLookupByLibrary.simpleMessage("Add address"),
+    "meshRelayDdns": MessageLookupByLibrary.simpleMessage("DDNS hostname"),
+    "meshRelayDdnsNote": MessageLookupByLibrary.simpleMessage(
+      "Fill in if your home IP changes; the relay device resolves it every 5 minutes",
+    ),
+    "meshRelayEndpoints": MessageLookupByLibrary.simpleMessage(
+      "Static addresses",
+    ),
+    "meshRelayEndpointsNote": MessageLookupByLibrary.simpleMessage(
+      "Fill in when you forwarded a port or the public address is not detected. Write public IP:port (IPv6 in brackets), up to 4",
+    ),
+    "meshRelayErrDeviceNotFound": MessageLookupByLibrary.simpleMessage(
+      "The device no longer exists; the device list was refreshed",
+    ),
+    "meshRelayErrDisabled": MessageLookupByLibrary.simpleMessage(
+      "The admin turned off device relays",
+    ),
+    "meshRelayErrInvalidDdns": MessageLookupByLibrary.simpleMessage(
+      "Invalid DDNS hostname",
+    ),
+    "meshRelayErrInvalidEndpoint": MessageLookupByLibrary.simpleMessage(
+      "Static addresses must be public IP:port (IPv6 in brackets), not private or MeowNest addresses, up to 4",
+    ),
+    "meshRelayErrInvalidPort": MessageLookupByLibrary.simpleMessage(
+      "The port must be between 1024 and 65535",
+    ),
+    "meshRelayErrInvalidRequest": MessageLookupByLibrary.simpleMessage(
+      "Invalid request",
+    ),
+    "meshRelayErrRateLimited": MessageLookupByLibrary.simpleMessage(
+      "Too many requests, try again later",
+    ),
+    "meshRelayErrShareNotAllowed": MessageLookupByLibrary.simpleMessage(
+      "Only admins can share with everyone; changed back to this account",
+    ),
+    "meshRelayNoSessions": MessageLookupByLibrary.simpleMessage(
+      "No connections are going through it",
+    ),
+    "meshRelayNotCapable": MessageLookupByLibrary.simpleMessage(
+      "This device has not reported relay support (needs the latest MeowX on OpenWrt / fnOS / Docker)",
+    ),
+    "meshRelayPendingStuck": MessageLookupByLibrary.simpleMessage(
+      "The device is not responding. Make sure it runs the latest MeowX and is online",
+    ),
+    "meshRelayPort": MessageLookupByLibrary.simpleMessage("UDP port"),
+    "meshRelayPortForward": m12,
+    "meshRelayPortNote": MessageLookupByLibrary.simpleMessage(
+      "1024–65535, default 40000",
+    ),
+    "meshRelaySave": MessageLookupByLibrary.simpleMessage("Save"),
+    "meshRelaySaved": MessageLookupByLibrary.simpleMessage("Saved"),
+    "meshRelaySessions": MessageLookupByLibrary.simpleMessage("Relaying now"),
+    "meshRelaySettings": MessageLookupByLibrary.simpleMessage("Relay settings"),
+    "meshRelaySettingsNote": MessageLookupByLibrary.simpleMessage(
+      "Devices that cannot connect directly can go through it, faster than a relay server",
+    ),
+    "meshRelayShare": MessageLookupByLibrary.simpleMessage("Sharing"),
+    "meshRelayShareAll": MessageLookupByLibrary.simpleMessage("Everyone"),
+    "meshRelayShareSelf": MessageLookupByLibrary.simpleMessage("This account"),
+    "meshRelayStateActive": MessageLookupByLibrary.simpleMessage("Active"),
+    "meshRelayStateDisabled": MessageLookupByLibrary.simpleMessage("Off"),
+    "meshRelayStateError": MessageLookupByLibrary.simpleMessage("Error"),
+    "meshRelayStateOffline": MessageLookupByLibrary.simpleMessage(
+      "Device offline",
+    ),
+    "meshRelayStatePending": MessageLookupByLibrary.simpleMessage(
+      "Waiting for the device",
+    ),
+    "meshRelayStateVersionTooOld": MessageLookupByLibrary.simpleMessage(
+      "tailscale is too old",
+    ),
+    "meshRelayStatus": MessageLookupByLibrary.simpleMessage("Status"),
+    "meshRelaySwitch": MessageLookupByLibrary.simpleMessage(
+      "Act as MeowNest relay",
+    ),
+    "meshRelayTag": MessageLookupByLibrary.simpleMessage("Relay"),
+    "meshRelayUnmatched": m13,
+    "meshRelayVersion": m14,
+    "meshReportedByBoth": MessageLookupByLibrary.simpleMessage(
+      "reported by both ends",
+    ),
+    "meshReportedByOne": m15,
     "messageTest": MessageLookupByLibrary.simpleMessage("Message Test"),
     "messageTestTip": MessageLookupByLibrary.simpleMessage(
       "This is a message.",
@@ -720,11 +854,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "minimizeOnExitDesc": MessageLookupByLibrary.simpleMessage(
       "Override default exit behavior",
     ),
-    "minutes": m7,
+    "minutes": m16,
     "mixedPort": MessageLookupByLibrary.simpleMessage("Mixed Port"),
     "mode": MessageLookupByLibrary.simpleMessage("Mode"),
     "monochromeScheme": MessageLookupByLibrary.simpleMessage("Monochrome"),
-    "months": m8,
+    "months": m17,
     "more": MessageLookupByLibrary.simpleMessage("More"),
     "moreIpInfo": MessageLookupByLibrary.simpleMessage("More IP Information"),
     "name": MessageLookupByLibrary.simpleMessage("Name"),
@@ -821,8 +955,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
       "No profile. Please add one.",
     ),
-    "nullTip": m9,
-    "numberTip": m10,
+    "nullTip": m18,
+    "numberTip": m19,
     "oneColumn": MessageLookupByLibrary.simpleMessage("1 Column"),
     "onlinePanel": MessageLookupByLibrary.simpleMessage("Online Panel"),
     "onlyIcon": MessageLookupByLibrary.simpleMessage("Icon Only"),
@@ -926,7 +1060,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "portConflictTip": MessageLookupByLibrary.simpleMessage(
       "Please enter a different port",
     ),
-    "portTip": m11,
+    "portTip": m20,
     "powerSwitch": MessageLookupByLibrary.simpleMessage("Power"),
     "preferH3Desc": MessageLookupByLibrary.simpleMessage(
       "Prioritize DoH HTTP/3",
@@ -945,7 +1079,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
       "Profile modified. Disable auto-update?",
     ),
-    "profileImportFailed": m12,
+    "profileImportFailed": m21,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "Please enter a profile name",
     ),
@@ -1104,7 +1238,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "selectAll": MessageLookupByLibrary.simpleMessage("Select All"),
     "selected": MessageLookupByLibrary.simpleMessage("Selected"),
-    "selectedCountTitle": m13,
+    "selectedCountTitle": m22,
     "serviceReady": MessageLookupByLibrary.simpleMessage("Service Ready"),
     "serviceRunning": MessageLookupByLibrary.simpleMessage("Service Running"),
     "settings": MessageLookupByLibrary.simpleMessage("Settings"),
@@ -1293,7 +1427,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Upload"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
     "urlDesc": MessageLookupByLibrary.simpleMessage("Get profile via URL"),
-    "urlTip": m14,
+    "urlTip": m23,
     "useGlobalScriptOverride": MessageLookupByLibrary.simpleMessage(
       "Use Global Script Override",
     ),
@@ -1332,6 +1466,6 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Requires administrator privileges",
     ),
-    "years": m15,
+    "years": m24,
   };
 }

@@ -24,6 +24,7 @@ import '../state/dial_failures.dart';
 import '../state/ggy_reporter.dart';
 import '../state/home_widget.dart';
 import '../state/mesh.dart';
+import '../state/mesh_path_reporter.dart';
 import '../state/meow_settings.dart';
 import '../state/po0_reporter.dart';
 import '../state/whitelist_demo.dart';
@@ -57,6 +58,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
   late final ProviderSubscription<(bool, String, bool)> _ggySub;
   late final ProviderSubscription<(bool, String, String, bool)> _akileSub;
   late final ProviderSubscription<bool> _batterySub;
+  late final ProviderSubscription<bool> _meshPathSub;
+  late final ProviderSubscription<TsStatus?> _meshEngineSub;
   final List<ProviderSubscription<Object?>> _wifiSubs = [];
   /// 安卓桌面小组件的数据同步（只 Android，见 state/home_widget.dart）
   late final HomeWidgetSync _homeWidget = HomeWidgetSync(ref);
@@ -156,6 +159,12 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _homeWidget.start();
     // 喵窝：建出控制器（登录 / 启动后问主控能不能用；配置生效后叫醒内核里的喵窝节点）
     ref.read(meshProvider);
+    // 喵窝路径上报（设备中继）：喵窝开着、代理在跑、主控支持时 60 秒一次 + 路径变化 / 回前台 / 换网补报（MeshPathReporter）；
+    // 页面上轮询拿到的内核状态也交给它，路径变了更快补报
+    _meshPathSub = ref.listenManual(meshPathReportActiveProvider, (_, _) => ref.read(meshPathReporterProvider).sync(), fireImmediately: true);
+    _meshEngineSub = ref.listenManual(meshProvider.select((s) => s.engine), (_, next) {
+      if (next != null) ref.read(meshPathReporterProvider).observe(next);
+    });
     _profileSub = ref.listenManual(currentProfileIdProvider, (prev, next) => _syncDirectMode(next));
     // 等 Bettbox 把偏好加载完（isInit）再补内置直连档，否则会被随后加载的配置覆盖
     _initSub = ref.listenManual(initProvider, (prev, next) {
@@ -264,6 +273,8 @@ class _MeowRootState extends ConsumerState<MeowRoot> {
     _ggySub.close();
     _akileSub.close();
     _batterySub.close();
+    _meshPathSub.close();
+    _meshEngineSub.close();
     for (final sub in _wifiSubs) {
       sub.close();
     }

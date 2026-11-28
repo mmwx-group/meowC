@@ -34,24 +34,42 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m6(count) => "${count}";
 
-  static String m7(count) => "${Intl.plural(count, other: '分钟')}";
+  static String m7(n) => "${n} 分钟前";
 
-  static String m8(count) => "${Intl.plural(count, other: '月')}";
+  static String m8(name) => "经中继服务器 ${name}";
 
-  static String m9(label) => "暂无${label}";
+  static String m9(name) => "经 ${name} 中继";
 
-  static String m10(label) => "${label}必须为数字";
+  static String m10(addr) => "经设备中继 ${addr}";
 
-  static String m11(label) => "${label} 必须在 1024 到 49151 之间，0 为关闭";
+  static String m11(name) => "经 ${name} 中继（他人的）";
 
-  static String m12(statusCode) =>
+  static String m12(port) => "设备在路由器后面时，要在上级路由器上把 UDP ${port} 映射到这台设备";
+
+  static String m13(n) => "另有 ${n} 个未识别的连接";
+
+  static String m14(v) => "tailscale ${v}";
+
+  static String m15(name) => "${name} 报的";
+
+  static String m16(count) => "${Intl.plural(count, other: '分钟')}";
+
+  static String m17(count) => "${Intl.plural(count, other: '月')}";
+
+  static String m18(label) => "暂无${label}";
+
+  static String m19(label) => "${label}必须为数字";
+
+  static String m20(label) => "${label} 必须在 1024 到 49151 之间，0 为关闭";
+
+  static String m21(statusCode) =>
       "配置导入失败，请检查网络状况或尝试重置订阅链接( HTTP错误代码: ${statusCode} )";
 
-  static String m13(count) => "已选择 ${count} 项";
+  static String m22(count) => "已选择 ${count} 项";
 
-  static String m14(label) => "${label}必须为URL";
+  static String m23(label) => "${label}必须为URL";
 
-  static String m15(count) => "${Intl.plural(count, other: '年')}";
+  static String m24(count) => "${Intl.plural(count, other: '年')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -509,17 +527,108 @@ class MessageLookup extends MessageLookupByLibrary {
       "当前内存信息数值显示为内核运行时的动态堆栈内存占用，非完整 App 内存统计，仅供参考。",
     ),
     "meowNest": MessageLookupByLibrary.simpleMessage("喵窝"),
+    "meshCopyAddress": MessageLookupByLibrary.simpleMessage("复制地址"),
+    "meshDeviceAddress": MessageLookupByLibrary.simpleMessage("地址"),
+    "meshDeviceDetails": MessageLookupByLibrary.simpleMessage("设备详情"),
+    "meshDeviceLastHandshake": MessageLookupByLibrary.simpleMessage("最近握手"),
+    "meshDevicePath": MessageLookupByLibrary.simpleMessage("路径"),
+    "meshDevicePeerView": MessageLookupByLibrary.simpleMessage("主控记录"),
+    "meshDevicePeerViewNote": MessageLookupByLibrary.simpleMessage(
+      "主控汇总的两端上报（对端视角）",
+    ),
+    "meshDeviceTraffic": MessageLookupByLibrary.simpleMessage("流量"),
+    "meshJustNow": MessageLookupByLibrary.simpleMessage("刚刚"),
+    "meshMinutesAgo": m7,
+    "meshNoRecord": MessageLookupByLibrary.simpleMessage("没有记录"),
+    "meshNone": MessageLookupByLibrary.simpleMessage("还没有"),
+    "meshNotInEngine": MessageLookupByLibrary.simpleMessage("本机暂时没有到它的连接"),
+    "meshOffline": MessageLookupByLibrary.simpleMessage("离线"),
+    "meshOtherUser": MessageLookupByLibrary.simpleMessage("其他用户"),
+    "meshPathDirect": MessageLookupByLibrary.simpleMessage("直连"),
+    "meshPathIdle": MessageLookupByLibrary.simpleMessage("空闲"),
+    "meshPathViaDerp": m8,
+    "meshPathViaDerpPlain": MessageLookupByLibrary.simpleMessage("经中继服务器"),
+    "meshPathViaDeviceRelay": MessageLookupByLibrary.simpleMessage("经设备中继"),
+    "meshPathViaRelay": m9,
+    "meshPathViaRelayAddr": m10,
+    "meshPathViaRelayOther": m11,
+    "meshRelayAddEndpoint": MessageLookupByLibrary.simpleMessage("添加地址"),
+    "meshRelayDdns": MessageLookupByLibrary.simpleMessage("DDNS 域名"),
+    "meshRelayDdnsNote": MessageLookupByLibrary.simpleMessage(
+      "家里 IP 会变时填写，中继设备每 5 分钟解析一次",
+    ),
+    "meshRelayEndpoints": MessageLookupByLibrary.simpleMessage("静态地址"),
+    "meshRelayEndpointsNote": MessageLookupByLibrary.simpleMessage(
+      "做了端口映射、或探测不到公网地址时填写，写成公网 IP:端口（IPv6 加方括号），最多 4 个",
+    ),
+    "meshRelayErrDeviceNotFound": MessageLookupByLibrary.simpleMessage(
+      "设备不存在或已删除，已刷新设备列表",
+    ),
+    "meshRelayErrDisabled": MessageLookupByLibrary.simpleMessage("管理员关闭了设备中继"),
+    "meshRelayErrInvalidDdns": MessageLookupByLibrary.simpleMessage(
+      "DDNS 域名格式不对",
+    ),
+    "meshRelayErrInvalidEndpoint": MessageLookupByLibrary.simpleMessage(
+      "静态地址要写成公网 IP:端口（IPv6 加方括号），不能是私网或喵窝地址，最多 4 个",
+    ),
+    "meshRelayErrInvalidPort": MessageLookupByLibrary.simpleMessage(
+      "端口要在 1024–65535 之间",
+    ),
+    "meshRelayErrInvalidRequest": MessageLookupByLibrary.simpleMessage("请求无效"),
+    "meshRelayErrRateLimited": MessageLookupByLibrary.simpleMessage(
+      "操作太频繁，稍后再试",
+    ),
+    "meshRelayErrShareNotAllowed": MessageLookupByLibrary.simpleMessage(
+      "只有管理员能共享给所有成员，已改回仅本账号",
+    ),
+    "meshRelayNoSessions": MessageLookupByLibrary.simpleMessage("现在没有经它中继的连接"),
+    "meshRelayNotCapable": MessageLookupByLibrary.simpleMessage(
+      "这台设备没有上报过中继能力（要 OpenWrt / 飞牛 / Docker 上的新版 MeowX），开不了中继",
+    ),
+    "meshRelayPendingStuck": MessageLookupByLibrary.simpleMessage(
+      "设备未响应，确认已安装新版 MeowX 并在线",
+    ),
+    "meshRelayPort": MessageLookupByLibrary.simpleMessage("UDP 端口"),
+    "meshRelayPortForward": m12,
+    "meshRelayPortNote": MessageLookupByLibrary.simpleMessage(
+      "1024–65535，缺省 40000",
+    ),
+    "meshRelaySave": MessageLookupByLibrary.simpleMessage("保存"),
+    "meshRelaySaved": MessageLookupByLibrary.simpleMessage("已保存"),
+    "meshRelaySessions": MessageLookupByLibrary.simpleMessage("正在经它中继"),
+    "meshRelaySettings": MessageLookupByLibrary.simpleMessage("中继设置"),
+    "meshRelaySettingsNote": MessageLookupByLibrary.simpleMessage(
+      "打不通直连的设备可以经它转发，比中继服务器快",
+    ),
+    "meshRelayShare": MessageLookupByLibrary.simpleMessage("共享范围"),
+    "meshRelayShareAll": MessageLookupByLibrary.simpleMessage("所有成员"),
+    "meshRelayShareSelf": MessageLookupByLibrary.simpleMessage("仅本账号"),
+    "meshRelayStateActive": MessageLookupByLibrary.simpleMessage("正在工作"),
+    "meshRelayStateDisabled": MessageLookupByLibrary.simpleMessage("未开启"),
+    "meshRelayStateError": MessageLookupByLibrary.simpleMessage("出错"),
+    "meshRelayStateOffline": MessageLookupByLibrary.simpleMessage("设备离线"),
+    "meshRelayStatePending": MessageLookupByLibrary.simpleMessage("等待设备响应"),
+    "meshRelayStateVersionTooOld": MessageLookupByLibrary.simpleMessage(
+      "tailscale 版本过低",
+    ),
+    "meshRelayStatus": MessageLookupByLibrary.simpleMessage("状态"),
+    "meshRelaySwitch": MessageLookupByLibrary.simpleMessage("作为喵窝中继"),
+    "meshRelayTag": MessageLookupByLibrary.simpleMessage("中继"),
+    "meshRelayUnmatched": m13,
+    "meshRelayVersion": m14,
+    "meshReportedByBoth": MessageLookupByLibrary.simpleMessage("两端都报了"),
+    "meshReportedByOne": m15,
     "messageTest": MessageLookupByLibrary.simpleMessage("消息测试"),
     "messageTestTip": MessageLookupByLibrary.simpleMessage("这是一条消息。"),
     "min": MessageLookupByLibrary.simpleMessage("最小"),
     "minimize": MessageLookupByLibrary.simpleMessage("最小化"),
     "minimizeOnExit": MessageLookupByLibrary.simpleMessage("退出最小化"),
     "minimizeOnExitDesc": MessageLookupByLibrary.simpleMessage("修改系统默认退出事件"),
-    "minutes": m7,
+    "minutes": m16,
     "mixedPort": MessageLookupByLibrary.simpleMessage("混合端口"),
     "mode": MessageLookupByLibrary.simpleMessage("模式"),
     "monochromeScheme": MessageLookupByLibrary.simpleMessage("单色"),
-    "months": m8,
+    "months": m17,
     "more": MessageLookupByLibrary.simpleMessage("查看"),
     "moreIpInfo": MessageLookupByLibrary.simpleMessage("更多 IP 信息"),
     "name": MessageLookupByLibrary.simpleMessage("名称"),
@@ -590,8 +699,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "ntpStatus": MessageLookupByLibrary.simpleMessage("状态"),
     "ntpStatusDesc": MessageLookupByLibrary.simpleMessage("开启 NTP 时间服务"),
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage("没有配置文件,请先添加配置文件"),
-    "nullTip": m9,
-    "numberTip": m10,
+    "nullTip": m18,
+    "numberTip": m19,
     "oneColumn": MessageLookupByLibrary.simpleMessage("一列"),
     "onlinePanel": MessageLookupByLibrary.simpleMessage("在线面板"),
     "onlyIcon": MessageLookupByLibrary.simpleMessage("仅图标"),
@@ -667,7 +776,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "port": MessageLookupByLibrary.simpleMessage("端口"),
     "portConflictTip": MessageLookupByLibrary.simpleMessage("请输入不同的端口"),
-    "portTip": m11,
+    "portTip": m20,
     "powerSwitch": MessageLookupByLibrary.simpleMessage("启动开关"),
     "preferH3Desc": MessageLookupByLibrary.simpleMessage("优先使用 DoH 的 HTTP/3"),
     "pressKeyboard": MessageLookupByLibrary.simpleMessage("请按下按键"),
@@ -682,7 +791,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
       "配置文件已经修改，是否关闭自动更新？",
     ),
-    "profileImportFailed": m12,
+    "profileImportFailed": m21,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "请输入配置名称",
     ),
@@ -787,7 +896,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "secretCopied": MessageLookupByLibrary.simpleMessage("密码已复制到剪贴板"),
     "selectAll": MessageLookupByLibrary.simpleMessage("全选"),
     "selected": MessageLookupByLibrary.simpleMessage("已选择"),
-    "selectedCountTitle": m13,
+    "selectedCountTitle": m22,
     "serviceReady": MessageLookupByLibrary.simpleMessage("服务已就绪"),
     "serviceRunning": MessageLookupByLibrary.simpleMessage("服务正在运行中"),
     "settings": MessageLookupByLibrary.simpleMessage("设置"),
@@ -932,7 +1041,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("上传"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
     "urlDesc": MessageLookupByLibrary.simpleMessage("通过 URL 获取配置文件"),
-    "urlTip": m14,
+    "urlTip": m23,
     "useGlobalScriptOverride": MessageLookupByLibrary.simpleMessage("使用全局脚本覆写"),
     "useHosts": MessageLookupByLibrary.simpleMessage("使用Hosts"),
     "useSystemHosts": MessageLookupByLibrary.simpleMessage("使用系统 Hosts"),
@@ -961,6 +1070,6 @@ class MessageLookup extends MessageLookupByLibrary {
     "whitelistMode": MessageLookupByLibrary.simpleMessage("白名单模式"),
     "writeToSystem": MessageLookupByLibrary.simpleMessage("写入系统"),
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage("需要管理员权限"),
-    "years": m15,
+    "years": m24,
   };
 }

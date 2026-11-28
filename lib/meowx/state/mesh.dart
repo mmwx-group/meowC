@@ -21,7 +21,7 @@ import 'status.dart';
 import 'tailscale_status.dart';
 
 export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName, meshNarrowBypass, meshTunRoutes;
-export '../panel/mesh.dart' show MeshDevice, MeshSite;
+export '../panel/mesh.dart' show MeshDevice, MeshSite, MeshDeviceRelayFlag;
 export 'tailscale_status.dart' show TsStatus, TsPeer;
 
 /// 喵窝的运行时数据（不落盘）。生成运行配置的 `patchRawConfig` 在 globalState 里跑、拿不到 Riverpod，经这里取。
@@ -195,6 +195,7 @@ class MeshState {
     this.devices = const [],
     this.sites = const [],
     this.joinedAdmin = '',
+    this.deviceRelay,
     this.sharedDevices = const [],
     this.devicesComplete = false,
     this.devicesAt,
@@ -219,6 +220,13 @@ class MeshState {
 
   /// 加入了哪位管理员的喵窝（主控 `mesh/status` 的 joined_admin；空 = 独立喵窝 / 老主控）
   final String joinedAdmin;
+
+  /// 主控的设备中继开关（`mesh/status` 的 device_relay）：null = 老主控 / 还没问到，不报路径、不显示任何中继界面；
+  /// enabled 为 false 时只报 / 显示路径，不显示中继开关与标签
+  final MeshDeviceRelayFlag? deviceRelay;
+
+  /// 中继相关界面（标签、设置页）要不要显示
+  bool get deviceRelayEnabled => deviceRelay?.enabled == true;
 
   /// 同网络里别人的设备（主控 `mesh/devices` 的 shared_devices）：只读显示，不算进「我的设备」与在线台数
   final List<MeshDevice> sharedDevices;
@@ -288,6 +296,8 @@ class MeshState {
     List<MeshDevice>? devices,
     List<MeshSite>? sites,
     String? joinedAdmin,
+    MeshDeviceRelayFlag? deviceRelay,
+    bool clearDeviceRelay = false,
     List<MeshDevice>? sharedDevices,
     bool? devicesComplete,
     DateTime? devicesAt,
@@ -309,6 +319,7 @@ class MeshState {
     devices: devices ?? this.devices,
     sites: sites ?? this.sites,
     joinedAdmin: joinedAdmin ?? this.joinedAdmin,
+    deviceRelay: clearDeviceRelay ? null : (deviceRelay ?? this.deviceRelay),
     sharedDevices: sharedDevices ?? this.sharedDevices,
     devicesComplete: devicesComplete ?? this.devicesComplete,
     devicesAt: devicesAt ?? this.devicesAt,
@@ -464,6 +475,7 @@ class MeshController extends Notifier<MeshState> {
         devices: const [],
         sites: const [],
         joinedAdmin: '',
+        clearDeviceRelay: true,
         sharedDevices: const [],
         devicesComplete: false,
       );
@@ -475,6 +487,8 @@ class MeshController extends Notifier<MeshState> {
       message: '',
       magicDns: status.magicDns,
       joinedAdmin: status.joinedAdmin,
+      deviceRelay: status.deviceRelay,
+      clearDeviceRelay: status.deviceRelay == null,
     );
     final before = _mesh;
     _updateMesh(

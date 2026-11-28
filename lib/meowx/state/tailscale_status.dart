@@ -66,6 +66,10 @@ class TsPeer {
     this.curAddr = '',
     this.relay = '',
     this.lastSeen,
+    this.peerRelay = '',
+    this.rxBytes = 0,
+    this.txBytes = 0,
+    this.lastHandshake,
   });
 
   final int? id;
@@ -75,16 +79,32 @@ class TsPeer {
   final bool online;
   final bool active;
 
-  /// 直连用的地址（空 = 没打通直连，走中继）
+  /// 直连用的地址（空 = 没打通直连）
   final String curAddr;
+
+  /// 经中继服务器（DERP）时的区域代码（如 meowx-7 / meowx-7-alt）
   final String relay;
   final DateTime? lastSeen;
 
-  bool get direct => curAddr.isNotEmpty;
+  /// 经设备中继时的中继地址（`ip:port:vni:N`；空 = 没走设备中继）。走设备中继时 curAddr 为空、relay 照样有值，
+  /// 所以判路径要先看它（喵窝设备中继，Design/mesh-peer-relay.md §2.2）
+  final String peerRelay;
 
-  /// 「直连」/「中继 · 区域」/「空闲」（MeowX 同一写法）。设备之间按需打通：最近没流量、也没有直连地址的
-  /// 还没真正连过（relay 只是对方的家中继），以前一律写成「中继」，要访问一次才变「直连」，看着像没打通
+  /// 与这台之间收 / 发的字节数（本机 WireGuard 计数，旧内核没有为 0）
+  final int rxBytes;
+  final int txBytes;
+
+  /// 最近一次 WireGuard 握手成功的时刻（没握过手 / 旧内核为 null）
+  final DateTime? lastHandshake;
+
+  bool get direct => curAddr.isNotEmpty;
+  bool get viaPeerRelay => peerRelay.isNotEmpty;
+
+  /// 「经设备中继」/「直连」/「中继 · 区域」/「空闲」（MeowX 同一写法）。顺序同路径上报：设备中继 > 直连 > 中继服务器。
+  /// 设备之间按需打通：最近没流量、也没有直连地址的还没真正连过（relay 只是对方的家中继），以前一律写成「中继」，
+  /// 要访问一次才变「直连」，看着像没打通
   String get pathText {
+    if (viaPeerRelay) return '经设备中继';
     if (direct) return '直连';
     if (!active) return '空闲';
     return relay.isEmpty ? '中继' : '中继 · $relay';
@@ -102,9 +122,20 @@ class TsPeer {
       curAddr: o['curAddr']?.toString() ?? '',
       relay: o['relay']?.toString() ?? '',
       lastSeen: DateTime.tryParse(o['lastSeen']?.toString() ?? ''),
+      peerRelay: o['peerRelay']?.toString() ?? '',
+      rxBytes: _int(o['rxBytes']),
+      txBytes: _int(o['txBytes']),
+      lastHandshake: DateTime.tryParse(o['lastHandshake']?.toString() ?? ''),
     );
   }
 }
+
+int _int(Object? v) => switch (v) {
+  int i => i,
+  num n => n.toInt(),
+  String s => int.tryParse(s) ?? 0,
+  _ => 0,
+};
 
 /// 核心的回包：{status: …|null, error?}。没有这个出站 → (null, null)；旧核心不认这个动作 → 抛出 / 回 null，按拿不到处理。
 ({TsStatus? status, String? error}) parseTsStatusResponse(String? raw) {

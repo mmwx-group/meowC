@@ -1,5 +1,7 @@
 import 'client.dart';
 
+export 'mesh_relay.dart';
+
 /// 主控 `GET /api/user/mesh/status` 的应答：喵窝能不能用（只认启用中的管理员）。
 class MeshPanelStatus {
   const MeshPanelStatus({
@@ -9,9 +11,14 @@ class MeshPanelStatus {
     this.controlUrl = '',
     this.magicDns = '',
     this.joinedAdmin = '',
+    this.deviceRelay,
   });
 
   final bool available;
+
+  /// 设备中继的主控开关（接口稿 MEOWX_MESH_PEER_RELAY_API.md）。老主控没有这个字段 = null：不支持，隐藏全部中继界面、
+  /// 也不调路径 / 中继接口
+  final MeshDeviceRelayFlag? deviceRelay;
 
   /// not_admin / disabled / starting（可用时为空）
   final String reason;
@@ -36,8 +43,39 @@ class MeshPanelStatus {
       controlUrl: r['control_url']?.toString() ?? '',
       magicDns: r['magic_dns']?.toString() ?? '',
       joinedAdmin: (r['joined_admin']?.toString() ?? '').trim(),
+      deviceRelay: available ? MeshDeviceRelayFlag.parse(r['device_relay']) : null,
     );
   }
+}
+
+/// `mesh/status` 的 `device_relay`。
+class MeshDeviceRelayFlag {
+  const MeshDeviceRelayFlag({this.enabled = false, this.minVersion = '', this.canShare = false});
+
+  /// 管理员开放了设备中继：false 时隐藏中继开关与标签（路径上报与显示照常）
+  final bool enabled;
+
+  /// 中继设备要求的 tailscaled 最低版本
+  final String minVersion;
+
+  /// 能把中继设成 `share: all`（只有管理员）
+  final bool canShare;
+
+  static MeshDeviceRelayFlag? parse(Object? o) {
+    if (o is! Map) return null;
+    return MeshDeviceRelayFlag(
+      enabled: o['enabled'] == true,
+      minVersion: o['min_version']?.toString() ?? '',
+      canShare: o['can_share'] == true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is MeshDeviceRelayFlag && other.enabled == enabled && other.minVersion == minVersion && other.canShare == canShare;
+
+  @override
+  int get hashCode => Object.hash(enabled, minVersion, canShare);
 }
 
 /// 主控里的一台设备（`mesh/devices` 的 devices[]，以及同网络里别人的设备 shared_devices[]）。

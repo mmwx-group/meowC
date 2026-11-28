@@ -10,12 +10,15 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../config/mesh_config.dart';
 import '../../state/format.dart';
 import '../../state/mesh.dart';
+import '../../state/mesh_relay.dart';
 import '../../state/meow_settings.dart';
 import '../../state/status.dart';
 import '../../state/tailscale_status.dart';
 import '../../theme/tokens.dart';
 import '../../theme/widgets.dart';
 import '../me/me_kit.dart';
+import 'mesh_relay_pages.dart';
+import 'mesh_relay_text.dart';
 
 /// 「喵窝」的显示名（arb 的 meowNest：简体喵窝 / 繁体喵窩 / 英文 MeowNest）；多语言没加载时（单测）用简体。
 String meowNestName(BuildContext context) => AppLocalizations.maybeOf(context)?.meowNest ?? '喵窝';
@@ -115,6 +118,8 @@ class _NetworkingPageState extends ConsumerState<NetworkingPage> {
     _timer = Timer.periodic(const Duration(seconds: 3), (_) {
       if (mounted && TickerMode.getValuesNotifier(context).value.enabled) {
         unawaited(ref.read(meshProvider.notifier).tick(devicesEvery: const Duration(seconds: 9)));
+        // 设备中继：主控汇总的路径与中继设备（controller 里按 15 秒合并；主控不支持时不调）
+        if (ref.read(networkingModeProvider) == NetworkingMode.mesh) unawaited(ref.read(meshRelayProvider.notifier).refresh());
       }
     });
   }
@@ -218,6 +223,9 @@ class MeshDetails extends ConsumerWidget {
     final running = ref.watch(isRunningProvider);
     final phase = meshPhase(enabled: mesh.enabled, running: running, state: state, fallbackId: mesh.nodeId);
     final self = state.selfDevice(mesh.nodeId);
+    final relay = ref.watch(meshRelayProvider);
+    MeshPathView? pathOf(MeshDevice d) => meshDevicePath(state, relay, d, fallbackId: mesh.nodeId);
+    bool relayTag(MeshDevice d) => state.deviceRelayEnabled && d.id != self?.id && relay.isRelay(d.id);
     final statusColor = switch (phase) {
       MeshPhase.connected => mm.good,
       MeshPhase.failed => mm.slow,
@@ -261,7 +269,16 @@ class MeshDetails extends ConsumerWidget {
             note: '点按复制地址',
             children: [
               for (final d in state.devices)
-                _DeviceRow(device: d, isSelf: d.id == self?.id, selfOnline: phase == MeshPhase.connected, path: state.pathOf(d)),
+                _DeviceRow(
+                  device: d,
+                  isSelf: d.id == self?.id,
+                  selfOnline: phase == MeshPhase.connected,
+                  path: pathOf(d),
+                  relayTag: relayTag(d),
+                  relayActive: relay.relays[d.id]?.state == MeshRelayState.active,
+                  // 我的设备点进详情（路径、主控记录、流量、中继设置）；本机那一行照旧复制地址
+                  onOpen: d.id == self?.id ? null : () => mePush(context, MeshDevicePage(device: d)),
+                ),
             ],
           ),
         ],
@@ -273,7 +290,7 @@ class MeshDetails extends ConsumerWidget {
             note: '点按复制地址',
             children: [
               for (final d in state.sharedDevices)
-                _DeviceRow(device: d, isSelf: false, selfOnline: false, path: state.pathOf(d), showOwner: true),
+                _DeviceRow(device: d, isSelf: false, selfOnline: false, path: pathOf(d), showOwner: true),
             ],
           ),
         ],
@@ -429,9 +446,19 @@ void _copy(String text) {
   globalState.showNotifier('已复制 $text');
 }
 
-/// 一台设备：在线时写内核看到的路径（直连 / 中继 · 区域，拿不到内核状态时只写「在线」），离线写离线多久。
+/// 一台设备：在线时写路径（直连 / 经 X 中继 / 经中继服务器 Y：本机内核的实时值优先，名字从主控补全；
+/// 拿不到时只写「在线」），离线写离线多久。主控的旧记录灰显并注「x 分钟前」。本账号的中继设备带「中继」标签。
 class _DeviceRow extends StatelessWidget {
-  const _DeviceRow({required this.device, required this.isSelf, required this.selfOnline, this.path, this.showOwner = false});
+  const _DeviceRow({
+    required this.device,
+    required this.isSelf,
+    required this.selfOnline,
+    this.path,
+    this.showOwner = false,
+    this.relayTag = false,
+    this.relayActive = false,
+    this.onOpen,
+  });
   final MeshDevice device;
   final bool isSelf;
   final bool selfOnline;
@@ -439,29 +466,58 @@ class _DeviceRow extends StatelessWidget {
   /// 副标题末尾写设备主人（同网络里别人的设备）
   final bool showOwner;
 
-  /// 内核里这台对端的状态（直连地址 / 中继）
-  final TsPeer? path;
+  /// 这台此刻走的路（[meshDevicePath]）
+  final MeshPathView? path;
+  final bool relayTag;
+  final bool relayActive;
+
+  /// 点进设备详情（null = 点按复制地址）
+  final VoidCallback? onOpen;
 
   @override
   Widget build(BuildContext context) {
     final mm = context.mm;
+    final t = MeshRelayText.of(context);
     final online = isSelf ? selfOnline : device.online;
     final seen = device.lastSeen;
+    final p = path;
     final value = isSelf
         ? (online ? '在线' : '')
         : online
-        ? (path?.pathText ?? '在线')
+        ? (p == null ? '在线' : meshPathLabel(t, p))
         : (seen == null ? '离线' : '离线 · ${fmtRelative(seen.toLocal())}');
+    final stale = !isSelf && online && p != null && p.fromPanel && p.stale;
+    final subtitle = [
+      if (device.ipv4.isNotEmpty) device.ipv4,
+      ...device.routes,
+      if (showOwner && device.username.isNotEmpty) '属于 ${device.username}',
+    ].join(' · ');
     return MeRow(
       leading: StatusDot(color: online ? mm.good : mm.t3),
       label: '${device.name}${isSelf ? '（本机）' : ''}',
-      subtitle: [
-        if (device.ipv4.isNotEmpty) device.ipv4,
-        ...device.routes,
-        if (showOwner && device.username.isNotEmpty) '属于 ${device.username}',
-      ].join(' · '),
-      value: value.isEmpty ? null : value,
-      onTap: device.ipv4.isEmpty ? null : () => _copy(device.ipv4),
+      subtitle: subtitle,
+      // 平常照旧用值那一栏；带「中继」标签或主控的旧记录（灰显）时才自己排
+      value: relayTag || stale || value.isEmpty ? null : value,
+      trailing: !relayTag && !stale
+          ? null
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (relayTag) ...[MeshRelayTag(active: relayActive), const SizedBox(width: 6)],
+                if (value.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: TextStyle(fontSize: MeowFont.footnote, color: stale ? mm.t3 : mm.t2),
+                    ),
+                  ),
+              ],
+            ),
+      chevron: onOpen != null,
+      onTap: onOpen ?? (device.ipv4.isEmpty ? null : () => _copy(device.ipv4)),
     );
   }
 }

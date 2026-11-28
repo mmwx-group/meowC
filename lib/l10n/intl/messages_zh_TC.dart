@@ -34,24 +34,42 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m6(count) => "${count}";
 
-  static String m7(count) => "${Intl.plural(count, other: '分鐘')}";
+  static String m7(n) => "${n} 分鐘前";
 
-  static String m8(count) => "${Intl.plural(count, other: '月')}";
+  static String m8(name) => "經中繼伺服器 ${name}";
 
-  static String m9(label) => "暫無 ${label}";
+  static String m9(name) => "經 ${name} 中繼";
 
-  static String m10(label) => "${label}必須為數字";
+  static String m10(addr) => "經裝置中繼 ${addr}";
 
-  static String m11(label) => "${label} 必須在 1024 到 49151 之間，0 為關閉";
+  static String m11(name) => "經 ${name} 中繼（他人的）";
 
-  static String m12(statusCode) =>
+  static String m12(port) => "裝置在路由器後面時，要在上級路由器上把 UDP ${port} 映射到這台裝置";
+
+  static String m13(n) => "另有 ${n} 個未識別的連線";
+
+  static String m14(v) => "tailscale ${v}";
+
+  static String m15(name) => "${name} 報的";
+
+  static String m16(count) => "${Intl.plural(count, other: '分鐘')}";
+
+  static String m17(count) => "${Intl.plural(count, other: '月')}";
+
+  static String m18(label) => "暫無 ${label}";
+
+  static String m19(label) => "${label}必須為數字";
+
+  static String m20(label) => "${label} 必須在 1024 到 49151 之間，0 為關閉";
+
+  static String m21(statusCode) =>
       "配置導入失敗，請檢查網路狀況或嘗試重置訂閱連結( HTTP錯誤代碼: ${statusCode} )";
 
-  static String m13(count) => "已選擇 ${count} 項";
+  static String m22(count) => "已選擇 ${count} 項";
 
-  static String m14(label) => "${label}必須為 URL";
+  static String m23(label) => "${label}必須為 URL";
 
-  static String m15(count) => "${Intl.plural(count, other: '年')}";
+  static String m24(count) => "${Intl.plural(count, other: '年')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
   static Map<String, Function> _notInlinedMessages(_) => <String, Function>{
@@ -517,17 +535,108 @@ class MessageLookup extends MessageLookupByLibrary {
       "目前記憶體資訊數值顯示為核心運作時的動態堆疊記憶體佔用，非完整 App 記憶體統計，僅供參考。",
     ),
     "meowNest": MessageLookupByLibrary.simpleMessage("喵窩"),
+    "meshCopyAddress": MessageLookupByLibrary.simpleMessage("複製位址"),
+    "meshDeviceAddress": MessageLookupByLibrary.simpleMessage("位址"),
+    "meshDeviceDetails": MessageLookupByLibrary.simpleMessage("裝置詳情"),
+    "meshDeviceLastHandshake": MessageLookupByLibrary.simpleMessage("最近握手"),
+    "meshDevicePath": MessageLookupByLibrary.simpleMessage("路徑"),
+    "meshDevicePeerView": MessageLookupByLibrary.simpleMessage("主控記錄"),
+    "meshDevicePeerViewNote": MessageLookupByLibrary.simpleMessage(
+      "主控彙總的兩端上報（對端視角）",
+    ),
+    "meshDeviceTraffic": MessageLookupByLibrary.simpleMessage("流量"),
+    "meshJustNow": MessageLookupByLibrary.simpleMessage("剛剛"),
+    "meshMinutesAgo": m7,
+    "meshNoRecord": MessageLookupByLibrary.simpleMessage("沒有記錄"),
+    "meshNone": MessageLookupByLibrary.simpleMessage("還沒有"),
+    "meshNotInEngine": MessageLookupByLibrary.simpleMessage("本機暫時沒有到它的連線"),
+    "meshOffline": MessageLookupByLibrary.simpleMessage("離線"),
+    "meshOtherUser": MessageLookupByLibrary.simpleMessage("其他使用者"),
+    "meshPathDirect": MessageLookupByLibrary.simpleMessage("直連"),
+    "meshPathIdle": MessageLookupByLibrary.simpleMessage("閒置"),
+    "meshPathViaDerp": m8,
+    "meshPathViaDerpPlain": MessageLookupByLibrary.simpleMessage("經中繼伺服器"),
+    "meshPathViaDeviceRelay": MessageLookupByLibrary.simpleMessage("經裝置中繼"),
+    "meshPathViaRelay": m9,
+    "meshPathViaRelayAddr": m10,
+    "meshPathViaRelayOther": m11,
+    "meshRelayAddEndpoint": MessageLookupByLibrary.simpleMessage("新增位址"),
+    "meshRelayDdns": MessageLookupByLibrary.simpleMessage("DDNS 網域"),
+    "meshRelayDdnsNote": MessageLookupByLibrary.simpleMessage(
+      "家裡 IP 會變時填寫，中繼裝置每 5 分鐘解析一次",
+    ),
+    "meshRelayEndpoints": MessageLookupByLibrary.simpleMessage("靜態位址"),
+    "meshRelayEndpointsNote": MessageLookupByLibrary.simpleMessage(
+      "做了連接埠映射、或偵測不到公網位址時填寫，寫成公網 IP:連接埠（IPv6 加方括號），最多 4 個",
+    ),
+    "meshRelayErrDeviceNotFound": MessageLookupByLibrary.simpleMessage(
+      "裝置不存在或已刪除，已重新整理裝置列表",
+    ),
+    "meshRelayErrDisabled": MessageLookupByLibrary.simpleMessage("管理員關閉了裝置中繼"),
+    "meshRelayErrInvalidDdns": MessageLookupByLibrary.simpleMessage(
+      "DDNS 網域格式不對",
+    ),
+    "meshRelayErrInvalidEndpoint": MessageLookupByLibrary.simpleMessage(
+      "靜態位址要寫成公網 IP:連接埠（IPv6 加方括號），不能是私網或喵窩位址，最多 4 個",
+    ),
+    "meshRelayErrInvalidPort": MessageLookupByLibrary.simpleMessage(
+      "連接埠要在 1024–65535 之間",
+    ),
+    "meshRelayErrInvalidRequest": MessageLookupByLibrary.simpleMessage("請求無效"),
+    "meshRelayErrRateLimited": MessageLookupByLibrary.simpleMessage(
+      "操作太頻繁，稍後再試",
+    ),
+    "meshRelayErrShareNotAllowed": MessageLookupByLibrary.simpleMessage(
+      "只有管理員能共享給所有成員，已改回僅本帳號",
+    ),
+    "meshRelayNoSessions": MessageLookupByLibrary.simpleMessage("現在沒有經它中繼的連線"),
+    "meshRelayNotCapable": MessageLookupByLibrary.simpleMessage(
+      "這台裝置沒有上報過中繼能力（要 OpenWrt / 飛牛 / Docker 上的新版 MeowX），開不了中繼",
+    ),
+    "meshRelayPendingStuck": MessageLookupByLibrary.simpleMessage(
+      "裝置未回應，確認已安裝新版 MeowX 並在線",
+    ),
+    "meshRelayPort": MessageLookupByLibrary.simpleMessage("UDP 連接埠"),
+    "meshRelayPortForward": m12,
+    "meshRelayPortNote": MessageLookupByLibrary.simpleMessage(
+      "1024–65535，預設 40000",
+    ),
+    "meshRelaySave": MessageLookupByLibrary.simpleMessage("儲存"),
+    "meshRelaySaved": MessageLookupByLibrary.simpleMessage("已儲存"),
+    "meshRelaySessions": MessageLookupByLibrary.simpleMessage("正在經它中繼"),
+    "meshRelaySettings": MessageLookupByLibrary.simpleMessage("中繼設定"),
+    "meshRelaySettingsNote": MessageLookupByLibrary.simpleMessage(
+      "打不通直連的裝置可以經它轉發，比中繼伺服器快",
+    ),
+    "meshRelayShare": MessageLookupByLibrary.simpleMessage("共享範圍"),
+    "meshRelayShareAll": MessageLookupByLibrary.simpleMessage("所有成員"),
+    "meshRelayShareSelf": MessageLookupByLibrary.simpleMessage("僅本帳號"),
+    "meshRelayStateActive": MessageLookupByLibrary.simpleMessage("正在運作"),
+    "meshRelayStateDisabled": MessageLookupByLibrary.simpleMessage("未開啟"),
+    "meshRelayStateError": MessageLookupByLibrary.simpleMessage("出錯"),
+    "meshRelayStateOffline": MessageLookupByLibrary.simpleMessage("裝置離線"),
+    "meshRelayStatePending": MessageLookupByLibrary.simpleMessage("等待裝置回應"),
+    "meshRelayStateVersionTooOld": MessageLookupByLibrary.simpleMessage(
+      "tailscale 版本過低",
+    ),
+    "meshRelayStatus": MessageLookupByLibrary.simpleMessage("狀態"),
+    "meshRelaySwitch": MessageLookupByLibrary.simpleMessage("作為喵窩中繼"),
+    "meshRelayTag": MessageLookupByLibrary.simpleMessage("中繼"),
+    "meshRelayUnmatched": m13,
+    "meshRelayVersion": m14,
+    "meshReportedByBoth": MessageLookupByLibrary.simpleMessage("兩端都報了"),
+    "meshReportedByOne": m15,
     "messageTest": MessageLookupByLibrary.simpleMessage("訊息測試"),
     "messageTestTip": MessageLookupByLibrary.simpleMessage("這是一條訊息。"),
     "min": MessageLookupByLibrary.simpleMessage("最小"),
     "minimize": MessageLookupByLibrary.simpleMessage("最小化"),
     "minimizeOnExit": MessageLookupByLibrary.simpleMessage("退出最小化"),
     "minimizeOnExitDesc": MessageLookupByLibrary.simpleMessage("修改系統預設退出事件"),
-    "minutes": m7,
+    "minutes": m16,
     "mixedPort": MessageLookupByLibrary.simpleMessage("混合連接埠"),
     "mode": MessageLookupByLibrary.simpleMessage("模式"),
     "monochromeScheme": MessageLookupByLibrary.simpleMessage("單色"),
-    "months": m8,
+    "months": m17,
     "more": MessageLookupByLibrary.simpleMessage("查看"),
     "moreIpInfo": MessageLookupByLibrary.simpleMessage("更多 IP 資訊"),
     "name": MessageLookupByLibrary.simpleMessage("名稱"),
@@ -600,8 +709,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "ntpStatus": MessageLookupByLibrary.simpleMessage("狀態"),
     "ntpStatusDesc": MessageLookupByLibrary.simpleMessage("開啟 NTP 時間服務"),
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage("沒有設定檔，請先新增設定檔"),
-    "nullTip": m9,
-    "numberTip": m10,
+    "nullTip": m18,
+    "numberTip": m19,
     "oneColumn": MessageLookupByLibrary.simpleMessage("一列"),
     "onlinePanel": MessageLookupByLibrary.simpleMessage("線上面板"),
     "onlyIcon": MessageLookupByLibrary.simpleMessage("僅圖示"),
@@ -677,7 +786,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "port": MessageLookupByLibrary.simpleMessage("連接埠"),
     "portConflictTip": MessageLookupByLibrary.simpleMessage("請輸入不同的連接埠"),
-    "portTip": m11,
+    "portTip": m20,
     "powerSwitch": MessageLookupByLibrary.simpleMessage("啟動開關"),
     "preferH3Desc": MessageLookupByLibrary.simpleMessage("優先使用 DoH 的 HTTP/3"),
     "pressKeyboard": MessageLookupByLibrary.simpleMessage("請按下按鍵"),
@@ -692,7 +801,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
       "設定檔已經修改，是否關閉自動更新？",
     ),
-    "profileImportFailed": m12,
+    "profileImportFailed": m21,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "請輸入配置名稱",
     ),
@@ -799,7 +908,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "secretCopied": MessageLookupByLibrary.simpleMessage("密碼已複製到剪貼簿"),
     "selectAll": MessageLookupByLibrary.simpleMessage("全選"),
     "selected": MessageLookupByLibrary.simpleMessage("已選擇"),
-    "selectedCountTitle": m13,
+    "selectedCountTitle": m22,
     "serviceReady": MessageLookupByLibrary.simpleMessage("服務已就緒"),
     "serviceRunning": MessageLookupByLibrary.simpleMessage("服務正在執行中"),
     "settings": MessageLookupByLibrary.simpleMessage("設定"),
@@ -944,7 +1053,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("上傳"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
     "urlDesc": MessageLookupByLibrary.simpleMessage("透過 URL 獲取設定檔"),
-    "urlTip": m14,
+    "urlTip": m23,
     "useGlobalScriptOverride": MessageLookupByLibrary.simpleMessage(
       "使用全域指令碼覆寫",
     ),
@@ -975,6 +1084,6 @@ class MessageLookup extends MessageLookupByLibrary {
     "whitelistMode": MessageLookupByLibrary.simpleMessage("白名單模式"),
     "writeToSystem": MessageLookupByLibrary.simpleMessage("寫入系統"),
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage("需要管理員權限"),
-    "years": m15,
+    "years": m24,
   };
 }

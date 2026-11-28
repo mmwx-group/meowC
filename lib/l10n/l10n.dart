@@ -5988,6 +5988,571 @@ class AppLocalizations {
   String get meowNest {
     return Intl.message('MeowNest', name: 'meowNest', desc: '', args: []);
   }
+
+  /// `Direct`
+  String get meshPathDirect {
+    return Intl.message('Direct', name: 'meshPathDirect', desc: '', args: []);
+  }
+
+  /// `Via {name} (relay)`
+  String meshPathViaRelay(Object name) {
+    return Intl.message(
+      'Via $name (relay)',
+      name: 'meshPathViaRelay',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `Via {name} (someone else's relay)`
+  String meshPathViaRelayOther(Object name) {
+    return Intl.message(
+      'Via $name (someone else\'s relay)',
+      name: 'meshPathViaRelayOther',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `Via device relay {addr}`
+  String meshPathViaRelayAddr(Object addr) {
+    return Intl.message(
+      'Via device relay $addr',
+      name: 'meshPathViaRelayAddr',
+      desc: '',
+      args: [addr],
+    );
+  }
+
+  /// `Via device relay`
+  String get meshPathViaDeviceRelay {
+    return Intl.message(
+      'Via device relay',
+      name: 'meshPathViaDeviceRelay',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Via relay server {name}`
+  String meshPathViaDerp(Object name) {
+    return Intl.message(
+      'Via relay server $name',
+      name: 'meshPathViaDerp',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `Via relay server`
+  String get meshPathViaDerpPlain {
+    return Intl.message(
+      'Via relay server',
+      name: 'meshPathViaDerpPlain',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Idle`
+  String get meshPathIdle {
+    return Intl.message('Idle', name: 'meshPathIdle', desc: '', args: []);
+  }
+
+  /// `{n} min ago`
+  String meshMinutesAgo(Object n) {
+    return Intl.message(
+      '$n min ago',
+      name: 'meshMinutesAgo',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `just now`
+  String get meshJustNow {
+    return Intl.message('just now', name: 'meshJustNow', desc: '', args: []);
+  }
+
+  /// `Device details`
+  String get meshDeviceDetails {
+    return Intl.message(
+      'Device details',
+      name: 'meshDeviceDetails',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Address`
+  String get meshDeviceAddress {
+    return Intl.message(
+      'Address',
+      name: 'meshDeviceAddress',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Path`
+  String get meshDevicePath {
+    return Intl.message('Path', name: 'meshDevicePath', desc: '', args: []);
+  }
+
+  /// `Panel record`
+  String get meshDevicePeerView {
+    return Intl.message(
+      'Panel record',
+      name: 'meshDevicePeerView',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Reports from both ends, collected by the panel`
+  String get meshDevicePeerViewNote {
+    return Intl.message(
+      'Reports from both ends, collected by the panel',
+      name: 'meshDevicePeerViewNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `reported by both ends`
+  String get meshReportedByBoth {
+    return Intl.message(
+      'reported by both ends',
+      name: 'meshReportedByBoth',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `reported by {name}`
+  String meshReportedByOne(Object name) {
+    return Intl.message(
+      'reported by $name',
+      name: 'meshReportedByOne',
+      desc: '',
+      args: [name],
+    );
+  }
+
+  /// `Traffic`
+  String get meshDeviceTraffic {
+    return Intl.message(
+      'Traffic',
+      name: 'meshDeviceTraffic',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Last handshake`
+  String get meshDeviceLastHandshake {
+    return Intl.message(
+      'Last handshake',
+      name: 'meshDeviceLastHandshake',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `None yet`
+  String get meshNone {
+    return Intl.message('None yet', name: 'meshNone', desc: '', args: []);
+  }
+
+  /// `No record`
+  String get meshNoRecord {
+    return Intl.message('No record', name: 'meshNoRecord', desc: '', args: []);
+  }
+
+  /// `Copy address`
+  String get meshCopyAddress {
+    return Intl.message(
+      'Copy address',
+      name: 'meshCopyAddress',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Offline`
+  String get meshOffline {
+    return Intl.message('Offline', name: 'meshOffline', desc: '', args: []);
+  }
+
+  /// `No connection to it from this device right now`
+  String get meshNotInEngine {
+    return Intl.message(
+      'No connection to it from this device right now',
+      name: 'meshNotInEngine',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Relay`
+  String get meshRelayTag {
+    return Intl.message('Relay', name: 'meshRelayTag', desc: '', args: []);
+  }
+
+  /// `Relay settings`
+  String get meshRelaySettings {
+    return Intl.message(
+      'Relay settings',
+      name: 'meshRelaySettings',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Devices that cannot connect directly can go through it, faster than a relay server`
+  String get meshRelaySettingsNote {
+    return Intl.message(
+      'Devices that cannot connect directly can go through it, faster than a relay server',
+      name: 'meshRelaySettingsNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Act as MeowNest relay`
+  String get meshRelaySwitch {
+    return Intl.message(
+      'Act as MeowNest relay',
+      name: 'meshRelaySwitch',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `UDP port`
+  String get meshRelayPort {
+    return Intl.message('UDP port', name: 'meshRelayPort', desc: '', args: []);
+  }
+
+  /// `1024–65535, default 40000`
+  String get meshRelayPortNote {
+    return Intl.message(
+      '1024–65535, default 40000',
+      name: 'meshRelayPortNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Static addresses`
+  String get meshRelayEndpoints {
+    return Intl.message(
+      'Static addresses',
+      name: 'meshRelayEndpoints',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Fill in when you forwarded a port or the public address is not detected. Write public IP:port (IPv6 in brackets), up to 4`
+  String get meshRelayEndpointsNote {
+    return Intl.message(
+      'Fill in when you forwarded a port or the public address is not detected. Write public IP:port (IPv6 in brackets), up to 4',
+      name: 'meshRelayEndpointsNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Add address`
+  String get meshRelayAddEndpoint {
+    return Intl.message(
+      'Add address',
+      name: 'meshRelayAddEndpoint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `DDNS hostname`
+  String get meshRelayDdns {
+    return Intl.message(
+      'DDNS hostname',
+      name: 'meshRelayDdns',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Fill in if your home IP changes; the relay device resolves it every 5 minutes`
+  String get meshRelayDdnsNote {
+    return Intl.message(
+      'Fill in if your home IP changes; the relay device resolves it every 5 minutes',
+      name: 'meshRelayDdnsNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Sharing`
+  String get meshRelayShare {
+    return Intl.message('Sharing', name: 'meshRelayShare', desc: '', args: []);
+  }
+
+  /// `This account`
+  String get meshRelayShareSelf {
+    return Intl.message(
+      'This account',
+      name: 'meshRelayShareSelf',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Everyone`
+  String get meshRelayShareAll {
+    return Intl.message(
+      'Everyone',
+      name: 'meshRelayShareAll',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Status`
+  String get meshRelayStatus {
+    return Intl.message('Status', name: 'meshRelayStatus', desc: '', args: []);
+  }
+
+  /// `Off`
+  String get meshRelayStateDisabled {
+    return Intl.message(
+      'Off',
+      name: 'meshRelayStateDisabled',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Waiting for the device`
+  String get meshRelayStatePending {
+    return Intl.message(
+      'Waiting for the device',
+      name: 'meshRelayStatePending',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Active`
+  String get meshRelayStateActive {
+    return Intl.message(
+      'Active',
+      name: 'meshRelayStateActive',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `tailscale is too old`
+  String get meshRelayStateVersionTooOld {
+    return Intl.message(
+      'tailscale is too old',
+      name: 'meshRelayStateVersionTooOld',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Error`
+  String get meshRelayStateError {
+    return Intl.message(
+      'Error',
+      name: 'meshRelayStateError',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Device offline`
+  String get meshRelayStateOffline {
+    return Intl.message(
+      'Device offline',
+      name: 'meshRelayStateOffline',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The device is not responding. Make sure it runs the latest MeowX and is online`
+  String get meshRelayPendingStuck {
+    return Intl.message(
+      'The device is not responding. Make sure it runs the latest MeowX and is online',
+      name: 'meshRelayPendingStuck',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `If the device is behind a router, forward UDP {port} to it on that router`
+  String meshRelayPortForward(Object port) {
+    return Intl.message(
+      'If the device is behind a router, forward UDP $port to it on that router',
+      name: 'meshRelayPortForward',
+      desc: '',
+      args: [port],
+    );
+  }
+
+  /// `tailscale {v}`
+  String meshRelayVersion(Object v) {
+    return Intl.message(
+      'tailscale $v',
+      name: 'meshRelayVersion',
+      desc: '',
+      args: [v],
+    );
+  }
+
+  /// `Save`
+  String get meshRelaySave {
+    return Intl.message('Save', name: 'meshRelaySave', desc: '', args: []);
+  }
+
+  /// `Saved`
+  String get meshRelaySaved {
+    return Intl.message('Saved', name: 'meshRelaySaved', desc: '', args: []);
+  }
+
+  /// `Relaying now`
+  String get meshRelaySessions {
+    return Intl.message(
+      'Relaying now',
+      name: 'meshRelaySessions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `No connections are going through it`
+  String get meshRelayNoSessions {
+    return Intl.message(
+      'No connections are going through it',
+      name: 'meshRelayNoSessions',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `{n} more unidentified connections`
+  String meshRelayUnmatched(Object n) {
+    return Intl.message(
+      '$n more unidentified connections',
+      name: 'meshRelayUnmatched',
+      desc: '',
+      args: [n],
+    );
+  }
+
+  /// `Another user`
+  String get meshOtherUser {
+    return Intl.message(
+      'Another user',
+      name: 'meshOtherUser',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `This device has not reported relay support (needs the latest MeowX on OpenWrt / fnOS / Docker)`
+  String get meshRelayNotCapable {
+    return Intl.message(
+      'This device has not reported relay support (needs the latest MeowX on OpenWrt / fnOS / Docker)',
+      name: 'meshRelayNotCapable',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Invalid request`
+  String get meshRelayErrInvalidRequest {
+    return Intl.message(
+      'Invalid request',
+      name: 'meshRelayErrInvalidRequest',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The port must be between 1024 and 65535`
+  String get meshRelayErrInvalidPort {
+    return Intl.message(
+      'The port must be between 1024 and 65535',
+      name: 'meshRelayErrInvalidPort',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Static addresses must be public IP:port (IPv6 in brackets), not private or MeowNest addresses, up to 4`
+  String get meshRelayErrInvalidEndpoint {
+    return Intl.message(
+      'Static addresses must be public IP:port (IPv6 in brackets), not private or MeowNest addresses, up to 4',
+      name: 'meshRelayErrInvalidEndpoint',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Invalid DDNS hostname`
+  String get meshRelayErrInvalidDdns {
+    return Intl.message(
+      'Invalid DDNS hostname',
+      name: 'meshRelayErrInvalidDdns',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Only admins can share with everyone; changed back to this account`
+  String get meshRelayErrShareNotAllowed {
+    return Intl.message(
+      'Only admins can share with everyone; changed back to this account',
+      name: 'meshRelayErrShareNotAllowed',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The device no longer exists; the device list was refreshed`
+  String get meshRelayErrDeviceNotFound {
+    return Intl.message(
+      'The device no longer exists; the device list was refreshed',
+      name: 'meshRelayErrDeviceNotFound',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `The admin turned off device relays`
+  String get meshRelayErrDisabled {
+    return Intl.message(
+      'The admin turned off device relays',
+      name: 'meshRelayErrDisabled',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Too many requests, try again later`
+  String get meshRelayErrRateLimited {
+    return Intl.message(
+      'Too many requests, try again later',
+      name: 'meshRelayErrRateLimited',
+      desc: '',
+      args: [],
+    );
+  }
 }
 
 class AppLocalizationDelegate extends LocalizationsDelegate<AppLocalizations> {
