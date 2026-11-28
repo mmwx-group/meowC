@@ -203,8 +203,8 @@ class PanelClient {
     String? token,
   }) async => (await rpcWithStatus(path, method: method, payload: payload, token: token)).body;
 
-  /// 同 [rpc]，另带回 HTTP 状态码：主控的 RPC 保留业务状态码（喵窝设备中继的接口按 400 / 403 / 404 / 409 / 429 分别处理，
-  /// 404 还要分清「接口不存在」与「设备不存在」）。
+  /// 同 [rpc]，另带回 HTTP 状态码：主控的 RPC 保留业务状态码（喵窝管理接口按 401 / 403 / 409 / 429 / 502 分别处理；
+  /// 喵窝设备中继的接口按 400 / 403 / 404 / 409 / 429 分别处理，404 还要分清「接口不存在」与「设备不存在」）。
   Future<({int status, Map<String, dynamic> body})> rpcWithStatus(
     String path, {
     String method = 'POST',
@@ -264,7 +264,7 @@ class PanelClient {
       throw PanelException('主控响应无法解密，请重试');
     }
     final decoded = json.decode(utf8.decode(plain));
-    final status = res.statusCode ?? 0;
+    final status = res.statusCode ?? 200;
     if (decoded is Map) return (status: status, body: decoded.cast<String, dynamic>());
     return (status: status, body: <String, dynamic>{'data': decoded});
   }

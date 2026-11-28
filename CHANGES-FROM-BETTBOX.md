@@ -319,6 +319,17 @@
 ## 2026-11-20 · 拉订阅换路重试（分支 feat/sub-fetch-retry）
 - `lib/common/request.dart`：拉订阅（`_getResponseForUrl`，导入 / 刷新 / 账户订阅 / 主控推送重拉 / 到期同步与脚本、规则文本都经它）不再自己持有两个 Dio，改调 `lib/meowx/net/subscription_fetch.dart` 的 `SubscriptionFetcher`：连接层失败（握手被掐、连接被重置 / 关闭 / 拒绝、超时）依次换「经本机代理 → 直连 → 加密 DNS 解析后按 IP 直连（SNI 与证书校验按原域名）」，连接阶段合计 25 秒；全部失败抛给人看的一句话（以前是 `DioException [unknown]: null`）。删掉了 `_clashDio` / `_directSubscriptionDio` / `_isNetworkFailure`（以前握手被掐不算网络失败，连「经内核失败 → 直连」那一次都不重试）。经本机代理 / 直连两条路照旧接受任何证书（全局 `BettboxHttpOverrides` 的行为，没改）。起因是 Windows 用户在「直连」档下导入订阅报 `HandshakeException: Connection terminated during handshake`。
 
+## 2026-11-21 · 喵窝白名单直连（分支 feat/mesh-whitelist-direct，规格 MeowX 仓库 `Design/meshnet-whitelist-direct.md`）
+- `lib/models/meow.dart`（MeowX 的设置模型）：`MeowMesh` 加 `whitelistViaMesh`（「白名单节点经喵窝连线」，缺省开，老配置没有这个键也算开；本机偏好、退出登录不清）。
+- `lib/models/profile.dart`：`Profile.update` 发请求前经 `meowSubscriptionRequestHeaders`（`lib/meowx/state/mesh_whitelist.dart`）补请求头：登录过的主控的订阅（同主机、上次应答头里的实时通道地址是这台主控、或没有那个应答头时路径像主控订阅）带 `X-MeowX-Mesh: on|off`，别家订阅原样。
+- 其余在 `lib/meowx/`：纯逻辑 `config/mesh_whitelist.dart`（on 的条件、本主控订阅的认法、运行配置里 `_mmwx-mesh` 节点：on 时加 `dialer-proxy: 喵窝`（已有的不覆盖），off 时拿掉并摘掉分组成员、空组补 DIRECT、rules / sub-rules 里目标是它们的规则（含 AND / OR / NOT）整行删掉，两种都去掉私有字段）；`state/mesh.dart`（生成运行配置时接在「组网」改写之后；on / off 变了重拉当前在用的本主控订阅，拉不到就按新状态重新生成配置；喵窝管理接口按 HTTP 码分别处理：401 登录续期、403 / 409 重查 status、429 / 503 退避、502 只提示不清状态）；`panel/client.dart` 加 `rpcWithStatus`（带回 RPC 保留的业务状态码）；`panel/mesh.dart`（status 的 `access_scope` / `device_limit` / 预留的 `servers`，共享设备的 `dns_name` / `pending_routes` 与站点路由器）；「组网」页的访问范围、设备上限、站点路由器、可用服务器与开关（`pages/settings/networking_page.dart`），节点格的「喵窝」小标（`pages/proxies/mesh_badge.dart`）。没动内核。
+- 2026-11-25 拉本主控订阅不被自己的代理卡住（同 MeowX Android Rust 版 344b896）：关掉「白名单节点经喵窝连线」后，账号的节点又全是只认白名单 IP 的服务器时节点全连不上，App 自己的请求也在 VPN / 虚拟网卡里、被内核按规则送进这些节点，拉订阅的「直连」那一路跟着连不上，再打开开关也拉不回喵窝版节点（只能先断开）。
+  - `lib/common/request.dart`：`SubscriptionHttp` 传 `bypassDirect`（`_vpnBypassDirect`）：「直连」那一路 Android 上 VPN 开着时交给原生层、Windows / Linux 内核起着时交给内核发；都不适用时照常 Dart 直连。请求头没有 UA 时补 `globalState.ua`（这一路不经 HttpClient，不补就发系统缺省 UA，主控不给官方内核才支持的节点）。
+  - `lib/plugins/vpn.dart`：静态 `Vpn.directFetch`，用一个不设 handler 的 `vpn` 通道（界面引擎里没有 `vpn` 实例，也不能 new `Vpn`）。`lib/enum/enum.dart`：`ActionMethod.meowDirectFetch`。
+  - `android/…/plugins/VpnPlugin.kt`：`directFetch` 方法（VPN 服务在跑时挑一个物理网络，已验证的优先，复用原有的 `getActivePhysicalNetworks`）；新文件 `DirectFetch.kt`（`Network.openConnection`，DNS 一起走物理网络）。
+  - `core/action.go`：`meowDirectFetch` 动作；新文件 `core/meow_direct_fetch.go`（与 po0 上报同一条直连路：mihomo 直连 dialer + `DirectHostResolver`）。
+  - `lib/meowx/net/subscription_fetch.dart`：`bypassDirect` 钩子与原生 / 内核应答转 `Response`（`nativeResponse` / `coreResponse`）。
+
 ## 2026-11-28 · 喵窝设备中继：路径上报与展示、远程开关中继（分支 feat/mesh-peer-relay，MeowX 仓库 `Design/mesh-peer-relay.md` §2 / §4）
 - `arb/intl_zh_CN.arb`、`intl_zh_TC.arb`、`intl_en.arb` + `lib/l10n/`（`intl_utils:generate` 重新生成；别的语言回落英文）：加 `meshPath*` / `meshDevice*` / `meshRelay*` 等约 65 条（路径文字、设备详情、中继设置）。生成器顺带给已有的带参数消息重新编号（`m7` → `m16` 这类），内容不变。
 - 内核子模块 `core/Clash.Meta`（meowx-core 分支 `feat/mesh-peer-relay-status`）：`TailscalePeerStatus` 多带 `peerRelay`、`rxBytes`、`txBytes`、`lastHandshake`（从 `ipnstate.PeerStatus` 原样取，零值不输出）；桥层 `core/meow_tailscale.go` 不用改。

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -327,7 +328,12 @@ class SubscriptionHttp {
     required this.proxyFor,
     this.context,
     this.acceptBadCertificates = false,
+    this.bypassDirect,
   });
+
+  /// 「直连」那一路先交给它（Android：VPN 开着时在物理网络上发，不进自己的 VPN，见 Vpn.directFetch）；
+  /// 返回 null 时照常用 Dart 直连。拉本主控订阅时公网节点全连不上，直连若也进了 VPN 就和经本机代理一样连不上。
+  final Future<Response<dynamic>?> Function(String url, Options options, Duration connectTimeout)? bypassDirect;
 
   /// 每次发请求时的 UA（缺省的那个；请求头里给了就盖掉它）
   final String Function() userAgent;
@@ -350,7 +356,11 @@ class SubscriptionHttp {
     InternetAddress? ip,
     Duration connectTimeout,
     CancelToken cancel,
-  ) {
+  ) async {
+    if (route == SubFetchRoute.direct && bypassDirect != null) {
+      final res = await bypassDirect!(url, options, connectTimeout);
+      if (res != null) return res;
+    }
     final target = Uri.parse(url);
     final dio = Dio(BaseOptions(connectTimeout: connectTimeout, sendTimeout: sendTimeout, receiveTimeout: receiveTimeout));
     dio.httpClientAdapter = IOHttpClientAdapter(
@@ -372,6 +382,49 @@ class SubscriptionHttp {
       },
     );
     return dio.get<dynamic>(url, options: options, cancelToken: cancel).whenComplete(() => dio.close());
+  }
+
+  /// 把原生那边回的 status / url / headers / body 包成 dio 的 [Response]；状态码不是 2xx 时同 dio 默认抛 badResponse。
+  static Response<dynamic> nativeResponse(String url, Options options, Map<Object?, Object?> reply) {
+    final request = RequestOptions(path: url, method: 'GET', headers: options.headers, responseType: options.responseType);
+    final headers = Headers();
+    final raw = reply['headers'];
+    if (raw is Map) {
+      for (final e in raw.entries) {
+        final values = e.value;
+        if (e.key is String && values is List) headers.map[(e.key as String).toLowerCase()] = [for (final v in values) '$v'];
+      }
+    }
+    final body = reply['body'];
+    final status = reply['status'] is int ? reply['status'] as int : 0;
+    final finalUrl = reply['url'] is String ? reply['url'] as String : url;
+    final response = Response<dynamic>(
+      requestOptions: request,
+      data: body is Uint8List ? body : Uint8List(0),
+      statusCode: status,
+      headers: headers,
+      isRedirect: finalUrl != url,
+      redirects: [if (finalUrl != url) RedirectRecord(302, 'GET', Uri.parse(finalUrl))],
+    );
+    if (status < 200 || status >= 300) {
+      throw DioException.badResponse(statusCode: status, requestOptions: request, response: response);
+    }
+    return response;
+  }
+
+  /// 内核 meowDirectFetch 的应答（JSON 文本）包成 [Response]：`{error}` 抛 [SocketException]（换下一条路）；
+  /// 认不出（旧内核没有这个动作）返回 null，照常用 Dart 直连。
+  static Response<dynamic>? coreResponse(String url, Options options, String raw) {
+    Object? reply;
+    try {
+      reply = jsonDecode(raw);
+    } catch (_) {
+      return null;
+    }
+    if (reply is! Map) return null;
+    if (reply['error'] is String) throw SocketException(reply['error'] as String);
+    if (reply['status'] is! int || reply['body'] is! String) return null;
+    return nativeResponse(url, options, {...reply, 'body': base64Decode(reply['body'] as String)});
   }
 
   /// 连 [ip]、TLS 照原域名握手（SNI 与证书校验都是 [host]）；跳转到别的主机时照常按主机名连

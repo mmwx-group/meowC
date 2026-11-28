@@ -1,6 +1,7 @@
 import 'package:bett_box/meowx/config/mesh_config.dart';
 import 'package:bett_box/meowx/pages/dashboard/mesh_card.dart';
 import 'package:bett_box/meowx/pages/me/me_kit.dart';
+import 'package:bett_box/meowx/pages/proxies/mesh_badge.dart';
 import 'package:bett_box/meowx/pages/settings/networking_page.dart';
 import 'package:bett_box/meowx/state/mesh.dart';
 import 'package:bett_box/meowx/state/meow_settings.dart';
@@ -112,6 +113,7 @@ void main() {
   });
   tearDown(() {
     meshRuntime.subscriptionNodes.value = const [];
+    meshRuntime.whitelistNodes.value = const [];
     debugFetchTailscaleStatus = null;
   });
 
@@ -418,5 +420,121 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(calls, [NetworkingMode.mesh]);
+  });
+
+  group('喵窝白名单直连与访问范围', () {
+    const meshOn = MeowSettings(
+      account: _admin,
+      tailscaleNodes: false,
+      mesh: MeowMesh(enabled: true, controlUrl: 'https://x', hostname: 'pixel-8', nodeId: 7, panelReason: ''),
+    );
+
+    testWidgets('访问范围一行、设备上限（0 = 不限）、站点路由器只读、可用服务器一节', (tester) async {
+      final copied = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') copied.add((call.arguments as Map)['text'] as String);
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+      await _pump(
+        tester,
+        const NetworkingPage(),
+        size: const Size(412, 2600),
+        running: true,
+        meow: meshOn,
+        mesh: MeshState(
+          availability: MeshAvailability.available,
+          accessScope: 'sites',
+          deviceLimit: 0,
+          devices: _devices,
+          sharedDevices: const [
+            MeshDevice(id: 31, name: 'boss-router', online: true, username: 'boss', routes: ['192.168.9.0/24', '10.9.0.0/24']),
+          ],
+          servers: const [MeshServer(name: '香港 01', meshIp: '100.64.0.21')],
+          devicesComplete: true,
+          devicesAt: DateTime.now(),
+          stateNodeId: 7,
+        ),
+      );
+      expect(find.text('访问范围：服务器 + 管理员站点'), findsOneWidget);
+      expect(find.widgetWithText(MeRow, '设备上限'), findsOneWidget);
+      expect(find.text('不限'), findsOneWidget);
+      // 站点路由器：「站点 · 主人」+ 网段，点了不复制
+      expect(find.text('站点 · boss'), findsOneWidget);
+      expect(find.text('192.168.9.0/24 · 10.9.0.0/24'), findsOneWidget);
+      final row = find.ancestor(of: find.text('站点 · boss'), matching: find.byType(MeRow));
+      expect(tester.widget<MeRow>(row).onTap, isNull);
+      // 可用服务器
+      expect(find.text('可经喵窝连接的服务器'), findsOneWidget);
+      await tester.tap(find.text('香港 01'));
+      await tester.pump();
+      expect(copied, ['100.64.0.21']);
+    });
+
+    testWidgets('设备上限有数时写已用几台；旧主控没有访问范围 / 上限时都不显示', (tester) async {
+      await _pump(
+        tester,
+        const NetworkingPage(),
+        size: const Size(412, 2000),
+        meow: meshOn,
+        mesh: MeshState(availability: MeshAvailability.available, deviceLimit: 5, devices: _devices, devicesComplete: true, devicesAt: DateTime.now()),
+      );
+      expect(find.text('已用 3 / 5 台'), findsOneWidget);
+      expect(find.textContaining('访问范围'), findsNothing);
+      await tester.pumpWidget(const SizedBox());   // 换一组 overrides 要先拆掉旧的 ProviderScope
+      await _pump(
+        tester,
+        const NetworkingPage(),
+        size: const Size(412, 2000),
+        meow: meshOn,
+        mesh: MeshState(availability: MeshAvailability.available, devices: _devices, devicesComplete: true, devicesAt: DateTime.now()),
+      );
+      expect(find.widgetWithText(MeRow, '设备上限'), findsNothing);
+      expect(find.text('可经喵窝连接的服务器'), findsNothing);
+    });
+
+    testWidgets('「白名单节点经喵窝连线」：名单账号看得到、缺省开，拨了写进设置', (tester) async {
+      await _pump(tester, const NetworkingPage(), size: const Size(412, 2000), meow: meshOn);
+      final label = find.text('白名单节点经喵窝连线');
+      expect(label, findsOneWidget);
+      expect(find.textContaining('不占服务器的 IP 白名单名额'), findsOneWidget);
+      final container = ProviderScope.containerOf(tester.element(label));
+      expect(container.read(meowSettingProvider).mesh.whitelistViaMesh, isTrue);
+      await tester.tap(label);
+      await tester.pump();
+      expect(container.read(meowSettingProvider).mesh.whitelistViaMesh, isFalse);
+    });
+
+    testWidgets('「白名单节点经喵窝连线」：喵窝没开也显示（名单账号）；not_admin / 没问过 / 没登录不显示', (tester) async {
+      await _pump(
+        tester,
+        const NetworkingPage(),
+        size: const Size(412, 2000),
+        meow: const MeowSettings(account: _admin, mesh: MeowMesh(panelReason: 'disabled')),
+        mesh: const MeshState(availability: MeshAvailability.unavailable, message: '主控没有开启喵窝'),
+      );
+      expect(find.text('白名单节点经喵窝连线'), findsOneWidget);
+      for (final meow in const [
+        MeowSettings(account: _admin, mesh: MeowMesh(panelReason: 'not_admin')),
+        MeowSettings(account: _admin),
+        MeowSettings(account: MeowAccount(host: 'https://panel.example.com'), mesh: MeowMesh(panelReason: '')),
+      ]) {
+        await tester.pumpWidget(const SizedBox());
+        await _pump(tester, const NetworkingPage(), size: const Size(412, 2000), meow: meow);
+        expect(find.text('白名单节点经喵窝连线'), findsNothing);
+      }
+    });
+
+    testWidgets('节点的「喵窝」小标：经喵窝拨号的白名单节点才画，点开说明', (tester) async {
+      meshRuntime.whitelistNodes.value = const ['东京 · 喵窝'];
+      await _pump(
+        tester,
+        const Column(children: [MeshViaBadge('东京 · 喵窝'), MeshViaBadge('香港')]),
+      );
+      expect(find.byTooltip('经喵窝连接'), findsOneWidget);
+      await tester.tap(find.byTooltip('经喵窝连接'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('不占服务器的 IP 白名单名额'), findsOneWidget);
+    });
   });
 }

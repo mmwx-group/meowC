@@ -285,6 +285,12 @@ func handleAction(action *Action, result ActionResult) {
 			result.success(value)
 		})
 		return
+	case meowDirectFetchMethod:
+		// MeowX：拉订阅「直连」那一路由内核发，不进虚拟网卡（见 meow_direct_fetch.go）
+		handleMeowDirectFetch(action.Data.(string), func(value string) {
+			result.success(value)
+		})
+		return
 	case meowRealtimeMethod:
 		// MeowX：主控实时通道（入口即时切换 + 订阅自动更新，见 meow_realtime.go）
 		result.success(handleMeowRealtime(action.Data.(string)))
