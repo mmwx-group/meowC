@@ -742,7 +742,6 @@
   "meshPathDirect": "直连",
   "meshPathViaRelay": "经 {name} 中继",
   "meshPathViaRelayOther": "经 {name} 中继（他人的）",
-  "meshPathViaRelayAddr": "经设备中继 {addr}",
   "meshPathViaDeviceRelay": "经设备中继",
   "meshPathViaDerp": "经中继服务器 {name}",
   "meshPathViaDerpPlain": "经中继服务器",
@@ -801,5 +800,15 @@
   "meshRelayErrShareNotAllowed": "只有管理员能共享给所有成员，已改回仅本账号",
   "meshRelayErrDeviceNotFound": "设备不存在或已删除，已刷新设备列表",
   "meshRelayErrDisabled": "管理员关闭了设备中继",
-  "meshRelayErrRateLimited": "操作太频繁，稍后再试"
+  "meshRelayErrRateLimited": "操作太频繁，稍后再试",
+  "meshViaBadge": "经喵窝连接",
+  "meshViaConnectTo": "连到",
+  "meshViaNotRunning": "喵窝没有连着",
+  "meshViaNotInList": "喵窝设备列表里没有这台服务器",
+  "meshViaRelayAddr": "中继地址 {addr}",
+  "meshViaPeerAddr": "对端地址 {addr}",
+  "meshViaDerpRegion": "中继服务器区域 {code}",
+  "meshViaIdleNote": "有流量时先经中继服务器，同时尝试直连或设备中继",
+  "meshViaPanelRecord": "主控记录：{text}",
+  "meshViaFooter": "白名单服务器节点走喵窝，不占服务器的 IP 白名单名额"
 }

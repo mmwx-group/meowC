@@ -327,6 +327,15 @@ class MeshPathsSnapshot {
     return null;
   }
 
+  /// 本机 [selfId] 与地址是 [ip] 的另一端（设备或 agent 服务器，节点喵窝小标的气泡用）之间的连接
+  MeshPathLink? linkToIp({required int selfId, String selfIp = '', required String ip}) {
+    if (ip.isEmpty) return null;
+    for (final l in links) {
+      if (l.otherEnd(selfId: selfId, selfIp: selfIp)?.ip == ip) return l;
+    }
+    return null;
+  }
+
   MeshRelayInfo? relayOf(int deviceId) {
     for (final r in relays) {
       if (r.deviceId == deviceId) return r;

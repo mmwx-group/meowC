@@ -196,6 +196,7 @@ Future<T?> showMeowPopover<T>(
   required String title,
   required WidgetBuilder builder,
   double width = 320,
+  Widget? titleLeading,
 }) {
   final box = anchorContext.findRenderObject() as RenderBox?;
   final overlay = Overlay.of(anchorContext, rootOverlay: true).context.findRenderObject() as RenderBox?;
@@ -207,6 +208,7 @@ Future<T?> showMeowPopover<T>(
       anchor: anchor,
       width: width,
       title: title,
+      titleLeading: titleLeading,
       builder: builder,
       reduce: MeowMotion.reduced(anchorContext),
     ),
@@ -218,6 +220,7 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
     required this.anchor,
     required this.width,
     required this.title,
+    this.titleLeading,
     required this.builder,
     required this.reduce,
   });
@@ -225,6 +228,9 @@ class _MeowPopoverRoute<T> extends PopupRoute<T> {
   final Rect anchor;
   final double width;
   final String title;
+
+  /// 标题前面的小图标（节点喵窝小标的气泡：喵窝图标 + 节点名）
+  final Widget? titleLeading;
   final WidgetBuilder builder;
   final bool reduce;
 
@@ -343,7 +349,22 @@ class _MeowPopoverPanelState extends State<_MeowPopoverPanel> with SingleTickerP
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-          child: Text(route.title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface)),
+          child: route.titleLeading == null
+              ? Text(route.title, style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface))
+              : Row(
+                  children: [
+                    route.titleLeading!,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        route.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: cs.onSurface),
+                      ),
+                    ),
+                  ],
+                ),
         ),
         Flexible(
           child: SingleChildScrollView(

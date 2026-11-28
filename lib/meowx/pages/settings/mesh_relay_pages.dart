@@ -27,15 +27,14 @@ String meshAgo(MeshRelayText t, DateTime at, [DateTime? now]) {
   return '${fmtDate(l)} ${two(l.hour)}:${two(l.minute)}';
 }
 
-/// 路径的一行字：直连 / 经 X 中继 / 经设备中继 ip:port / 经中继服务器 Y / 空闲；主控的旧记录后面注「x 分钟前」。
+/// 路径的一行字：直连 / 经 X 中继 / 经设备中继 / 经中继服务器 Y / 空闲；主控的旧记录后面注「x 分钟前」。
 String meshPathLabel(MeshRelayText t, MeshPathView v, {DateTime? now}) {
   final base = switch (v.kind) {
     MeshPathKind.direct => t.pathDirect,
     MeshPathKind.idle => t.pathIdle,
+    // 认不出是哪台时只写「经设备中继」，不带 IP（中继地址对用户没意义，设备详情 / 节点气泡里另有一行地址）
     MeshPathKind.peerRelay => v.relayName.isNotEmpty
         ? (v.relayOther ? t.pathViaRelayOther(v.relayName) : t.pathViaRelay(v.relayName))
-        : v.relayAddr.isNotEmpty
-        ? t.pathViaRelayAddr(v.relayAddr)
         : t.pathViaDeviceRelay,
     MeshPathKind.derp => v.derpName.isNotEmpty
         ? t.pathViaDerp(v.derpName)

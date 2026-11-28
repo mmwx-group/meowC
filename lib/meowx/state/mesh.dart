@@ -25,7 +25,7 @@ import 'tailscale_status.dart';
 
 export '../config/mesh_config.dart' show NetworkingMode, meshOutboundName, meshNarrowBypass, meshTunRoutes;
 export '../panel/mesh.dart' show MeshDevice, MeshSite, MeshDeviceRelayFlag, MeshServer, meshAccessScopeText, meshDeviceLimitText;
-export 'tailscale_status.dart' show TsStatus, TsPeer;
+export 'tailscale_status.dart' show TsStatus, TsPeer, meshShortName;
 
 /// 喵窝的运行时数据（不落盘）。生成运行配置的 `patchRawConfig` 在 globalState 里跑、拿不到 Riverpod，经这里取。
 ///
@@ -62,6 +62,9 @@ class MeshRuntime {
 
   /// 当前订阅里经喵窝拨号的白名单节点名（`_mmwx-mesh`，应用配置时记下的）：节点格据此画「喵窝」小标
   final whitelistNodes = ValueNotifier<List<String>>(const []);
+
+  /// [whitelistNodes] 各自的 server（喵窝地址）：小标的气泡按它在内核状态里找这台服务器
+  Map<String, String> whitelistServers = const {};
 
   /// 当前订阅里有没有白名单节点（不管这次是经喵窝还是被拿掉）：on / off 变了而订阅不是本主控的（拉不到新版本）时，
   /// 据此决定要不要按新状态重新生成运行配置
@@ -111,6 +114,7 @@ List<dynamic> applyNetworkingToConfig(
       meshRuntime.subscriptionNodes.value = patch.subscriptionTailscaleNodes;
     }
     meshRuntime.hasWhitelistNodes = whitelist.viaMesh.isNotEmpty || whitelist.removed.isNotEmpty;
+    meshRuntime.whitelistServers = whitelist.viaMeshServers;
     if (!listEquals(meshRuntime.whitelistNodes.value, whitelist.viaMesh)) {
       meshRuntime.whitelistNodes.value = whitelist.viaMesh;
     }
@@ -864,6 +868,9 @@ class MeshController extends Notifier<MeshState> {
     final ok = await _enroll(hostname: await _joinHostname(), previous: previous);
     if (ok) await _apply();
   }
+
+  /// 问一次内核里喵窝节点的状态（节点喵窝小标的气泡打开时）
+  Future<void> pollEngine() => _demo ? Future.value() : _pollEngine();
 
   /// 内核从什么时候起一直说要登录（[_maybeEnroll] 用）
   DateTime? _needsLoginSince;

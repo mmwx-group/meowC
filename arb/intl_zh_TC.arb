@@ -742,7 +742,6 @@
   "meshPathDirect": "直連",
   "meshPathViaRelay": "經 {name} 中繼",
   "meshPathViaRelayOther": "經 {name} 中繼（他人的）",
-  "meshPathViaRelayAddr": "經裝置中繼 {addr}",
   "meshPathViaDeviceRelay": "經裝置中繼",
   "meshPathViaDerp": "經中繼伺服器 {name}",
   "meshPathViaDerpPlain": "經中繼伺服器",
@@ -801,5 +800,15 @@
   "meshRelayErrShareNotAllowed": "只有管理員能共享給所有成員，已改回僅本帳號",
   "meshRelayErrDeviceNotFound": "裝置不存在或已刪除，已重新整理裝置列表",
   "meshRelayErrDisabled": "管理員關閉了裝置中繼",
-  "meshRelayErrRateLimited": "操作太頻繁，稍後再試"
+  "meshRelayErrRateLimited": "操作太頻繁，稍後再試",
+  "meshViaBadge": "經喵窩連線",
+  "meshViaConnectTo": "連到",
+  "meshViaNotRunning": "喵窩沒有連著",
+  "meshViaNotInList": "喵窩裝置列表裡沒有這台伺服器",
+  "meshViaRelayAddr": "中繼位址 {addr}",
+  "meshViaPeerAddr": "對端位址 {addr}",
+  "meshViaDerpRegion": "中繼伺服器區域 {code}",
+  "meshViaIdleNote": "有流量時先經中繼伺服器，同時嘗試直連或裝置中繼",
+  "meshViaPanelRecord": "主控記錄：{text}",
+  "meshViaFooter": "白名單伺服器節點走喵窩，不佔伺服器的 IP 白名單名額"
 }

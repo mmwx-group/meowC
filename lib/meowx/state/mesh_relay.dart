@@ -37,6 +37,7 @@ class MeshPathView {
     this.relayName = '',
     this.relayAddr = '',
     this.relayOther = false,
+    this.relayNamedByPanel = false,
     this.derpName = '',
     this.derpRegion = '',
     this.fromPanel = false,
@@ -46,7 +47,7 @@ class MeshPathView {
 
   final MeshPathKind kind;
 
-  /// 经设备中继时主控认出的中继设备名（认不出为空）
+  /// 经设备中继时的中继设备名：本机内核认出的优先，再用主控认出的（都认不出为空）
   final String relayName;
 
   /// 中继的 `ip:port`
@@ -54,6 +55,9 @@ class MeshPathView {
 
   /// 中继设备属于别的账号
   final bool relayOther;
+
+  /// 本机认不出中继设备、[relayName] 是主控认出的（设备中继的气泡补一行「主控记录：经 X 中继」）
+  final bool relayNamedByPanel;
 
   /// 经中继服务器时的服务器名（主控给的）与区域代码
   final String derpName;
@@ -73,6 +77,7 @@ class MeshPathView {
       other.relayName == relayName &&
       other.relayAddr == relayAddr &&
       other.relayOther == relayOther &&
+      other.relayNamedByPanel == relayNamedByPanel &&
       other.derpName == derpName &&
       other.derpRegion == derpRegion &&
       other.fromPanel == fromPanel &&
@@ -80,17 +85,28 @@ class MeshPathView {
       other.reportedAt == reportedAt;
 
   @override
-  int get hashCode => Object.hash(kind, relayName, relayAddr, relayOther, derpName, derpRegion, fromPanel, stale, reportedAt);
+  int get hashCode => Object.hash(kind, relayName, relayAddr, relayOther, relayNamedByPanel, derpName, derpRegion, fromPanel, stale, reportedAt);
 }
 
 /// [local]：本机内核里的这台对端；[link]：主控记录的本机与它之间的连接；[paths]：整份主控数据（按地址 / 区域补名字）。
 /// 都判不出 → null（不显示路径）。
+/// 中继设备名（Design/mesh-peer-relay.md §2.4）：先用本机内核认出的（`peerRelayVia`：中继 IP 对上本机设备列表里某台的公网端点），
+/// 再用主控 links 的 `via.name`（先看本机与它这条，再按中继地址找），都没有就只写「经设备中继」。
 MeshPathView? meshPathView({TsPeer? local, MeshPathLink? link, MeshPathsSnapshot? paths}) {
   if (local != null) {
     if (local.peerRelay.isNotEmpty) {
       final hostPort = parseMeshPeerRelay(local.peerRelay)?.hostPort ?? '';
       final via = (link?.path == 'peer_relay' ? link?.via : null) ?? paths?.viaForAddress(hostPort);
-      return MeshPathView(MeshPathKind.peerRelay, relayName: via?.name ?? '', relayAddr: hostPort, relayOther: via?.isOther ?? false);
+      final panelName = via?.name ?? '';
+      final localName = meshShortName(local.peerRelayVia);
+      return MeshPathView(
+        MeshPathKind.peerRelay,
+        relayName: localName.isNotEmpty ? localName : panelName,
+        relayAddr: hostPort,
+        // 本机认出的与主控那条不是同一台时，「他人的」以主控的为准就不对了
+        relayOther: (localName.isEmpty || localName == meshShortName(panelName)) && (via?.isOther ?? false),
+        relayNamedByPanel: localName.isEmpty && panelName.isNotEmpty,
+      );
     }
     if (local.curAddr.isNotEmpty) return const MeshPathView(MeshPathKind.direct);
     if (local.active && local.relay.isNotEmpty) {
@@ -99,8 +115,9 @@ MeshPathView? meshPathView({TsPeer? local, MeshPathLink? link, MeshPathsSnapshot
       final name = (fromLink != null && fromLink.isNotEmpty) ? fromLink : (paths?.derpForRegion(code)?.name ?? '');
       return MeshPathView(MeshPathKind.derp, derpName: name, derpRegion: code);
     }
-    // 本机这会儿判不出（最近没流量）：有主控的记录就按它，没有就是空闲
-    return _fromLink(link) ?? const MeshPathView(MeshPathKind.idle);
+    // 本机这会儿判不出（最近没流量）就是空闲：路径类型以本机为准，不拿主控的旧记录硬写成「经设备中继」等
+    // （主控那条另在设备详情的「主控记录」里显示）
+    return const MeshPathView(MeshPathKind.idle);
   }
   return _fromLink(link);
 }

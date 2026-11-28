@@ -58,12 +58,38 @@ final _paths = MeshPathsSnapshot.parse({
 
 void main() {
   group('路径文字', () {
-    test('本机实时状态优先：内核说走设备中继，中继名按地址从主控补；对不上写「经设备中继 地址」', () {
+    test('本机实时状态优先：内核说走设备中继，中继名按地址从主控补；对不上只写「经设备中继」、不带 IP', () {
       const local = TsPeer(name: 'm', active: true, peerRelay: '203.0.113.7:40000:vni:12', relay: 'meowx-3');
       final v = meshPathView(local: local, paths: _paths)!;
       expect(meshPathLabel(_t, v), '经 openwrt 中继');
+      expect(v.relayNamedByPanel, isTrue);
       const unknown = TsPeer(name: 'm', active: true, peerRelay: '198.51.100.3:40000:12');
-      expect(meshPathLabel(_t, meshPathView(local: unknown, paths: _paths)!), '经设备中继 198.51.100.3:40000');
+      final u = meshPathView(local: unknown, paths: _paths)!;
+      expect(meshPathLabel(_t, u), '经设备中继');
+      expect(u.relayAddr, '198.51.100.3:40000');
+      expect(u.relayNamedByPanel, isFalse);
+    });
+
+    test('中继设备名本机认出的优先（内核的 peerRelayVia，显示短名），主控认不出也照样有名字', () {
+      const local = TsPeer(
+        name: 'm',
+        active: true,
+        peerRelay: '198.51.100.3:40000:vni:12',
+        peerRelayVia: 'home-nas.meowx.internal.',
+      );
+      final v = meshPathView(local: local, paths: _paths)!;
+      expect(meshPathLabel(_t, v), '经 home-nas 中继');
+      expect(v.relayNamedByPanel, isFalse);
+      // 主控那条认成了别的名字：仍按本机的
+      const same = TsPeer(name: 'm', active: true, peerRelay: '203.0.113.7:40000:vni:12', peerRelayVia: 'home-openwrt');
+      expect(meshPathLabel(_t, meshPathView(local: same, paths: _paths)!), '经 home-openwrt 中继');
+      // 内核的 JSON
+      final parsed = TsPeer.parse({'name': 'po0', 'peerRelay': '[2001:db8::7]:40000:vni:9', 'peerRelayVia': 'nas'})!;
+      expect(parsed.peerRelayVia, 'nas');
+      expect(parsed.pathText, '经 nas 中继');
+      expect(const TsPeer(name: 'x', peerRelay: '203.0.113.7:40000:vni:1').pathText, '经设备中继');
+      expect(meshShortName('home-openwrt.meowx.internal.'), 'home-openwrt');
+      expect(meshShortName('openwrt'), 'openwrt');
     });
 
     test('中继服务器写服务器名（主控给的），没有就写区域代码；直连、空闲', () {
@@ -80,8 +106,8 @@ void main() {
       final stale = meshPathView(link: _paths.links[1])!;
       expect(stale.fromPanel && stale.stale, isTrue);
       expect(meshPathLabel(_t, stale), '经中继服务器 hkaliyun · 7 分钟前');
-      // 本机这会儿空闲：有主控记录就按它
-      expect(meshPathLabel(_t, meshPathView(local: const TsPeer(name: 'x'), link: _paths.links[0])!), '经 openwrt 中继');
+      // 本机这会儿空闲（PeerRelay 为空）：写「空闲」，不拿主控的旧记录硬写成设备中继
+      expect(meshPathLabel(_t, meshPathView(local: const TsPeer(name: 'x'), link: _paths.links[0])!), '空闲');
       final other = MeshPathLink.parse({
         'a': {'type': 'device', 'id': 7},
         'b': {'type': 'server', 'id': 1},

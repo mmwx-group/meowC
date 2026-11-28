@@ -741,7 +741,6 @@
   "meshPathDirect": "Direct",
   "meshPathViaRelay": "Via {name} (relay)",
   "meshPathViaRelayOther": "Via {name} (someone else's relay)",
-  "meshPathViaRelayAddr": "Via device relay {addr}",
   "meshPathViaDeviceRelay": "Via device relay",
   "meshPathViaDerp": "Via relay server {name}",
   "meshPathViaDerpPlain": "Via relay server",
@@ -800,5 +799,15 @@
   "meshRelayErrShareNotAllowed": "Only admins can share with everyone; changed back to this account",
   "meshRelayErrDeviceNotFound": "The device no longer exists; the device list was refreshed",
   "meshRelayErrDisabled": "The admin turned off device relays",
-  "meshRelayErrRateLimited": "Too many requests, try again later"
+  "meshRelayErrRateLimited": "Too many requests, try again later",
+  "meshViaBadge": "Via MeowNest",
+  "meshViaConnectTo": "To",
+  "meshViaNotRunning": "MeowNest is not connected",
+  "meshViaNotInList": "This server is not in the MeowNest device list",
+  "meshViaRelayAddr": "Relay address {addr}",
+  "meshViaPeerAddr": "Peer address {addr}",
+  "meshViaDerpRegion": "Relay server region {code}",
+  "meshViaIdleNote": "When traffic starts it goes through a relay server first, while trying a direct path or a device relay",
+  "meshViaPanelRecord": "Panel record: {text}",
+  "meshViaFooter": "Whitelisted server nodes go through MeowNest and don't use up the server's IP whitelist slots"
 }

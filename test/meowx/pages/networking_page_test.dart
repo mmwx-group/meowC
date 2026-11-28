@@ -49,6 +49,9 @@ class _FakeMesh extends MeshController {
   Future<void> refresh() async {}
 
   @override
+  Future<void> pollEngine() async {}
+
+  @override
   Future<bool> setMode(NetworkingMode mode) async {
     calls.add(mode);
     return true;
@@ -525,15 +528,44 @@ void main() {
       }
     });
 
-    testWidgets('节点的「喵窝」小标：经喵窝拨号的白名单节点才画，点开说明', (tester) async {
+    testWidgets('节点的「喵窝」小标：经喵窝拨号的白名单节点才画，点开看链路（服务器名、经哪台设备中继、中继地址）', (tester) async {
       meshRuntime.whitelistNodes.value = const ['东京 · 喵窝'];
+      meshRuntime.whitelistServers = const {'东京 · 喵窝': '100.64.0.20'};
+      addTearDown(() => meshRuntime.whitelistServers = const {});
       await _pump(
         tester,
         const Column(children: [MeshViaBadge('东京 · 喵窝'), MeshViaBadge('香港')]),
+        mesh: const MeshState(
+          availability: MeshAvailability.available,
+          servers: [MeshServer(name: '东京 po0', meshIp: '100.64.0.20')],
+          engine: TsStatus(
+            state: 'Running',
+            self: TsPeer(id: 7, name: 'pixel-8', addresses: ['100.64.0.7']),
+            peers: [
+              TsPeer(id: 3, name: 'openwrt', addresses: ['100.64.0.3'], online: true),
+              TsPeer(
+                id: 20,
+                name: 'tokyo',
+                addresses: ['100.64.0.20'],
+                online: true,
+                active: true,
+                relay: 'meowx-1',
+                peerRelay: '203.0.113.7:40000:vni:12',
+                peerRelayVia: 'openwrt',
+              ),
+            ],
+          ),
+        ),
       );
       expect(find.byTooltip('经喵窝连接'), findsOneWidget);
       await tester.tap(find.byTooltip('经喵窝连接'));
       await tester.pumpAndSettle();
+      expect(find.text('东京 · 喵窝'), findsOneWidget);
+      expect(find.text('东京 po0'), findsOneWidget);
+      expect(find.text('100.64.0.20'), findsOneWidget);
+      expect(find.text('经 openwrt 中继'), findsOneWidget);
+      expect(find.text('中继地址 203.0.113.7:40000'), findsOneWidget);
+      expect(find.textContaining('主控记录'), findsNothing);
       expect(find.textContaining('不占服务器的 IP 白名单名额'), findsOneWidget);
     });
   });

@@ -95,13 +95,16 @@ List<dynamic> dropRulesTargeting(List<dynamic> rules, Set<String> names) => [
 
 /// [applyMeshWhitelist] 的结果。
 class MeshWhitelistPatch {
-  const MeshWhitelistPatch({required this.rules, this.viaMesh = const [], this.removed = const []});
+  const MeshWhitelistPatch({required this.rules, this.viaMesh = const [], this.viaMeshServers = const {}, this.removed = const []});
 
   /// 改写后的订阅规则（off 时目标是拿掉的节点的已删掉；新列表）
   final List<dynamic> rules;
 
   /// 经喵窝拨号的节点名（on 时；界面据此给节点画「喵窝」小标）
   final List<String> viaMesh;
+
+  /// 经喵窝拨号的节点名 → 它的 server（喵窝地址 100.64.x.y；小标的气泡据此在内核状态里找这台服务器）
+  final Map<String, String> viaMeshServers;
 
   /// 这次拿掉的节点名（off 时）
   final List<String> removed;
@@ -149,7 +152,14 @@ MeshWhitelistPatch applyMeshWhitelist(Map<String, dynamic> rawConfig, List<dynam
       else
         p,
   ];
-  return MeshWhitelistPatch(rules: List<dynamic>.of(rules), viaMesh: names);
+  return MeshWhitelistPatch(
+    rules: List<dynamic>.of(rules),
+    viaMesh: names,
+    viaMeshServers: {
+      for (final p in proxies)
+        if (isMeshWhitelistNode(p) && p['name'] is String && p['server'] != null) p['name'] as String: p['server'].toString().trim(),
+    },
+  );
 }
 
 Map<String, dynamic> _viaMesh(Map<dynamic, dynamic> p) {

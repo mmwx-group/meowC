@@ -41,40 +41,46 @@ class MessageLookup extends MessageLookupByLibrary {
 
   static String m9(name) => "Via ${name} (relay)";
 
-  static String m10(addr) => "Via device relay ${addr}";
+  static String m10(name) => "Via ${name} (someone else\'s relay)";
 
-  static String m11(name) => "Via ${name} (someone else\'s relay)";
-
-  static String m12(port) =>
+  static String m11(port) =>
       "If the device is behind a router, forward UDP ${port} to it on that router";
 
-  static String m13(n) => "${n} more unidentified connections";
+  static String m12(n) => "${n} more unidentified connections";
 
-  static String m14(v) => "tailscale ${v}";
+  static String m13(v) => "tailscale ${v}";
 
-  static String m15(name) => "reported by ${name}";
+  static String m14(name) => "reported by ${name}";
 
-  static String m16(count) =>
+  static String m15(code) => "Relay server region ${code}";
+
+  static String m16(text) => "Panel record: ${text}";
+
+  static String m17(addr) => "Peer address ${addr}";
+
+  static String m18(addr) => "Relay address ${addr}";
+
+  static String m19(count) =>
       "${Intl.plural(count, one: 'minute', other: 'minutes')}";
 
-  static String m17(count) =>
+  static String m20(count) =>
       "${Intl.plural(count, one: 'month', other: 'months')}";
 
-  static String m18(label) => "No ${label}";
+  static String m21(label) => "No ${label}";
 
-  static String m19(label) => "${label} must be a number";
+  static String m22(label) => "${label} must be a number";
 
-  static String m20(label) =>
+  static String m23(label) =>
       "${label} must be between 1024 and 49151, 0 to disable";
 
-  static String m21(statusCode) =>
+  static String m24(statusCode) =>
       "Failed to import profile. Please check your network status or try resetting the subscription link ( HTTP error code: ${statusCode} )";
 
-  static String m22(count) => "${count} items selected";
+  static String m25(count) => "${count} items selected";
 
-  static String m23(label) => "${label} must be a URL";
+  static String m26(label) => "${label} must be a URL";
 
-  static String m24(count) =>
+  static String m27(count) =>
       "${Intl.plural(count, one: 'year', other: 'years')}";
 
   final messages = _notInlinedMessages(_notInlinedMessages);
@@ -760,8 +766,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Via device relay",
     ),
     "meshPathViaRelay": m9,
-    "meshPathViaRelayAddr": m10,
-    "meshPathViaRelayOther": m11,
+    "meshPathViaRelayOther": m10,
     "meshRelayAddEndpoint": MessageLookupByLibrary.simpleMessage("Add address"),
     "meshRelayDdns": MessageLookupByLibrary.simpleMessage("DDNS hostname"),
     "meshRelayDdnsNote": MessageLookupByLibrary.simpleMessage(
@@ -807,7 +812,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "The device is not responding. Make sure it runs the latest MeowX and is online",
     ),
     "meshRelayPort": MessageLookupByLibrary.simpleMessage("UDP port"),
-    "meshRelayPortForward": m12,
+    "meshRelayPortForward": m11,
     "meshRelayPortNote": MessageLookupByLibrary.simpleMessage(
       "1024–65535, default 40000",
     ),
@@ -838,12 +843,30 @@ class MessageLookup extends MessageLookupByLibrary {
       "Act as MeowNest relay",
     ),
     "meshRelayTag": MessageLookupByLibrary.simpleMessage("Relay"),
-    "meshRelayUnmatched": m13,
-    "meshRelayVersion": m14,
+    "meshRelayUnmatched": m12,
+    "meshRelayVersion": m13,
     "meshReportedByBoth": MessageLookupByLibrary.simpleMessage(
       "reported by both ends",
     ),
-    "meshReportedByOne": m15,
+    "meshReportedByOne": m14,
+    "meshViaBadge": MessageLookupByLibrary.simpleMessage("Via MeowNest"),
+    "meshViaConnectTo": MessageLookupByLibrary.simpleMessage("To"),
+    "meshViaDerpRegion": m15,
+    "meshViaFooter": MessageLookupByLibrary.simpleMessage(
+      "Whitelisted server nodes go through MeowNest and don\'t use up the server\'s IP whitelist slots",
+    ),
+    "meshViaIdleNote": MessageLookupByLibrary.simpleMessage(
+      "When traffic starts it goes through a relay server first, while trying a direct path or a device relay",
+    ),
+    "meshViaNotInList": MessageLookupByLibrary.simpleMessage(
+      "This server is not in the MeowNest device list",
+    ),
+    "meshViaNotRunning": MessageLookupByLibrary.simpleMessage(
+      "MeowNest is not connected",
+    ),
+    "meshViaPanelRecord": m16,
+    "meshViaPeerAddr": m17,
+    "meshViaRelayAddr": m18,
     "messageTest": MessageLookupByLibrary.simpleMessage("Message Test"),
     "messageTestTip": MessageLookupByLibrary.simpleMessage(
       "This is a message.",
@@ -854,11 +877,11 @@ class MessageLookup extends MessageLookupByLibrary {
     "minimizeOnExitDesc": MessageLookupByLibrary.simpleMessage(
       "Override default exit behavior",
     ),
-    "minutes": m16,
+    "minutes": m19,
     "mixedPort": MessageLookupByLibrary.simpleMessage("Mixed Port"),
     "mode": MessageLookupByLibrary.simpleMessage("Mode"),
     "monochromeScheme": MessageLookupByLibrary.simpleMessage("Monochrome"),
-    "months": m17,
+    "months": m20,
     "more": MessageLookupByLibrary.simpleMessage("More"),
     "moreIpInfo": MessageLookupByLibrary.simpleMessage("More IP Information"),
     "name": MessageLookupByLibrary.simpleMessage("Name"),
@@ -955,8 +978,8 @@ class MessageLookup extends MessageLookupByLibrary {
     "nullProfileDesc": MessageLookupByLibrary.simpleMessage(
       "No profile. Please add one.",
     ),
-    "nullTip": m18,
-    "numberTip": m19,
+    "nullTip": m21,
+    "numberTip": m22,
     "oneColumn": MessageLookupByLibrary.simpleMessage("1 Column"),
     "onlinePanel": MessageLookupByLibrary.simpleMessage("Online Panel"),
     "onlyIcon": MessageLookupByLibrary.simpleMessage("Icon Only"),
@@ -1060,7 +1083,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "portConflictTip": MessageLookupByLibrary.simpleMessage(
       "Please enter a different port",
     ),
-    "portTip": m20,
+    "portTip": m23,
     "powerSwitch": MessageLookupByLibrary.simpleMessage("Power"),
     "preferH3Desc": MessageLookupByLibrary.simpleMessage(
       "Prioritize DoH HTTP/3",
@@ -1079,7 +1102,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "profileHasUpdate": MessageLookupByLibrary.simpleMessage(
       "Profile modified. Disable auto-update?",
     ),
-    "profileImportFailed": m21,
+    "profileImportFailed": m24,
     "profileNameNullValidationDesc": MessageLookupByLibrary.simpleMessage(
       "Please enter a profile name",
     ),
@@ -1238,7 +1261,7 @@ class MessageLookup extends MessageLookupByLibrary {
     ),
     "selectAll": MessageLookupByLibrary.simpleMessage("Select All"),
     "selected": MessageLookupByLibrary.simpleMessage("Selected"),
-    "selectedCountTitle": m22,
+    "selectedCountTitle": m25,
     "serviceReady": MessageLookupByLibrary.simpleMessage("Service Ready"),
     "serviceRunning": MessageLookupByLibrary.simpleMessage("Service Running"),
     "settings": MessageLookupByLibrary.simpleMessage("Settings"),
@@ -1427,7 +1450,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "upload": MessageLookupByLibrary.simpleMessage("Upload"),
     "url": MessageLookupByLibrary.simpleMessage("URL"),
     "urlDesc": MessageLookupByLibrary.simpleMessage("Get profile via URL"),
-    "urlTip": m23,
+    "urlTip": m26,
     "useGlobalScriptOverride": MessageLookupByLibrary.simpleMessage(
       "Use Global Script Override",
     ),
@@ -1466,6 +1489,6 @@ class MessageLookup extends MessageLookupByLibrary {
     "writeToSystemDesc": MessageLookupByLibrary.simpleMessage(
       "Requires administrator privileges",
     ),
-    "years": m24,
+    "years": m27,
   };
 }

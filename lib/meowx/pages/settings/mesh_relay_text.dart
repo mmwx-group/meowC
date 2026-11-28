@@ -13,7 +13,6 @@ class MeshRelayText {
   String get pathDirect => _l?.meshPathDirect ?? '直连';
   String pathViaRelay(String name) => _l?.meshPathViaRelay(name) ?? '经 $name 中继';
   String pathViaRelayOther(String name) => _l?.meshPathViaRelayOther(name) ?? '经 $name 中继（他人的）';
-  String pathViaRelayAddr(String addr) => _l?.meshPathViaRelayAddr(addr) ?? '经设备中继 $addr';
   String get pathViaDeviceRelay => _l?.meshPathViaDeviceRelay ?? '经设备中继';
   String pathViaDerp(String name) => _l?.meshPathViaDerp(name) ?? '经中继服务器 $name';
   String get pathViaDerpPlain => _l?.meshPathViaDerpPlain ?? '经中继服务器';
@@ -73,4 +72,16 @@ class MeshRelayText {
   String get errDeviceNotFound => _l?.meshRelayErrDeviceNotFound ?? '设备不存在或已删除，已刷新设备列表';
   String get errDisabled => _l?.meshRelayErrDisabled ?? '管理员关闭了设备中继';
   String get errRateLimited => _l?.meshRelayErrRateLimited ?? '操作太频繁，稍后再试';
+
+  // 节点上的喵窝小标（气泡）
+  String get viaBadge => _l?.meshViaBadge ?? '经喵窝连接';
+  String get viaConnectTo => _l?.meshViaConnectTo ?? '连到';
+  String get viaNotRunning => _l?.meshViaNotRunning ?? '喵窝没有连着';
+  String get viaNotInList => _l?.meshViaNotInList ?? '喵窝设备列表里没有这台服务器';
+  String viaRelayAddr(String addr) => _l?.meshViaRelayAddr(addr) ?? '中继地址 $addr';
+  String viaPeerAddr(String addr) => _l?.meshViaPeerAddr(addr) ?? '对端地址 $addr';
+  String viaDerpRegion(String code) => _l?.meshViaDerpRegion(code) ?? '中继服务器区域 $code';
+  String get viaIdleNote => _l?.meshViaIdleNote ?? '有流量时先经中继服务器，同时尝试直连或设备中继';
+  String viaPanelRecord(String text) => _l?.meshViaPanelRecord(text) ?? '主控记录：$text';
+  String get viaFooter => _l?.meshViaFooter ?? '白名单服务器节点走喵窝，不占服务器的 IP 白名单名额';
 }

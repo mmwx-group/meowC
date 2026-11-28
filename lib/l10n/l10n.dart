@@ -6014,16 +6014,6 @@ class AppLocalizations {
     );
   }
 
-  /// `Via device relay {addr}`
-  String meshPathViaRelayAddr(Object addr) {
-    return Intl.message(
-      'Via device relay $addr',
-      name: 'meshPathViaRelayAddr',
-      desc: '',
-      args: [addr],
-    );
-  }
-
   /// `Via device relay`
   String get meshPathViaDeviceRelay {
     return Intl.message(
@@ -6549,6 +6539,101 @@ class AppLocalizations {
     return Intl.message(
       'Too many requests, try again later',
       name: 'meshRelayErrRateLimited',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Via MeowNest`
+  String get meshViaBadge {
+    return Intl.message(
+      'Via MeowNest',
+      name: 'meshViaBadge',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `To`
+  String get meshViaConnectTo {
+    return Intl.message('To', name: 'meshViaConnectTo', desc: '', args: []);
+  }
+
+  /// `MeowNest is not connected`
+  String get meshViaNotRunning {
+    return Intl.message(
+      'MeowNest is not connected',
+      name: 'meshViaNotRunning',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `This server is not in the MeowNest device list`
+  String get meshViaNotInList {
+    return Intl.message(
+      'This server is not in the MeowNest device list',
+      name: 'meshViaNotInList',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Relay address {addr}`
+  String meshViaRelayAddr(Object addr) {
+    return Intl.message(
+      'Relay address $addr',
+      name: 'meshViaRelayAddr',
+      desc: '',
+      args: [addr],
+    );
+  }
+
+  /// `Peer address {addr}`
+  String meshViaPeerAddr(Object addr) {
+    return Intl.message(
+      'Peer address $addr',
+      name: 'meshViaPeerAddr',
+      desc: '',
+      args: [addr],
+    );
+  }
+
+  /// `Relay server region {code}`
+  String meshViaDerpRegion(Object code) {
+    return Intl.message(
+      'Relay server region $code',
+      name: 'meshViaDerpRegion',
+      desc: '',
+      args: [code],
+    );
+  }
+
+  /// `When traffic starts it goes through a relay server first, while trying a direct path or a device relay`
+  String get meshViaIdleNote {
+    return Intl.message(
+      'When traffic starts it goes through a relay server first, while trying a direct path or a device relay',
+      name: 'meshViaIdleNote',
+      desc: '',
+      args: [],
+    );
+  }
+
+  /// `Panel record: {text}`
+  String meshViaPanelRecord(Object text) {
+    return Intl.message(
+      'Panel record: $text',
+      name: 'meshViaPanelRecord',
+      desc: '',
+      args: [text],
+    );
+  }
+
+  /// `Whitelisted server nodes go through MeowNest and don't use up the server's IP whitelist slots`
+  String get meshViaFooter {
+    return Intl.message(
+      'Whitelisted server nodes go through MeowNest and don\'t use up the server\'s IP whitelist slots',
+      name: 'meshViaFooter',
       desc: '',
       args: [],
     );
